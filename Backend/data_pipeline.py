@@ -29,7 +29,7 @@ def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     }
     
     try:
-        response = requests.get(f"{OANDA_URL}/instruments/{oanda_instrument}/candles", headers=headers, params=params)
+        response = requests.get(f"{OANDA_URL}/instruments/{oanda_instrument}/candles", headers=headers, params=params, timeout=10)
         response.raise_for_status()
     except Exception as e:
         print(f"OANDA API Request Fehler bei {instrument}: {e}")
