@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +30,11 @@ app.add_middleware(
 # Globaler Cache, um mehrfache Telegram-Alerts bei Refreshes zu blockieren
 # Key: "PAIR_SHORT" oder "PAIR_LONG" -> Value: line_level (float)
 ALERT_CACHE = {}
+
+# Vorberechnete Screener-Daten. Der Endpoint liest NUR aus diesem Cache,
+# damit Requests sofort antworten. Der Hintergrund-Thread aktualisiert ihn.
+SCREENER_CACHE = {"data": [], "updated": None}
+REFRESH_INTERVAL = 60 * 15  # 15 Minuten
 
 def send_telegram_alert(text: str):
     token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -106,9 +112,35 @@ def run_screener():
         
     return market_data
 
+def _refresh_loop():
+    """Laeuft im Hintergrund-Thread: berechnet den Screener neu und cached ihn."""
+    while True:
+        try:
+            data = run_screener()
+            SCREENER_CACHE["data"] = data
+            SCREENER_CACHE["updated"] = time.time()
+            print(f"Screener-Cache aktualisiert: {len(data)} Paare")
+        except Exception as e:
+            print(f"Screener-Refresh Fehler: {e}")
+        time.sleep(REFRESH_INTERVAL)
+
+
+@app.on_event("startup")
+def start_background_refresh():
+    threading.Thread(target=_refresh_loop, daemon=True).start()
+
+
 @app.get("/api/screener")
 def get_screener():
-    return run_screener()
+    # Antwortet sofort aus dem Cache. Beim ersten Start evtl. noch leer,
+    # bis der Hintergrund-Thread den ersten Durchlauf fertig hat.
+    return SCREENER_CACHE["data"]
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "pairs": len(SCREENER_CACHE["data"]), "updated": SCREENER_CACHE["updated"]}
+
 
 if __name__ == "__main__":
     import uvicorn
