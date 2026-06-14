@@ -34,7 +34,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       // Dynamische API-URL für lokales Testing vs. Vercel Production
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
       const response = await fetch(`${apiUrl}/api/screener`);
       
       if (!response.ok) {
