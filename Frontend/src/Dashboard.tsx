@@ -15,6 +15,7 @@ interface MarketData {
   long: number | null;
   long_date: string | null;
   status: 'HIT' | 'PREPARE' | 'NEUTRAL';
+  near: 'SHORT' | 'LONG' | null;
   distance: number | null;
   last_touched: LastTouched | null;
 }
@@ -71,15 +72,18 @@ export default function Dashboard() {
   const renderDetailedCard = (item: MarketData) => {
     let cardStyle = "bg-[#111318] border-[#222631] hover:border-[#3a4154]";
     let statusDot = "bg-[#3a4154]";
-    let badgeText = item.distance ? `${item.distance.toFixed(1)} Pips` : '-';
+    let badgeText = item.distance != null ? `${item.distance.toFixed(1)} Pips` : '-';
 
-    if (item.status === 'HIT') {
+    // Farbe nach Richtung: nahe SHORT-GVA = rot, nahe LONG-GVA = gruen.
+    if (item.status !== 'NEUTRAL' && item.near === 'SHORT') {
       cardStyle = "bg-[#1a1414] border-[#4a2424] hover:border-[#ff4d4d]";
-      statusDot = "bg-[#ff4d4d] animate-pulse";
+      statusDot = item.status === 'HIT' ? "bg-[#ff4d4d] animate-pulse" : "bg-[#ef4444]";
+    } else if (item.status !== 'NEUTRAL' && item.near === 'LONG') {
+      cardStyle = "bg-[#0f1714] border-[#244a2e] hover:border-[#22c55e]";
+      statusDot = item.status === 'HIT' ? "bg-[#22c55e] animate-pulse" : "bg-[#22c55e]";
+    }
+    if (item.status === 'HIT') {
       badgeText = "ACTION REQUIRED";
-    } else if (item.status === 'PREPARE') {
-      cardStyle = "bg-[#181611] border-[#4a3e24] hover:border-[#eab308]";
-      statusDot = "bg-[#eab308]";
     }
 
     return (
@@ -99,13 +103,13 @@ export default function Dashboard() {
             <span className="text-[#64748b]">Market</span>
             <span className="font-mono text-[#f8fafc]">{item.price.toFixed(5)}</span>
           </div>
-          <div className="flex justify-between border-b border-[#222631] pb-2">
-            <span className="text-[#ef4444]/80">Short Line</span>
-            <span className="font-mono text-[#cbd5e1]">{item.short ? item.short.toFixed(5) : '-'}</span>
+          <div className={`flex justify-between border-b border-[#222631] pb-2 ${item.near === 'SHORT' ? 'bg-[#ff4d4d]/5 -mx-2 px-2 rounded' : ''}`}>
+            <span className={item.near === 'SHORT' ? 'text-[#ff4d4d] font-semibold' : 'text-[#ef4444]/80'}>Short Line</span>
+            <span className={`font-mono ${item.near === 'SHORT' ? 'text-[#f8fafc] font-semibold' : 'text-[#cbd5e1]'}`}>{item.short ? item.short.toFixed(5) : '-'}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-[#22c55e]/80">Long Line</span>
-            <span className="font-mono text-[#cbd5e1]">{item.long ? item.long.toFixed(5) : '-'}</span>
+          <div className={`flex justify-between ${item.near === 'LONG' ? 'bg-[#22c55e]/5 -mx-2 px-2 rounded' : ''}`}>
+            <span className={item.near === 'LONG' ? 'text-[#22c55e] font-semibold' : 'text-[#22c55e]/80'}>Long Line</span>
+            <span className={`font-mono ${item.near === 'LONG' ? 'text-[#f8fafc] font-semibold' : 'text-[#cbd5e1]'}`}>{item.long ? item.long.toFixed(5) : '-'}</span>
           </div>
         </div>
       </div>
@@ -129,8 +133,8 @@ export default function Dashboard() {
           <tbody className="divide-y divide-[#222631] text-sm">
             {sortedData.map((item) => {
               let dotColor = "bg-[#3a4154]";
-              if (item.status === 'HIT') dotColor = "bg-[#ff4d4d] animate-pulse";
-              if (item.status === 'PREPARE') dotColor = "bg-[#eab308]";
+              if (item.status !== 'NEUTRAL' && item.near === 'SHORT') dotColor = item.status === 'HIT' ? "bg-[#ff4d4d] animate-pulse" : "bg-[#ef4444]";
+              if (item.status !== 'NEUTRAL' && item.near === 'LONG') dotColor = item.status === 'HIT' ? "bg-[#22c55e] animate-pulse" : "bg-[#22c55e]";
 
               return (
                 <tr key={item.pair} onClick={() => setSelectedPair(item)} className="hover:bg-[#1a1d24] cursor-pointer transition-colors">

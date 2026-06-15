@@ -95,8 +95,14 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
         elif distance_pips <= 100.0:
             status = "PREPARE"
 
+    # Welche Line ist am naechsten? -> Richtung auf die man achten muss.
+    near = None
+    if status != "NEUTRAL":
+        near = "SHORT" if abs(dist_short) <= abs(dist_long) else "LONG"
+
     return {
         "pair": pair,
+        "near": near,
         "price": round(price, 5),
         "short": round(short_lvl, 5) if short_lvl else None,
         "short_date": short_date,
