@@ -31,6 +31,9 @@ app.add_middleware(
 # Key: "PAIR_SHORT" oder "PAIR_LONG" -> Value: line_level (float)
 ALERT_CACHE = {}
 
+# Letzter Live-Preis je Paar -> fuer Kreuzungs-Erkennung (Line gequert?).
+PREV_PRICE = {}
+
 # GVA-Zonen pro Paar (schwer zu berechnen, aendern sich nur langsam).
 # pair -> {short_lvl, short_date, long_lvl, long_date, last_touched}
 ZONES = {}
@@ -71,34 +74,56 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
     dist_short = (short_lvl - price) / pip_size if short_lvl else 9999.0
     dist_long = (price - long_lvl) / pip_size if long_lvl else 9999.0
 
-    min_dist = min(dist_short, dist_long)
+    # Abstand zur naechsten Line (Betrag, nur fuer Anzeige).
+    min_dist = min(abs(dist_short), abs(dist_long))
     distance_pips = round(min_dist, 1) if min_dist != 9999.0 else None
 
-    if distance_pips is not None:
-        if distance_pips <= 2.5:
-            status = "HIT"
+    # HIT = Line exakt beruehrt/gekreuzt. Keine 2.5-Pip-Toleranz.
+    # Beruehrt wenn Preis innerhalb 0.1 Pip ODER zwischen letztem Tick und
+    # jetzt die Line gekreuzt hat (faengt auch schnelle Spruenge ab).
+    prev = PREV_PRICE.get(pair)
+    band = 0.1 * pip_size
 
-            if dist_short <= 2.5 and short_lvl:
-                cache_key = f"{pair}_SHORT"
-                if fire_alerts and ALERT_CACHE.get(cache_key) != short_lvl:
-                    msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* SHORT LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(short_lvl, 5)}\n*Formiert am:* {short_date}"
-                    send_telegram_alert(msg)
-                    ALERT_CACHE[cache_key] = short_lvl
+    def line_touched(level):
+        if level is None:
+            return False
+        if abs(price - level) <= band:
+            return True
+        if prev is None:
+            return False
+        return (prev - level) * (price - level) < 0  # Vorzeichenwechsel = gekreuzt
 
-            elif dist_long <= 2.5 and long_lvl:
-                cache_key = f"{pair}_LONG"
-                if fire_alerts and ALERT_CACHE.get(cache_key) != long_lvl:
-                    msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* LONG LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(long_lvl, 5)}\n*Formiert am:* {long_date}"
-                    send_telegram_alert(msg)
-                    ALERT_CACHE[cache_key] = long_lvl
+    short_hit = line_touched(short_lvl)
+    long_hit = line_touched(long_lvl)
 
-        elif distance_pips <= 100.0:
-            status = "PREPARE"
+    if short_hit or long_hit:
+        status = "HIT"
+
+        if short_hit:
+            cache_key = f"{pair}_SHORT"
+            if fire_alerts and ALERT_CACHE.get(cache_key) != short_lvl:
+                msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* SHORT LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(short_lvl, 5)}\n*Formiert am:* {short_date}"
+                send_telegram_alert(msg)
+                ALERT_CACHE[cache_key] = short_lvl
+
+        elif long_hit:
+            cache_key = f"{pair}_LONG"
+            if fire_alerts and ALERT_CACHE.get(cache_key) != long_lvl:
+                msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* LONG LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(long_lvl, 5)}\n*Formiert am:* {long_date}"
+                send_telegram_alert(msg)
+                ALERT_CACHE[cache_key] = long_lvl
+
+    elif distance_pips is not None and distance_pips <= 100.0:
+        status = "PREPARE"
 
     # Welche Line ist am naechsten? -> Richtung auf die man achten muss.
     near = None
     if status != "NEUTRAL":
         near = "SHORT" if abs(dist_short) <= abs(dist_long) else "LONG"
+
+    # Vortick-Preis nur bei echten Live-Ticks merken (nicht beim Fallback).
+    if fire_alerts:
+        PREV_PRICE[pair] = price
 
     return {
         "pair": pair,
