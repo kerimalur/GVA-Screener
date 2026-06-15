@@ -7,6 +7,38 @@ from dotenv import load_dotenv
 load_dotenv()
 OANDA_API_KEY = os.getenv('OANDA_API_KEY')
 OANDA_URL = os.getenv('OANDA_URL', 'https://api-fxpractice.oanda.com/v3')
+OANDA_ACCOUNT_ID = os.getenv('OANDA_ACCOUNT_ID')
+
+
+def fetch_live_prices(instruments: list) -> dict:
+    """Holt Live-Bid/Ask fuer ALLE Paare in EINEM Request.
+    Rueckgabe: {"EURUSD": {"bid": .., "ask": .., "mid": ..}, ...}"""
+    if not OANDA_API_KEY or not OANDA_ACCOUNT_ID:
+        print("FEHLER: OANDA_API_KEY oder OANDA_ACCOUNT_ID fehlt.")
+        return {}
+
+    oanda_instruments = [i[:3] + "_" + i[3:] if "_" not in i else i for i in instruments]
+    headers = {"Authorization": f"Bearer {OANDA_API_KEY}"}
+    params = {"instruments": ",".join(oanda_instruments)}
+    url = f"{OANDA_URL}/accounts/{OANDA_ACCOUNT_ID}/pricing"
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"OANDA Pricing Fehler: {e}")
+        return {}
+
+    out = {}
+    for p in response.json().get("prices", []):
+        pair = p.get("instrument", "").replace("_", "")
+        bids = p.get("bids") or []
+        asks = p.get("asks") or []
+        if bids and asks:
+            bid = float(bids[0]["price"])
+            ask = float(asks[0]["price"])
+            out[pair] = {"bid": bid, "ask": ask, "mid": (bid + ask) / 2}
+    return out
 
 def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     if not OANDA_API_KEY:
