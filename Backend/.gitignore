@@ -10,3 +10,6 @@ env/
 __pycache__/
 *.pyc
 *.pyo
+
+# Laufzeit-State (Sticky-HIT / verbrauchte Lines)
+state.json

@@ -2,7 +2,7 @@ import pandas as pd
 
 def analyze_gva_zones(df: pd.DataFrame, instrument: str, tol_pips: float = 2.5, size_mult: float = 1.3):
     if df.empty or len(df) < 2:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, [], []
 
     pip_size = 0.01 if "JPY" in instrument else 0.0001
     tol = tol_pips * pip_size
@@ -72,4 +72,16 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str, tol_pips: float = 2.5, 
         closest_long = obj['level']
         long_date = obj['date'].strftime('%d.%m.%Y')
 
-    return closest_short, short_date, closest_long, long_date, current_price, last_touched
+    # ALLE noch nicht getroffenen Lines, sortiert nach Naehe:
+    # Shorts aufsteigend (niedrigste = naechste ueber Preis),
+    # Longs absteigend (hoechste = naechste unter Preis).
+    all_shorts = sorted(
+        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y')} for x in active_shorts],
+        key=lambda x: x['level']
+    )
+    all_longs = sorted(
+        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y')} for x in active_longs],
+        key=lambda x: -x['level']
+    )
+
+    return closest_short, short_date, closest_long, long_date, current_price, last_touched, all_shorts, all_longs

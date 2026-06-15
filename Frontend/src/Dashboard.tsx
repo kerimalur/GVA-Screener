@@ -16,6 +16,8 @@ interface MarketData {
   long_date: string | null;
   status: 'HIT' | 'PREPARE' | 'NEUTRAL';
   near: 'SHORT' | 'LONG' | null;
+  triggered: boolean;
+  pending: boolean;
   distance: number | null;
   last_touched: LastTouched | null;
 }
@@ -51,6 +53,22 @@ export default function Dashboard() {
     }
   };
 
+  // User-Aktion auf ein getroffenes Paar: "pending" (dran) oder "done" (Line verbraucht).
+  const markPair = async (pair: string, action: 'pending' | 'done') => {
+    try {
+      const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+      await fetch(`${apiUrl}/api/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair, action }),
+      });
+      setSelectedPair(null);
+      fetchData();
+    } catch (e) {
+      console.error("mark Fehler:", e);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 1000 * 30);
@@ -82,12 +100,16 @@ export default function Dashboard() {
       cardStyle = "bg-[#0f1714] border-[#244a2e] hover:border-[#22c55e]";
       statusDot = item.status === 'HIT' ? "bg-[#22c55e] animate-pulse" : "bg-[#22c55e]";
     }
-    if (item.status === 'HIT') {
+    // Getroffen (sticky): gelber Rand bleibt bis "Fertig". Innen bleibt gruen/rot.
+    const triggerRing = item.triggered ? "ring-2 ring-[#eab308] ring-offset-2 ring-offset-[#0b0c10]" : "";
+    if (item.triggered) {
+      badgeText = item.pending ? "HIT · PENDING" : "HIT";
+    } else if (item.status === 'HIT') {
       badgeText = "ACTION REQUIRED";
     }
 
     return (
-      <div key={item.pair} onClick={() => setSelectedPair(item)} className={`border rounded-lg p-5 transition-all duration-300 cursor-pointer ${cardStyle}`}>
+      <div key={item.pair} onClick={() => setSelectedPair(item)} className={`border rounded-lg p-5 transition-all duration-300 cursor-pointer ${cardStyle} ${triggerRing}`}>
         <div className="flex justify-between items-center mb-5">
           <div className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${statusDot}`}></div>
@@ -137,7 +159,7 @@ export default function Dashboard() {
               if (item.status !== 'NEUTRAL' && item.near === 'LONG') dotColor = item.status === 'HIT' ? "bg-[#22c55e] animate-pulse" : "bg-[#22c55e]";
 
               return (
-                <tr key={item.pair} onClick={() => setSelectedPair(item)} className="hover:bg-[#1a1d24] cursor-pointer transition-colors">
+                <tr key={item.pair} onClick={() => setSelectedPair(item)} className={`hover:bg-[#1a1d24] cursor-pointer transition-colors ${item.triggered ? 'border-l-2 border-[#eab308]' : ''}`}>
                   <td className="p-4 font-semibold text-[#e2e8f0] tracking-wide">{item.pair}</td>
                   <td className="p-4 font-mono text-[#f8fafc]">{item.price.toFixed(5)}</td>
                   <td className="p-4 font-mono text-[#ef4444]/80">{item.short ? item.short.toFixed(5) : '-'}</td>
@@ -145,7 +167,7 @@ export default function Dashboard() {
                   <td className="p-4 font-mono text-[#cbd5e1]">{item.distance ? `${item.distance.toFixed(1)}` : '-'}</td>
                   <td className="p-4 flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></div>
-                    <span className="text-[#94a3b8] text-xs">{item.status}</span>
+                    <span className={`text-xs ${item.triggered ? 'text-[#eab308] font-semibold' : 'text-[#94a3b8]'}`}>{item.triggered ? (item.pending ? 'HIT · PENDING' : 'HIT') : item.status}</span>
                   </td>
                 </tr>
               );
@@ -276,6 +298,24 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+
+              {/* Aktionen nur bei getroffenem (HIT) Paar */}
+              {selectedPair.triggered && (
+                <div className="flex gap-3 p-6 pt-0">
+                  <button
+                    onClick={() => markPair(selectedPair.pair, 'pending')}
+                    className={`flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all border ${selectedPair.pending ? 'bg-[#eab308]/20 border-[#eab308] text-[#eab308]' : 'bg-[#171a21] border-[#222631] text-[#cbd5e1] hover:border-[#eab308]'}`}
+                  >
+                    {selectedPair.pending ? 'PENDING ✓' : 'PENDING'}
+                  </button>
+                  <button
+                    onClick={() => markPair(selectedPair.pair, 'done')}
+                    className="flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all bg-[#22c55e] hover:bg-[#16a34a] text-white"
+                  >
+                    SETUP FERTIG
+                  </button>
+                </div>
+              )}
 
             </div>
           </div>
