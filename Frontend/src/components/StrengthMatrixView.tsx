@@ -1,23 +1,37 @@
 import { useState } from 'react';
+import Panel from './Panel';
 
 // PLATZHALTER-Daten. Später aus Backend (Stark-vs-Schwach-Logik) ersetzbar.
-const BULLISH: string[] = ['CADJPY', 'CADCHF', 'NZDJPY', 'NZDCHF'];
-const BEARISH: string[] = ['JPYCAD', 'CHFCAD', 'EURCAD'];
+// strength = aggregierter Bias (0–100), treibt die Balkenbreite.
+const BULLISH: { pair: string; strength: number }[] = [
+  { pair: 'CADJPY', strength: 92 },
+  { pair: 'CADCHF', strength: 81 },
+  { pair: 'NZDJPY', strength: 74 },
+  { pair: 'NZDCHF', strength: 63 },
+];
+const BEARISH: { pair: string; strength: number }[] = [
+  { pair: 'JPYCAD', strength: 88 },
+  { pair: 'CHFCAD', strength: 70 },
+  { pair: 'EURCAD', strength: 58 },
+];
 
-interface PillProps {
+interface RowProps {
   pair: string;
+  strength: number;
   variant: 'bull' | 'bear';
 }
 
-function Pill({ pair, variant }: PillProps) {
-  const dot = variant === 'bull' ? 'bg-win' : 'bg-loss';
-  const hover = variant === 'bull' ? 'hover:border-win/30 hover:bg-winBg/30' : 'hover:border-loss/30 hover:bg-lossBg/30';
+function MatrixRow({ pair, strength, variant }: RowProps) {
+  const isBull = variant === 'bull';
+  const bar = isBull ? 'bg-win/80' : 'bg-loss/80';
+  const val = isBull ? 'text-win' : 'text-loss';
   return (
-    <div className={`matrix-pill flex items-center justify-between p-3 rounded-xl bg-bgBase border border-transparent transition-all cursor-pointer ${hover}`}>
-      <div className="flex items-center gap-2">
-        <div className={`w-1.5 h-1.5 rounded-full ${dot}`}></div>
-        <span className="font-bold text-sm">{pair}</span>
+    <div className="matrix-pill flex items-center gap-3 px-5 py-2.5 hover:bg-bgBase transition-colors">
+      <span className="font-mono font-bold text-sm text-textMain w-20">{pair}</span>
+      <div className="flex-1 h-1.5 bg-bgBase rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${bar}`} style={{ width: `${strength}%` }}></div>
       </div>
+      <span className={`font-mono text-xs font-semibold w-10 text-right ${val}`}>{strength}</span>
     </div>
   );
 }
@@ -26,67 +40,55 @@ export default function StrengthMatrixView() {
   const [search, setSearch] = useState('');
   const q = search.toUpperCase();
 
-  const bull = BULLISH.filter((p) => p.includes(q));
-  const bear = BEARISH.filter((p) => p.includes(q));
+  const bull = BULLISH.filter((p) => p.pair.includes(q));
+  const bear = BEARISH.filter((p) => p.pair.includes(q));
 
   return (
-    <div className="tab-view block max-w-[1400px] mx-auto space-y-6">
-      <div className="mb-2 flex justify-between items-end">
-        <p className="text-textMuted text-sm mt-1">
-          Übersicht basierend auf der <strong className="text-textMain">Stark vs. Schwach</strong> Logik. Neutrale Paare sind ausgeblendet.
+    <div className="tab-view block max-w-[1400px] mx-auto space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+        <p className="text-textMuted text-sm">
+          Bias aus der <strong className="text-textMain font-semibold">Stark vs. Schwach</strong> Logik. Neutrale Paare ausgeblendet.
         </p>
-        <div className="relative w-64">
-          <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-lg"></i>
+        <div className="relative w-full sm:w-64">
+          <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-base"></i>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Paar suchen (z.B. EUR)..."
-            className="w-full bg-bgSurface border border-borderLight text-textMain text-sm font-medium rounded-lg pl-10 pr-3 py-2.5 focus:outline-none focus:border-accent shadow-sm"
+            placeholder="Paar filtern (z.B. EUR)…"
+            className="w-full bg-bgSurface border border-borderLight text-textMain text-sm font-mono rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-accent shadow-sm"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* BULLISH */}
-        <div className="bg-bgSurface rounded-2xl border border-borderLight shadow-sm p-6">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-borderLight">
-            <div className="w-10 h-10 rounded-xl bg-winBg text-win flex items-center justify-center">
-              <i className="ph-bold ph-trend-up text-xl"></i>
-            </div>
-            <div>
-              <h3 className="font-bold text-textMain">Bullish Fokus (Long)</h3>
-              <p className="text-xs text-textMuted">Starke vs Schwache Währungen</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel
+          title="Bullish Fokus · Long"
+          bodyClass="p-0"
+          right={<span className="font-mono text-xs text-textMuted">{bull.length}</span>}
+        >
+          <div className="divide-y divide-borderLight">
             {bull.length === 0 ? (
-              <p className="text-textMuted text-sm col-span-2">Keine Treffer.</p>
+              <p className="text-textMuted text-sm px-5 py-4">Keine Treffer.</p>
             ) : (
-              bull.map((p) => <Pill key={p} pair={p} variant="bull" />)
+              bull.map((p) => <MatrixRow key={p.pair} pair={p.pair} strength={p.strength} variant="bull" />)
             )}
           </div>
-        </div>
+        </Panel>
 
-        {/* BEARISH */}
-        <div className="bg-bgSurface rounded-2xl border border-borderLight shadow-sm p-6">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-borderLight">
-            <div className="w-10 h-10 rounded-xl bg-lossBg text-loss flex items-center justify-center">
-              <i className="ph-bold ph-trend-down text-xl"></i>
-            </div>
-            <div>
-              <h3 className="font-bold text-textMain">Bearish Fokus (Short)</h3>
-              <p className="text-xs text-textMuted">Schwache vs Starke Währungen</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        <Panel
+          title="Bearish Fokus · Short"
+          bodyClass="p-0"
+          right={<span className="font-mono text-xs text-textMuted">{bear.length}</span>}
+        >
+          <div className="divide-y divide-borderLight">
             {bear.length === 0 ? (
-              <p className="text-textMuted text-sm col-span-2">Keine Treffer.</p>
+              <p className="text-textMuted text-sm px-5 py-4">Keine Treffer.</p>
             ) : (
-              bear.map((p) => <Pill key={p} pair={p} variant="bear" />)
+              bear.map((p) => <MatrixRow key={p.pair} pair={p.pair} strength={p.strength} variant="bear" />)
             )}
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );
