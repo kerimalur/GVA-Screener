@@ -1,22 +1,5 @@
 import Panel from './Panel';
-
-// PLATZHALTER-Daten. Später aus Backend (Macro-Kalender / News-Feed) ersetzbar.
-interface CalendarEvent {
-  time: string;
-  ccy: string;
-  impact: 1 | 2 | 3; // 3 = high
-  event: string;
-  actual: string;
-  forecast: string;
-  previous: string;
-}
-
-const CALENDAR: CalendarEvent[] = [
-  { time: 'Heute 14:30', ccy: 'USD', impact: 3, event: 'Core CPI (MoM)', actual: '—', forecast: '0.3%', previous: '0.4%' },
-  { time: 'Morgen 09:30', ccy: 'CHF', impact: 3, event: 'SNB Rate Decision', actual: '—', forecast: '1.50%', previous: '1.50%' },
-  { time: 'Morgen 11:00', ccy: 'EUR', impact: 2, event: 'ZEW Sentiment', actual: '—', forecast: '42.1', previous: '39.8' },
-  { time: 'Do 14:30', ccy: 'USD', impact: 2, event: 'Initial Jobless Claims', actual: '—', forecast: '221K', previous: '218K' },
-];
+import { useCalendar } from '../data/useMacro';
 
 // Countdown bis zum nächsten High-Impact-Event (Platzhalter: festes Zieldatum).
 const NFP_TARGET = new Date('2026-06-30T12:30:00Z');
@@ -47,6 +30,7 @@ function ImpactDots({ level }: { level: number }) {
 export default function CalendarView() {
   const { days, hours, mins } = countdown();
   const pad = (n: number) => String(n).padStart(2, '0');
+  const events = useCalendar();
 
   return (
     <div className="tab-view block max-w-[1400px] mx-auto space-y-4">
@@ -85,7 +69,7 @@ export default function CalendarView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-borderLight text-sm">
-            {CALENDAR.map((ev, i) => (
+            {events.map((ev, i) => (
               <tr key={i} className="hover:bg-bgBase transition-colors">
                 <td className="px-5 py-3 font-mono text-xs text-textMuted whitespace-nowrap">{ev.time}</td>
                 <td className="px-3 py-3">

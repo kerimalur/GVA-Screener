@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from data_pipeline import fetch_and_resample_3d, fetch_live_prices
 from analyzer import analyze_gva_zones
+import macro
 
 load_dotenv()
 
@@ -55,6 +56,10 @@ LIVE_CACHE = {"data": [], "updated": None}
 
 REFRESH_INTERVAL = 60 * 15  # Zonen-Neuberechnung: 15 Minuten
 PRICE_INTERVAL = 30         # Live-Preis + HIT-Check: 30 Sekunden
+MACRO_INTERVAL = 60 * 60 * 6  # Makro (FRED/CFTC/Kalender): alle 6h, ändert sich langsam
+
+# Makro & Stärke (Power Index / Matrix / Datenzentrum / Kalender) — unabhängig vom Screener.
+MACRO_CACHE = {"currencies": [], "calendar": [], "updated": None}
 
 STATE_FILE = os.path.join(os.path.dirname(__file__), "state.json")
 _state_lock = threading.Lock()
@@ -259,11 +264,27 @@ def _price_loop():
         time.sleep(PRICE_INTERVAL)
 
 
+def _macro_loop():
+    """Makro-Daten (FRED-Score, CFTC-COT, Kalender) alle 6h aktualisieren.
+    Eigener Thread, völlig unabhängig vom Screener/Telegram-Pfad."""
+    while True:
+        try:
+            data = macro.build_macro()
+            MACRO_CACHE["currencies"] = data["currencies"]
+            MACRO_CACHE["calendar"] = macro.fetch_calendar()
+            MACRO_CACHE["updated"] = data["updated"]
+            print(f"Makro aktualisiert: {len(MACRO_CACHE['currencies'])} Währungen, {len(MACRO_CACHE['calendar'])} Events")
+        except Exception as e:
+            print(f"Makro-Loop Fehler: {e}")
+        time.sleep(MACRO_INTERVAL)
+
+
 @app.on_event("startup")
 def start_background_refresh():
     load_state()
     threading.Thread(target=_zones_loop, daemon=True).start()
     threading.Thread(target=_price_loop, daemon=True).start()
+    threading.Thread(target=_macro_loop, daemon=True).start()
 
 
 @app.get("/api/screener")
@@ -308,6 +329,23 @@ def mark(req: MarkRequest):
     except Exception as e:
         print(f"mark/snapshot Fehler: {e}")
     return {"ok": True}
+
+
+@app.get("/api/fundamentals")
+def get_fundamentals():
+    """G8-Stärke/Zins/COT für Power Index, Stärke Matrix, Datenzentrum.
+    Bis der erste Makro-Loop durch ist -> STATIC-Fallback (vollständiges Objekt)."""
+    if not MACRO_CACHE["currencies"]:
+        return {"currencies": macro.static_currencies(), "updated": None}
+    return {"currencies": MACRO_CACHE["currencies"], "updated": MACRO_CACHE["updated"]}
+
+
+@app.get("/api/calendar")
+def get_calendar():
+    """Wirtschaftskalender (ForexFactory, keyfrei). Fallback bis Loop durch ist."""
+    if not MACRO_CACHE["calendar"]:
+        return macro.CAL_FALLBACK
+    return MACRO_CACHE["calendar"]
 
 
 @app.get("/api/health")

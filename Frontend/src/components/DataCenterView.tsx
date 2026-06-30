@@ -1,126 +1,120 @@
 import { useState } from 'react';
-import Panel, { LiveTag } from './Panel';
+import { UPDATED } from '../data/g8';
+import { useG8 } from '../data/useMacro';
+import CotChart from './CotChart';
+import RateInfoModal from './RateInfoModal';
 
-// PLATZHALTER-Daten. Später aus Backend/fundamentals.py (FRED Zinsen + CPI) ersetzbar:
-// - INDEX[ccy]   ← aggregierter Fundamental-Score + Sub-Metriken je Währung
-// - CB_RATES     ← Zentralbank-Leitzinsen (live)
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'JPY'] as const;
-type Ccy = (typeof CURRENCIES)[number];
-
-interface IndexEntry {
-  value: number;
-  label: string;
-  realRate: number; // Zins − CPI
-  cpi: number; // CPI YoY
-  tenY: number; // 10Y Rendite
-}
-
-const INDEX: Record<Ccy, IndexEntry> = {
-  USD: { value: 4.82, label: 'Signifikant Bullish', realRate: 2.4, cpi: 3.1, tenY: 4.28 },
-  EUR: { value: -0.8, label: 'Neutral / Schwach', realRate: 1.8, cpi: 2.4, tenY: 2.51 },
-  GBP: { value: 2.1, label: 'Leicht Bullish', realRate: 1.1, cpi: 3.4, tenY: 4.12 },
-  CHF: { value: -6.0, label: 'Bearish', realRate: 0.4, cpi: 1.1, tenY: 0.68 },
-  JPY: { value: -9.2, label: 'Signifikant Bearish', realRate: -2.9, cpi: 3.0, tenY: 0.98 },
-};
-
-// Zentralbank-Leitzinsen (Platzhalter). Quelle später: fundamentals / Policy-Rates.
-const CB_RATES: { bank: string; ccy: string; rate: number; change: number; next: string }[] = [
-  { bank: 'FED', ccy: 'USD', rate: 5.5, change: 0, next: '17. Jul' },
-  { bank: 'ECB', ccy: 'EUR', rate: 4.25, change: -0.25, next: '24. Jul' },
-  { bank: 'BOE', ccy: 'GBP', rate: 5.0, change: -0.25, next: '01. Aug' },
-  { bank: 'SNB', ccy: 'CHF', rate: 1.5, change: -0.25, next: '26. Sep' },
-  { bank: 'BOJ', ccy: 'JPY', rate: 0.1, change: 0, next: '31. Jul' },
-];
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
-      <div className={`font-mono font-bold text-base ${color ?? 'text-white'}`}>{value}</div>
-    </div>
-  );
-}
+const ACCENT = '#2563EB';
 
 export default function DataCenterView() {
-  const [selected, setSelected] = useState<Ccy>('USD');
-  const idx = INDEX[selected];
-  const positive = idx.value >= 0;
+  const [selected, setSelected] = useState<string>('USD');
+  const [rateInfo, setRateInfo] = useState(false);
+
+  const currencies = useG8();
+  const fd = currencies.find((c) => c.code === selected) ?? currencies[0];
+  const positive = fd.score >= 0;
+  const latest = fd.cot[fd.cot.length - 1];
+  const first = fd.cot[0];
+  const delta = latest - first;
+  const rank = currencies.slice().sort((a, b) => b.score - a.score).findIndex((c) => c.code === fd.code) + 1;
 
   return (
-    <div className="tab-view block max-w-[1400px] mx-auto space-y-4">
-      {/* Währungsauswahl — segmentiert, mono */}
-      <div className="flex justify-center">
-        <div className="inline-flex bg-bgSurface p-1 rounded-lg border border-borderLight shadow-sm">
-          {CURRENCIES.map((ccy) => (
+    <div className="tab-view block max-w-5xl mx-auto space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-textMain">COT-Datenzentrum</h3>
+          <p className="text-sm text-textMuted mt-1 max-w-md">
+            Commitments of Traders — Netto-Positionierung der <strong className="text-textMain font-semibold">Commercials</strong> über 52 Wochen.
+          </p>
+        </div>
+        <div className="inline-flex flex-wrap gap-1 bg-bgSurface p-1.5 rounded-xl border border-borderLight shadow-sm">
+          {currencies.map((c) => (
             <button
-              key={ccy}
-              onClick={() => setSelected(ccy)}
-              className={`px-5 py-1.5 rounded-md text-sm font-mono font-bold transition-all ${
-                selected === ccy ? 'bg-textMain text-white shadow-sm' : 'text-textMuted hover:text-textMain'
+              key={c.code}
+              onClick={() => setSelected(c.code)}
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-mono font-bold transition-all ${
+                selected === c.code ? 'bg-textMain text-white shadow-sm' : 'text-textMuted hover:text-textMain'
               }`}
             >
-              {ccy}
+              {c.code}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Primär-Metrik — dunkles Terminal-Panel */}
-        <div className="md:col-span-1 bg-textMain rounded-xl border border-slate-700 shadow-md p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{selected} Index</h3>
-            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-win animate-pulse"></span>Live
-            </span>
+      <div className="grid grid-cols-1 md:grid-cols-[284px_1fr] gap-5 items-stretch">
+        {/* Primär-Metrik */}
+        <div className="bg-textMain rounded-2xl border border-slate-700 shadow-md p-6 text-white relative overflow-hidden flex flex-col">
+          <i className="ph-fill ph-bank text-7xl absolute -bottom-3 -right-3 opacity-[0.07]"></i>
+          <div className="relative z-10">
+            <div className="font-mono text-4xl font-black tracking-wide">{fd.code}</div>
+            <div className="text-sm text-slate-400 font-medium mt-2">{fd.name}</div>
           </div>
-          <div className={`font-mono text-5xl font-black mb-1 ${positive ? 'text-win' : 'text-loss'}`}>
-            {positive ? '+' : ''}
-            {idx.value.toFixed(2)}
-          </div>
-          <p className="text-sm font-semibold text-slate-300 mb-5">{idx.label}</p>
-          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-700">
-            <Stat label="Real Rate" value={`${idx.realRate.toFixed(1)}%`} color={idx.realRate >= 0 ? 'text-win' : 'text-loss'} />
-            <Stat label="CPI YoY" value={`${idx.cpi.toFixed(1)}%`} />
-            <Stat label="10Y" value={`${idx.tenY.toFixed(2)}%`} />
+          <div className="h-px bg-slate-700 my-5 relative z-10"></div>
+          <div className="flex flex-col gap-4 relative z-10">
+            <button onClick={() => setRateInfo(true)} className="flex justify-between items-center group">
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                Leitzins <i className="ph ph-info text-slate-500 group-hover:text-white transition-colors"></i>
+              </span>
+              <span className="font-mono text-lg font-bold group-hover:text-accent transition-colors">{fd.rate.toFixed(2)}%</span>
+            </button>
+            <div className="flex justify-between items-center">
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Stärke-Score</span>
+              <span className={`font-mono text-lg font-bold ${positive ? 'text-win' : 'text-loss'}`}>
+                {positive ? '+' : ''}{fd.score.toFixed(1)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Rangliste</span>
+              <span className="text-sm font-semibold">Rang {rank} / 8</span>
+            </div>
           </div>
         </div>
 
-        {/* Zentralbank-Leitzinsen — Tabelle */}
-        <Panel title="Zentralbank Leitzinsen" right={<LiveTag />} className="md:col-span-2" bodyClass="p-0">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-borderLight text-[10px] text-neutral uppercase tracking-wider">
-                <th className="px-5 py-2.5 font-bold">Bank</th>
-                <th className="px-3 py-2.5 font-bold">CCY</th>
-                <th className="px-3 py-2.5 font-bold text-right">Leitzins</th>
-                <th className="px-3 py-2.5 font-bold text-right">Δ letzte</th>
-                <th className="px-5 py-2.5 font-bold text-right">Nächste Sitzung</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-borderLight text-sm">
-              {CB_RATES.map((r) => {
-                const isSel = r.ccy === selected;
-                return (
-                  <tr key={r.bank} className={`transition-colors ${isSel ? 'bg-accent/5' : 'hover:bg-bgBase'}`}>
-                    <td className={`px-5 py-3 font-bold ${isSel ? 'text-accent' : 'text-textMain'}`}>{r.bank}</td>
-                    <td className="px-3 py-3 font-mono text-xs text-textMuted">{r.ccy}</td>
-                    <td className="px-3 py-3 text-right font-mono font-bold text-textMain">{r.rate.toFixed(2)}%</td>
-                    <td
-                      className={`px-3 py-3 text-right font-mono text-xs ${
-                        r.change === 0 ? 'text-textMuted' : r.change > 0 ? 'text-win' : 'text-loss'
-                      }`}
-                    >
-                      {r.change === 0 ? '—' : `${r.change > 0 ? '+' : ''}${r.change.toFixed(2)}`}
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-xs text-textMuted">{r.next}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Panel>
+        {/* COT-Chart */}
+        <div className="bg-bgSurface rounded-2xl border border-borderLight shadow-sm p-6 flex flex-col">
+          <div className="flex justify-between items-start mb-2 flex-wrap gap-2">
+            <div>
+              <div className="text-sm font-semibold text-textMain">Commercials · Netto-Position</div>
+              <div className="text-[11px] text-neutral font-medium mt-0.5">in Tausend Kontrakten · letzte 52 Wochen</div>
+            </div>
+            {latest >= 0 ? (
+              <span className="inline-flex items-center gap-1.5 bg-winBg text-win px-2.5 py-1 rounded-lg text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-win"></span>Netto Long
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 bg-lossBg text-loss px-2.5 py-1 rounded-lg text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-loss"></span>Netto Short
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 min-h-[200px] flex items-center">
+            <CotChart data={fd.cot} color={ACCENT} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3.5 mt-4 pt-4 border-t border-borderLight">
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-neutral font-bold mb-1.5">Aktuell</div>
+              <div className="font-mono text-lg font-bold text-textMain">{latest >= 0 ? '+' : '−'}{Math.abs(latest)}K</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-neutral font-bold mb-1.5">52-Wochen-Δ</div>
+              <div className={`font-mono text-lg font-bold ${delta >= 0 ? 'text-win' : 'text-loss'}`}>
+                {delta >= 0 ? '▲ ' : '▼ '}{Math.abs(delta)}K
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-neutral font-bold mb-1.5">Trend</div>
+              <div className="text-[15px] font-semibold text-textMain">{delta >= 0 ? 'Steigend' : 'Fallend'}</div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <p className="text-[11px] text-textMuted">{UPDATED} · Quelle (geplant): CFTC Commitments of Traders.</p>
+
+      {rateInfo && <RateInfoModal ccy={fd} onClose={() => setRateInfo(false)} />}
     </div>
   );
 }
