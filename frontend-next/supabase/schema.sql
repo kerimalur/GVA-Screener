@@ -105,6 +105,41 @@ create table if not exists cron_runs (
 );
 create index if not exists cron_runs_ran_at_idx on cron_runs(ran_at desc);
 
+-- ============================================================
+-- Views (Aggregation in Postgres statt App — security_invoker
+-- respektiert RLS der Basistabellen => anon sieht nichts)
+-- ============================================================
+
+-- Letzter Schlusskurs je Instrument & Monat
+create or replace view monthly_closes
+  with (security_invoker = true) as
+select
+  instrument,
+  date_trunc('month', date)::date as month,
+  (array_agg(close order by date desc))[1] as close
+from price_daily
+group by 1, 2;
+
+-- Saisonalität: Ø-Monatsreturn, Trefferquote, Jahre je Instrument & Kalendermonat
+create or replace view seasonality_stats
+  with (security_invoker = true) as
+with mr as (
+  select
+    instrument,
+    month,
+    close / nullif(lag(close) over (partition by instrument order by month), 0) - 1 as ret
+  from monthly_closes
+)
+select
+  instrument,
+  extract(month from month)::int as cal_month,
+  avg(ret) * 100 as avg_return,
+  avg((ret > 0)::int) * 100 as hit_rate,
+  count(ret) as n_years
+from mr
+where ret is not null
+group by 1, 2;
+
 -- RLS: aktiviert, keine Policies => Zugriff nur mit Service-Role-Key
 alter table instruments         enable row level security;
 alter table price_daily         enable row level security;
