@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  /* Terminal Dark Theme */
+  --color-bg: #0d1117;
+  --color-surface: #161b22;
+  --color-surface2: #1c2330;
+  --color-border: #21262d;
+  --color-border2: #30363d;
+  --color-text: #e6edf3;
+  --color-muted: #8b949e;
+  --color-faint: #484f58;
+  --color-up: #3fb950;
+  --color-down: #f85149;
+  --color-accent: #58a6ff;
+  --color-warn: #d29922;
+  --color-neutral: #6e7681;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-feature-settings: "tnum";
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border2);
+  border-radius: 5px;
+}
