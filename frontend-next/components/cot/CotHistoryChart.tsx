@@ -18,8 +18,6 @@ export default function CotHistoryChart({ code }: { code: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setData(null);
-    setError(null);
     fetch(`/api/data/cot?code=${code}`)
       .then((r) => r.json())
       .then((json: ApiResponse) => {

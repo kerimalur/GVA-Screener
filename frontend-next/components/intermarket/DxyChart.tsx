@@ -12,11 +12,11 @@ interface DxyChartProps {
 /** DXY (berechnet) + Broad Dollar Index (FRED) als Sekundärlinie. */
 export default function DxyChart({ dxy, broad }: DxyChartProps) {
   const broadMap = new Map(broad.map((p) => [p.date, p.value]));
-  let last: number | null = null;
-  const points = dxy.map((p) => {
-    last = broadMap.get(p.date) ?? last;
-    return { date: p.date, dxy: p.value, broad: last };
-  });
+  const points: Array<{ date: string; dxy: number; broad: number | null }> = [];
+  for (const p of dxy) {
+    const prev = points.length > 0 ? points[points.length - 1].broad : null;
+    points.push({ date: p.date, dxy: p.value, broad: broadMap.get(p.date) ?? prev });
+  }
 
   return (
     <TimeSeriesChart

@@ -29,11 +29,11 @@ export default function SentimentHistory({ pairs }: { pairs: string[] }) {
   }, [pair]);
 
   const priceMap = new Map(price.map((p) => [p.date, p.value]));
-  let last: number | null = null;
-  const points: TimeSeriesPoint[] = sentiment.map((s) => {
-    last = priceMap.get(s.date) ?? last;
-    return { date: s.date, long: s.value, price: last };
-  });
+  const points: TimeSeriesPoint[] = [];
+  for (const s of sentiment) {
+    const prev = points.length > 0 ? (points[points.length - 1].price as number | null) : null;
+    points.push({ date: s.date, long: s.value, price: priceMap.get(s.date) ?? prev });
+  }
 
   const options = pairs.length > 0 ? pairs : FX_INSTRUMENTS.map((i) => i.instrument.replace("_", ""));
 

@@ -44,7 +44,7 @@ export default async function Page() {
           <code className="font-mono text-accent">MYFXBOOK_PASSWORD</code> in{" "}
           <code className="font-mono text-accent">.env.local</code> (kostenloser Account) — dann{" "}
           <code className="font-mono text-accent">npx tsx scripts/backfill.mts sentiment</code> für den
-          ersten Snapshot. Fällt Myfxbook aus, degradiert die Seite sauber (Cron loggt „skipped").
+          ersten Snapshot. Fällt Myfxbook aus, degradiert die Seite sauber (Cron loggt &bdquo;skipped&ldquo;).
         </p>
       </Panel>
     );

@@ -14,18 +14,15 @@ export default function SpreadChart({ initialPair = "EUR_USD" }: { initialPair?:
   const [mode, setMode] = useState<Mode>("spread_10y");
   const [points, setPoints] = useState<SeriesPoint[]>([]);
   const [label, setLabel] = useState("");
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
     fetch(`/api/data/series?type=${mode}&key=${pair}`)
       .then((r) => r.json())
       .then((json: { label?: string; points?: SeriesPoint[] }) => {
         setPoints(json.points ?? []);
         setLabel(json.label ?? "");
       })
-      .catch(() => setPoints([]))
-      .finally(() => setLoading(false));
+      .catch(() => setPoints([]));
   }, [pair, mode]);
 
   return (
@@ -62,7 +59,7 @@ export default function SpreadChart({ initialPair = "EUR_USD" }: { initialPair?:
             </button>
           ))}
         </div>
-        {loading && <span className="text-[11px] text-muted font-mono">lädt …</span>}
+        {points.length === 0 && <span className="text-[11px] text-muted font-mono">lädt …</span>}
       </div>
       <TimeSeriesChart
         data={points.map((p) => ({ date: p.date, value: p.value }))}

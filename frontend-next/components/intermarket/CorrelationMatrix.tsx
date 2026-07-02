@@ -24,7 +24,6 @@ export default function CorrelationMatrix() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setData(null);
     fetch(`/api/data/correlations?window=${window}`)
       .then((r) => r.json())
       .then((json: ApiResponse) => {

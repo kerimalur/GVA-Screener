@@ -33,7 +33,7 @@ export default function ScannerShell({ mode }: ScannerShellProps) {
   }, []);
 
   useEffect(() => {
-    load();
+    queueMicrotask(load);
     const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
   }, [load]);

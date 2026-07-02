@@ -42,13 +42,11 @@ export default function OverlayChart({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSeriesA(null);
-    setSeriesB(null);
-    setError(null);
     Promise.all([loadSeries(a), loadSeries(b)])
       .then(([ra, rb]) => {
         setSeriesA(ra);
         setSeriesB(rb);
+        setError(null);
       })
       .catch((e) => setError(String(e.message ?? e)));
   }, [a.type, a.key, b.type, b.key]); // eslint-disable-line react-hooks/exhaustive-deps

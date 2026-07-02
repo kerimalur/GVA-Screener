@@ -21,19 +21,18 @@ export default function BacktestPanel({ code }: { code: string }) {
   const [direction, setDirection] = useState<"top" | "bottom">("top");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
     fetch(`/api/data/cot/backtest?code=${code}&pct=${pct}&direction=${direction}`)
       .then((r) => r.json())
       .then((json: ApiResponse) => {
         if (json.error) setError(json.error);
-        else setData(json);
+        else {
+          setData(json);
+          setError(null);
+        }
       })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+      .catch((e) => setError(String(e)));
   }, [code, pct, direction]);
 
   return (
@@ -77,7 +76,7 @@ export default function BacktestPanel({ code }: { code: string }) {
       </div>
 
       {error && <div className="text-down text-sm font-mono py-4">{error}</div>}
-      {loading && !data && (
+      {!data && !error && (
         <div className="text-muted text-sm font-mono py-4">Backtest läuft …</div>
       )}
 

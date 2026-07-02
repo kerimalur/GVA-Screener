@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+type Query = ReturnType<ReturnType<SupabaseClient["from"]>["select"]>;
+
 /**
  * Supabase/PostgREST cappt bei 1000 Zeilen pro Request — großes Select
  * seitenweise laden. `build` bekommt einen frischen Query-Builder je Seite.
@@ -8,7 +10,7 @@ export async function pagedSelect<T>(
   db: SupabaseClient,
   table: string,
   select: string,
-  build: (q: ReturnType<SupabaseClient["from"]>["select"] extends never ? never : any) => any,
+  build: (q: Query) => Query,
   pageSize = 1000,
 ): Promise<T[]> {
   const out: T[] = [];

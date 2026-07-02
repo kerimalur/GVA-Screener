@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback } from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OverlayChart from "@/components/intermarket/OverlayChart";
 import { INSTRUMENTS, FX_INSTRUMENTS } from "@/lib/constants/instruments";
@@ -51,14 +51,11 @@ function Picker() {
   const keyB = params.get("kb") ?? "EUR_USD";
   const normalize = params.get("norm") === "1";
 
-  const update = useCallback(
-    (patch: Record<string, string>) => {
-      const next = new URLSearchParams(params.toString());
-      for (const [k, v] of Object.entries(patch)) next.set(k, v);
-      router.replace(`/vergleich?${next.toString()}`);
-    },
-    [params, router],
-  );
+  function update(patch: Record<string, string>) {
+    const next = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(patch)) next.set(k, v);
+    router.replace(`/vergleich?${next.toString()}`);
+  }
 
   const slot = (
     label: string,

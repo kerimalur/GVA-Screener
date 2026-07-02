@@ -3,67 +3,14 @@ import CorrelationMatrix from "@/components/intermarket/CorrelationMatrix";
 import OverlayTool from "@/components/intermarket/OverlayTool";
 import DxyChart from "@/components/intermarket/DxyChart";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getPrices } from "@/lib/data/cot";
-import { getFredSeries } from "@/lib/data/fred";
 import { tryQuery } from "@/lib/data/util";
-import { computeDxy, DXY_WEIGHTS } from "@/lib/calc/dxy";
-import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
+import { loadIntermarketData } from "@/lib/data/intermarket";
+import { DXY_WEIGHTS } from "@/lib/calc/dxy";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const data = await tryQuery(async () => {
-    const db = createServiceClient();
-    const since = new Date();
-    since.setFullYear(since.getFullYear() - 10);
-    const sinceStr = since.toISOString().slice(0, 10);
-
-    const [eur, jpy, gbp, cad, chf, sek, broad] = await Promise.all([
-      getPrices(db, "EUR_USD", sinceStr),
-      getPrices(db, "USD_JPY", sinceStr),
-      getPrices(db, "GBP_USD", sinceStr),
-      getPrices(db, "USD_CAD", sinceStr),
-      getPrices(db, "USD_CHF", sinceStr),
-      getFredSeries(db, "DEXSDUS", sinceStr),
-      getFredSeries(db, "DTWEXBGS", sinceStr),
-    ]);
-
-    const toSeries = (rows: Array<{ date: string; close: number }>) =>
-      rows.map((r) => ({ date: r.date, value: r.close }));
-
-    const dxy = computeDxy({
-      EUR_USD: toSeries(eur),
-      USD_JPY: toSeries(jpy),
-      GBP_USD: toSeries(gbp),
-      USD_CAD: toSeries(cad),
-      USD_SEK: sek,
-      USD_CHF: toSeries(chf),
-    });
-
-    // Auswirkung auf USD-Paare: 1M-Return je Pair
-    const usdPairs = FX_INSTRUMENTS.filter(
-      (i) => i.baseCcy === "USD" || i.quoteCcy === "USD",
-    );
-    const impact: Array<{ pair: string; ret1M: number | null; usdSide: "base" | "quote" }> = [];
-    for (const inst of usdPairs) {
-      const prices = await getPrices(
-        db,
-        inst.instrument,
-        new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10),
-      );
-      const ret =
-        prices.length > 21
-          ? (prices[prices.length - 1].close / prices[prices.length - 22].close - 1) * 100
-          : null;
-      impact.push({
-        pair: inst.displayName,
-        ret1M: ret,
-        usdSide: inst.baseCcy === "USD" ? "base" : "quote",
-      });
-    }
-
-    return { dxy, broad, impact };
-  });
+  const data = await tryQuery(() => loadIntermarketData(createServiceClient()));
 
   return (
     <div className="space-y-5 max-w-[1500px] mx-auto">
