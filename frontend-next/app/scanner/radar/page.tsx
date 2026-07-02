@@ -1,5 +1,5 @@
-import Placeholder from "@/components/layout/Placeholder";
+import ScannerShell from "@/components/scanner/ScannerShell";
 
 export default function Page() {
-  return <Placeholder modul="Visuelles Radar (GVA-Scanner)" />;
+  return <ScannerShell mode="radar" />;
 }
