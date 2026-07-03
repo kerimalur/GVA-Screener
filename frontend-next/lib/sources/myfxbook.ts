@@ -33,8 +33,9 @@ export async function fetchOutlook(): Promise<OutlookSymbol[] | null> {
     if (login.error || !login.session) return null;
     session = login.session;
 
+    // Myfxbook liefert die Session bereits URL-encoded — nicht nochmal encoden.
     const outlookRes = await fetch(
-      `${BASE}/get-community-outlook.json?session=${encodeURIComponent(session)}`,
+      `${BASE}/get-community-outlook.json?session=${session}`,
       { cache: "no-store", headers: UA },
     );
     if (!outlookRes.ok) return null;
@@ -60,7 +61,7 @@ export async function fetchOutlook(): Promise<OutlookSymbol[] | null> {
   } finally {
     if (session) {
       // Best effort — Session-Limit bei Myfxbook nicht ausschöpfen
-      fetch(`${BASE}/logout.json?session=${encodeURIComponent(session)}`, {
+      fetch(`${BASE}/logout.json?session=${session}`, {
         cache: "no-store",
         headers: UA,
       }).catch(() => {});
