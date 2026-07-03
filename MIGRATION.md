@@ -1,0 +1,153 @@
+# MIGRATION.md — Trading Journal → GVA-Screener Kombi-App
+
+Stand: 2026-07-03. Quelle: `c:\Projekte\Claude Cowork\TRADING-JOURNAL\desktop-app` (eingefroren nach Abschluss).
+Ziel: `frontend-next/` (Next.js 16 App Router, Vercel) + `Backend/` (FastAPI, Render).
+
+## Abweichung vom ursprünglichen Auftrag (mit User abgestimmt, 2026-07-03)
+
+Der Auftrag ging vom alten Vite-Frontend (`Frontend/`) aus. Das wurde im Terminal-Rebuild
+(Commit `c1be8e9`, P10) gelöscht und durch `frontend-next` (Next.js 16) ersetzt. Entscheidung:
+
+- **Ziel-App ist `frontend-next`** — Terminal-Seiten (COT, Makro, Sentiment, Intermarket,
+  Saisonalität, Econ-Kalender, Vergleich) bleiben vollständig erhalten, Journal-Features kommen additiv dazu.
+- React-Router entfällt → **Next.js App Router** übernimmt das Routing.
+- „Tech-Stack bleibt Vite" → sinngemäß: bleibt **Web/React/Tailwind auf Vercel, kein Electron**.
+- Supabase: **bestehendes Journal-Projekt wird wiederverwendet** (Bestandsdaten bleiben).
+  Das Terminal-Schema (`frontend-next/supabase/schema.sql`, bisher für eigenes Projekt gedacht)
+  wird in dasselbe Projekt eingespielt.
+
+## Architektur-Grundsatz Supabase (zwei Datenwelten, ein Projekt)
+
+| | Terminal-Tabellen (instruments, price_daily, cot_reports, fred_series, …) | Journal-Tabellen (trades, accounts, …) + `signals` |
+|---|---|---|
+| Zugriff | nur server-seitig (Service-Role-Key, `lib/supabase/server.ts`) | Browser-Client (Anon-Key) + Google-Session |
+| RLS | aktiv, **keine** Policies (anon sieht nichts) | aktiv, Policy `auth.uid() = user_id` |
+
+## Feature-Inventar (Quelle: Journal `src/`)
+
+Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht migriert
+
+### a) journal
+| | |
+|---|---|
+| Dateien | `features/journal/JournalPage.tsx` (945), `EKJournal.tsx`, `FundedJournal.tsx`, `TradeForm.tsx` (657), `TradeCard.tsx`, `TradeDetailModal.tsx`, `AccountSettings.tsx` |
+| Services/Stores | `tradeService` (Supabase-CRUD + Feld-Mapping symbol/side↔pair/direction), `accountConfigService` (accounts + transactions), `tradeStore`, `accountStore` |
+| UI | Modal, Button, Card, TradeRow, Toaster, Pagination |
+| Supabase | `trades`, `accounts`, `transactions`, `trade_screenshots` (siehe Hinweis Screenshots) |
+| Status | ⬜ |
+
+### b) dashboard + equity
+| | |
+|---|---|
+| Dateien | `features/dashboard/Dashboard.tsx` (758), `features/equity/EquityCurve.tsx` |
+| Services/Stores | `tradeStore` (Metrics via `utils/calculations.ts`, 447 Z.), `accountStore`, `analyticsStore`, `widgetSettingsStore` |
+| UI | BentoGrid, StatCard, MetricDisplay, SparklineChart, AnimatedNumber, ProgressRing, TradeStreak, charts/EquityChart+WinRateChart+RMultipleChart |
+| Supabase | `trades`, `accounts`, `user_widget_settings` |
+| Status | ⬜ |
+
+### c) outlook
+| | |
+|---|---|
+| Dateien | `features/outlook/Outlook.tsx` (1773), `OutlookWizard.tsx` (463) |
+| Services/Stores | `outlookService` (Tabelle `outlooks`), `outlookStore` (764 Z.), `currencyStrength.ts` (1463 Z.: COT via CFTC-API, Preise via frankfurter.dev, Zinsen hartkodiert) |
+| UI | Gauge, Heatmap, Card, Modal |
+| Supabase | `outlooks`, `cot_snapshots`, `cot_pair_signals`, `cot_currency_analysis`, `pair_notes`, `fundamentals_notes`, `user_watchlists` |
+| Status | ⬜ — **Fundamentaldaten ab Migration ausschließlich aus GVA-Backend `/api/fundamentals`**; hartkodierte Zinstabelle und Doppel-Fetcher entfallen |
+| Hinweis | `fundamentalDrivers.ts` existiert im Journal-Quellcode **nicht mehr** (0 Treffer) — Anforderung „wird nicht mitkopiert" ist damit trivial erfüllt und bleibt es (Ziel-Zustand: 0 Treffer im gesamten Frontend). |
+
+### d) calendar (Trade-Kalender, ≠ Econ-Kalender des Terminals)
+| | |
+|---|---|
+| Dateien | `features/calendar/Calendar.tsx` (312) |
+| Services/Stores | `tradeStore` (Trades pro Tag, P&L-Färbung) |
+| UI | Card, Modal |
+| Supabase | `trades` |
+| Status | ⬜ — Route wird `/journal/kalender`, Terminal-`/kalender` (ForexFactory) bleibt unverändert |
+
+### e) strategy
+| | |
+|---|---|
+| Dateien | `features/strategy/StrategyBuilder.tsx` (927) |
+| Services/Stores | `strategyService` → generisches `supabaseService`-CRUD |
+| UI | Card, Modal, Button |
+| Supabase | `strategies` (+ `trades.strategy_id`-Verknüpfung aus `RUN_THIS_strategy_link.sql`) |
+| Status | ⬜ |
+
+### f) backtest
+| | |
+|---|---|
+| Dateien | `features/backtest/Backtest.tsx`, `BacktestLanding.tsx`, `BacktestRoom.tsx` (432), `BacktestWizard.tsx`, `BacktestAnalysis.tsx` (367), `backtestStats.ts`, `useBacktestSessions.ts`, `types.ts` |
+| Services/Stores | `backtestService` (Sessions inkl. Trades+Config als JSONB in `backtest_sessions`) |
+| UI | Card, Modal, Button, CommandInput, charts |
+| Supabase | `backtest_sessions` (+ Spalten aus `RUN_THIS_backtest_problems.sql`) |
+| Status | ⬜ |
+
+### g) settings
+| | |
+|---|---|
+| Dateien | `features/settings/Settings.tsx` (847) |
+| Services/Stores | `preferencesService` (`user_preferences` Key/Value), `accountConfigService`, `uiStore`, Export/Import (JSON) |
+| Supabase | `user_preferences`, `user_profiles`, `risk_settings` |
+| Status | ⬜ — Electron-spezifische Teile (Speicherpfad, Auto-Update) entfallen |
+
+### Shared-Schicht
+| Journal | Ziel in frontend-next | Status |
+|---|---|---|
+| `shared/lib/supabase.ts` (Browser-Client) | `lib/supabase/client.ts` (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) | ⬜ |
+| `shared/services/*` (supabaseService, trade, accountConfig, outlook, strategy, backtest, preferences) | `lib/journal/*` | ⬜ |
+| `shared/stores/*` (zustand) | `lib/journal/stores/*` (Client Components) | ⬜ |
+| `shared/ui/*` (18 Komponenten) | `components/ui/*` — neu gestaltet, Terminal-Dark-Theme als Basis (siehe Design) | ⬜ |
+| `shared/utils/calculations.ts`, `dateUtils.ts` | `lib/journal/` | ⬜ |
+| `shared/config/constants.ts`, `schemas.ts` (zod) | `lib/journal/` | ⬜ |
+
+## Bewusst NICHT migriert (Begründung)
+
+| Was | Warum |
+|---|---|
+| `electron/`, `webApi.ts`-localStorage-Fallback, Offline-Modus, HashRouter | Kombi-App ist reine Web-App mit Pflicht-Login; Supabase ist Single Source of Truth. |
+| `api.ts` (`window.electronAPI`-Layer) + `webApi.ts`-Fetcher (COT/Frankfurter/Kalender/Zins-Hardcode) | Electron-IPC obsolet; Marktdaten liefert das Terminal (Supabase-Jobs) bzw. GVA-Backend `/api/fundamentals`. Hartkodierte Zinssätze (Stand Mai 2026) wären Datenmüll. |
+| `i18n/` (i18next, 2 Sprachen) | Single-User, UI durchgehend Deutsch — Framework-Overhead ohne Nutzen. |
+| `utils/migration.ts` (localStorage→Supabase-Einmalmigration), `utils/tradingViewIntegration.ts` (Electron-Fenster) | Einmalzweck erfüllt bzw. Electron-gebunden. |
+| `providers/QueryProvider` (react-query) | Datenzugriff läuft über Server Components + leichte Client-Stores; react-query nur für Electron-Polling nötig gewesen. Wird nachgerüstet, falls sich echter Bedarf zeigt. |
+| GlobalSearch (Cmd+K) | Wird im Zuge des Design-Overhauls neu bewertet; zunächst nicht portiert (geringe Nutzung, hohe Kopplung an alte Routen). Falls vermisst → Backlog. |
+
+**Hinweis Screenshots:** Das alte Journal speicherte Screenshots im Web-Modus **nur in
+localStorage des Browsers** (Base64, Key `trading-journal-screenshots`); der JSON-Export
+enthielt sie nicht. Die Tabelle `trade_screenshots` existierte, wurde vom Code aber nicht
+befüllt. Die Kombi-App speichert Screenshots in `trade_screenshots` (Supabase). In Supabase
+vorhandene Daten gehen nicht verloren; localStorage-Screenshots des alten Deployments sind
+technisch nur aus dem alten Browser-Origin exportierbar (falls benötigt: einmalig altes
+Deployment öffnen und Export-Snippet ausführen — auf Zuruf).
+
+## Supabase-Schema
+
+`supabase/schema.sql` (Repo-Root) = eine idempotente Datei:
+1. Journal-Tabellen aus `TRADING-JOURNAL/desktop-app/supabase/` (maßgeblich: `008_complete_fresh_setup.sql` + `009_schema_update.sql` + drei `RUN_THIS_*.sql`) — 1:1, keine Umbenennungen. Konflikte zwischen den Migrations-Dateien werden hier dokumentiert, nicht still aufgelöst.
+2. Terminal-Tabellen aus `frontend-next/supabase/schema.sql` (+ `seed.sql` für Instrumente).
+3. Neu: `signals` (Scanner-HITs, siehe unten) mit RLS + Index `(user_id, status, hit_at desc)`.
+4. RLS auf allen Tabellen; Journal+signals mit `auth.uid() = user_id`-Policy, Terminal ohne Policy (nur Service-Role). `updated_at`-Trigger überall, wo das Feld existiert.
+
+## Live-Kopplung Scanner → Journal (Block 5)
+
+- Backend (`Backend/main.py`): beim HIT **additiv** INSERT in `signals` (Supabase, Service-Role) mit Fundamental-Snapshot beider Währungen. Keine Änderung an `data_pipeline.py`, `analyzer.py`, `_zones_loop`, `_price_loop`, Sticky-HIT, CONSUMED, `state.json`.
+- Neuer Endpoint `GET /api/fundamentals` (Master aus `fundamentals.py`); einziger Fundamentals-Lieferant fürs Frontend.
+- Signals-Inbox im Scanner-Feature: Journalieren (TradeForm vorausgefüllt: Pair, Datum, Setup „GVA", Snapshot-Notiz) / Später ansehen (bleibt `new`, Badge) / Verwerfen (`dismissed`).
+
+## Setup-Anleitung (einmalig, manuell)
+
+1. **Supabase**: bestehendes Journal-Projekt öffnen → SQL-Editor → `supabase/schema.sql` komplett ausführen (idempotent, legt nur Fehlendes an) → danach `frontend-next/supabase/seed.sql` (Instrumente).
+2. **Google-OAuth** (falls im Journal-Projekt noch nicht aktiv): Google Cloud Console → OAuth-Client (Web) → Authorized redirect URI = `https://<projekt-ref>.supabase.co/auth/v1/callback` → Client-ID + Secret in Supabase unter Auth → Providers → Google eintragen. In Supabase Auth → URL Configuration: Site-URL = Vercel-Produktions-URL, zusätzliche Redirect-URLs für Preview-Deployments (`https://*-<team>.vercel.app/**`) und `http://localhost:3000/**`.
+3. **Vercel** (Projekt-Root = `frontend-next`): Env-Vars `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (neu), zusätzlich zu den bestehenden Terminal-Vars (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OANDA_*`, `CRON_SECRET`, …).
+4. **Render** (Backend): neue Env-Vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (für signals-INSERT), optional `FRED_API_KEY`.
+5. Lokal: `frontend-next/.env.example` → `.env.local` kopieren und füllen.
+
+## Design-Overhaul (Block 3)
+
+Basis ist das dunkle Terminal-Theme (`globals.css`, Panel/TopBar/Sidebar). Journal-UI-Kit
+(BentoGrid, Gauge, StatCard, …) wird nicht 1:1 kopiert, sondern im Terminal-Look neu aufgebaut
+unter `components/ui/`. Screenshot-Vergleich alt/neu wird hier ergänzt, sobald die ersten
+Features stehen. <!-- TODO: Screenshots -->
+
+## Journal-Repo einfrieren (Block 6)
+
+Root-README von TRADING-JOURNAL bekommt Archiv-Hinweis („abgelöst durch GVA Screener" + Link). Danach keine Commits mehr dort.
