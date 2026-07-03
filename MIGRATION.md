@@ -166,6 +166,18 @@ Basis ist das dunkle Terminal-Theme (`globals.css`, Panel/TopBar/Sidebar). Journ
 unter `components/ui/`. Screenshot-Vergleich alt/neu wird hier ergänzt, sobald die ersten
 Features stehen. <!-- TODO: Screenshots -->
 
+Stand des UI-Kits (✅ Block 3): `Button`, `Modal`, `Toaster`/`toast`, `Field`/`Input`/`Select`/
+`Textarea`, `StatCard`, `Badge`, `EmptyState`, `Skeleton`/`SkeletonRows`, `Segmented`,
+`ProgressRing` — dazu Motion-Utilities (`anim-fade-in`, `anim-slide-up`, `anim-scale-in`,
+Shimmer) und Focus-/Selection-Styles in `globals.css`. `Panel` (Terminal) bleibt der
+Karten-Grundbaustein.
+
+Bewusste Abweichungen vom Auftragstext:
+- **Icons: Phosphor statt Lucide.** Die Terminal-App nutzt durchgehend Phosphor (Webfont);
+  ein zweites Icon-Set würde genau die geforderte Konsistenz brechen.
+- **Motion: CSS-Keyframes statt Framer Motion** („o.ä." laut Auftrag): gleiche sanfte
+  Übergänge ohne ~40 kB Zusatz-Bundle; nachrüstbar, falls komplexe Layout-Animationen nötig werden.
+
 ## Journal-Repo einfrieren (Block 6)
 
 Root-README von TRADING-JOURNAL bekommt Archiv-Hinweis („abgelöst durch GVA Screener" + Link). Danach keine Commits mehr dort.
