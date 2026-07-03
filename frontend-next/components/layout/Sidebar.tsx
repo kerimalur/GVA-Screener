@@ -45,8 +45,19 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
-      <div className="px-5 py-3 border-t border-border text-[10px] text-faint font-mono">
-        Daten: CFTC · FRED · OANDA · Myfxbook
+      <div className="border-t border-border">
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            className="w-full flex items-center gap-2.5 px-5 py-2.5 text-[13px] text-muted hover:text-text hover:bg-surface2/50 transition-colors"
+          >
+            <i className="ph-bold ph-sign-out text-base" />
+            Abmelden
+          </button>
+        </form>
+        <div className="px-5 pb-3 text-[10px] text-faint font-mono">
+          Daten: CFTC · FRED · OANDA · Myfxbook
+        </div>
       </div>
     </aside>
   );
