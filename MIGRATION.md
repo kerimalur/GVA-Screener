@@ -121,11 +121,29 @@ Deployment öffnen und Export-Snippet ausführen — auf Zuruf).
 
 ## Supabase-Schema
 
-`supabase/schema.sql` (Repo-Root) = eine idempotente Datei:
-1. Journal-Tabellen aus `TRADING-JOURNAL/desktop-app/supabase/` (maßgeblich: `008_complete_fresh_setup.sql` + `009_schema_update.sql` + drei `RUN_THIS_*.sql`) — 1:1, keine Umbenennungen. Konflikte zwischen den Migrations-Dateien werden hier dokumentiert, nicht still aufgelöst.
-2. Terminal-Tabellen aus `frontend-next/supabase/schema.sql` (+ `seed.sql` für Instrumente).
-3. Neu: `signals` (Scanner-HITs, siehe unten) mit RLS + Index `(user_id, status, hit_at desc)`.
-4. RLS auf allen Tabellen; Journal+signals mit `auth.uid() = user_id`-Policy, Terminal ohne Policy (nur Service-Role). `updated_at`-Trigger überall, wo das Feld existiert.
+`supabase/schema.sql` (Repo-Root) = eine idempotente Master-Datei (Status: ✅ geschrieben):
+1. Journal-Tabellen aus `TRADING-JOURNAL/desktop-app/supabase/` (maßgeblich: `008_complete_fresh_setup.sql` + `009_schema_update.sql` + drei `RUN_THIS_*.sql`) — keine Umbenennungen.
+2. Terminal-Tabellen (vorher `frontend-next/supabase/schema.sql`, jetzt in die Master-Datei integriert; `seed.sql` liegt ebenfalls im Root-`supabase/`).
+3. Neu: `signals` (Scanner-HITs) mit RLS + Index `(user_id, status, hit_at desc)`.
+4. RLS auf allen Tabellen; Journal+signals mit `auth.uid() = user_id`-Policy (inkl. `WITH CHECK`), Terminal ohne Policy (nur Service-Role). `updated_at`-Trigger überall, wo das Feld existiert.
+
+### Gefundene Konflikte zwischen den Journal-Migrationsdateien
+
+| Tabelle | 008_complete_fresh_setup.sql | RUN_THIS_* (neuer) + App-Code | Entscheidung in schema.sql |
+|---|---|---|---|
+| `user_preferences` | `user_id UNIQUE` + `preferences JSONB` | `(user_id, key, value)`, PK `(user_id,key)` — `preferencesService` nutzt genau das | Key/Value-Variante. Liegt live das Alt-Schema vor → `RAISE WARNING` statt stiller Umbau. |
+| `backtest_sessions` | `pair TEXT NOT NULL`, `timeframe`, `start_date` … | schlank: name/status/elapsed_ms/trades/stats (Config in `stats.config`) — `backtestService` schreibt kein `pair` | Schlanke Variante; existiert `pair NOT NULL` (Alt-Schema) → wird per `DROP NOT NULL` gelockert (dokumentiert, sonst schlägt jedes Speichern fehl). |
+| `trades.result`, `outlooks.status/confidence` | mit CHECK-Constraints | ohne CHECKs | Ohne CHECKs (lenient, bestandsdatensicher). |
+| `outlooks` Spalten | `cot_bias JSONB`, `target_entry/sl/tp`, `interesting_zone`, `image_data` | identisch + 009-Erweiterungen (`is_starred`, `setup_id`, `strategy_checklist`, `fundamental_outlook`) | Beides (Basis + Erweiterungen als `ADD COLUMN IF NOT EXISTS`). |
+
+### ⚠️ Journal-Supabase-Projekt ist pausiert (INACTIVE)
+
+Das Supabase-Projekt `yahvhzywsynnsqznysfr` („kerim.alur@gmail.com's Project", eu-west-1,
+angelegt 2026-02-08 — mutmaßlich das Journal-Projekt) ist im Free-Tier pausiert.
+**Vor dem Einspielen von schema.sql im Supabase-Dashboard wiederherstellen (Restore)**
+und kurz verifizieren, dass `trades`/`accounts` mit Bestandsdaten vorhanden sind
+(= richtiges Projekt). Ein automatischer Restore aus dieser Session wurde bewusst
+nicht durchgeführt.
 
 ## Live-Kopplung Scanner → Journal (Block 5)
 

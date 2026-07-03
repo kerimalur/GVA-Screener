@@ -31,11 +31,11 @@ Page-Loads rufen nie externe APIs auf.
 
 ## Setup
 
-1. **Supabase-Projekt anlegen** (supabase.com), dann im SQL-Editor ausführen:
-   - `supabase/schema.sql` (Tabellen + Views + RLS)
-   - `supabase/seed.sql` (Instrumente, CB-Stances, CB-Meetings)
+1. **Supabase:** bestehendes Journal-Projekt verwenden (siehe `../MIGRATION.md`), im SQL-Editor ausführen:
+   - `../supabase/schema.sql` (Master: Journal + Terminal + signals, idempotent)
+   - `../supabase/seed.sql` (Instrumente, CB-Stances, CB-Meetings)
 2. **Env:** `.env.example` → `.env.local` kopieren und füllen
-   (Supabase-URL + Service-Role-Key, OANDA-Key, Myfxbook-Login, `CRON_SECRET`).
+   (Supabase-URL + Anon-Key + Service-Role-Key, OANDA-Key, Myfxbook-Login, `CRON_SECRET`).
 3. **Install + Backfill** (einmalig, lädt ~5 Jahre COT + ~19 Jahre Preise + FRED-Historie):
    ```bash
    npm install
