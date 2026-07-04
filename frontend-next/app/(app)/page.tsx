@@ -3,14 +3,26 @@ import StrengthPanel from "@/components/dashboard/StrengthPanel";
 import ScreenerPanel from "@/components/dashboard/ScreenerPanel";
 import CbSpectrumPanel from "@/components/dashboard/CbSpectrumPanel";
 import RiskGaugePanel from "@/components/dashboard/RiskGaugePanel";
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadDashboardData } from "@/lib/data/dashboard";
 import { tryQuery } from "@/lib/data/util";
+import { getServerSettings } from "@/lib/settings/server";
 
 export const dynamic = "force-dynamic";
 
+// Daten sind global (Service-Client) und ändern sich nur per Cron —
+// 5 min Server-Cache statt Dutzender Supabase-Roundtrips pro Aufruf.
+const getDashboard = unstable_cache(
+  () => tryQuery(() => loadDashboardData(createServiceClient())),
+  ["dashboard-data"],
+  { revalidate: 300 },
+);
+
 export default async function Page() {
-  const data = await tryQuery(() => loadDashboardData(createServiceClient()));
+  const [data, settings] = await Promise.all([getDashboard(), getServerSettings()]);
+  const hi = settings.terminal.cotExtremePct;
+  const lo = 100 - hi;
 
   if (!data) {
     return (
@@ -44,7 +56,10 @@ export default async function Page() {
           subtitle="Relative Stärke aus 28 Paaren (Ø signierter Return)"
           className="xl:col-span-2"
         >
-          <StrengthPanel strength={data.strength} />
+          <StrengthPanel
+            strength={data.strength}
+            initialLookback={settings.terminal.strengthLookback}
+          />
         </Panel>
 
         <Panel
@@ -79,13 +94,13 @@ export default async function Page() {
               <div className="text-[12px] font-mono font-bold">{c.ccy}</div>
               <div
                 className={`text-lg font-black font-mono ${
-                  c.percentile >= 90 ? "text-up" : c.percentile <= 10 ? "text-down" : "text-text"
+                  c.percentile >= hi ? "text-up" : c.percentile <= lo ? "text-down" : "text-text"
                 }`}
               >
                 {c.percentile.toFixed(0)}
               </div>
               <div className="text-[9px] text-faint uppercase tracking-wider">
-                {c.percentile >= 90 ? "Extrem-Long" : c.percentile <= 10 ? "Extrem-Short" : "Perzentil"}
+                {c.percentile >= hi ? "Extrem-Long" : c.percentile <= lo ? "Extrem-Short" : "Perzentil"}
               </div>
             </div>
           ))}

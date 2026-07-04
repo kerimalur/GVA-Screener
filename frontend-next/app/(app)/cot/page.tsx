@@ -4,10 +4,12 @@ import CotSnapshotTable from "@/components/cot/CotSnapshotTable";
 import CotHistoryChart from "@/components/cot/CotHistoryChart";
 import BacktestPanel from "@/components/cot/BacktestPanel";
 import MultiCompare from "@/components/cot/MultiCompare";
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getLatestReports, getCotSeries } from "@/lib/data/cot";
+import { getLatestReports, getCotSeriesBatch } from "@/lib/data/cot";
 import { tryQuery } from "@/lib/data/util";
 import { CFTC_CONTRACTS, CONTRACT_BY_CODE } from "@/lib/constants/cftcContracts";
+import { getServerSettings } from "@/lib/settings/server";
 
 export const dynamic = "force-dynamic";
 
@@ -19,37 +21,56 @@ interface PercentileRow {
   date: string;
 }
 
+// Globale Daten, ändern sich wöchentlich (CFTC) — 5 min Server-Cache.
+// Map ist nicht JSON-serialisierbar → als Entries cachen.
+const getCotPageData = unstable_cache(
+  () =>
+    tryQuery(async () => {
+      const db = createServiceClient();
+      const [latest, seriesByCode] = await Promise.all([
+        getLatestReports(db),
+        getCotSeriesBatch(db, CFTC_CONTRACTS.map((c) => c.code)),
+      ]);
+
+      const percentiles: PercentileRow[] = [];
+      for (const c of CFTC_CONTRACTS) {
+        const series = seriesByCode.get(c.code) ?? [];
+        const last = series[series.length - 1];
+        if (last) {
+          percentiles.push({
+            code: c.code,
+            label: c.label,
+            net: last.net,
+            percentile: last.percentile,
+            date: last.date,
+          });
+        }
+      }
+      return { latestEntries: [...latest.entries()], percentiles };
+    }),
+  ["cot-page-data"],
+  { revalidate: 300 },
+);
+
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ code?: string }>;
 }) {
-  const { code: rawCode } = await searchParams;
-  const code = rawCode && CONTRACT_BY_CODE.has(rawCode) ? rawCode : "099741";
+  const [{ code: rawCode }, settings, raw] = await Promise.all([
+    searchParams,
+    getServerSettings(),
+    getCotPageData(),
+  ]);
+  const fallback = CONTRACT_BY_CODE.has(settings.terminal.defaultCot)
+    ? settings.terminal.defaultCot
+    : "099741";
+  const code = rawCode && CONTRACT_BY_CODE.has(rawCode) ? rawCode : fallback;
   const contract = CONTRACT_BY_CODE.get(code)!;
+  const hi = settings.terminal.cotExtremePct;
+  const lo = 100 - hi;
 
-  const data = await tryQuery(async () => {
-    const db = createServiceClient();
-    const latest = await getLatestReports(db);
-
-    // Aktuelle Perzentile aller Contracts (für Extrem-Übersicht)
-    const percentiles: PercentileRow[] = [];
-    for (const c of CFTC_CONTRACTS) {
-      const series = await getCotSeries(db, c.code);
-      const last = series[series.length - 1];
-      if (last) {
-        percentiles.push({
-          code: c.code,
-          label: c.label,
-          net: last.net,
-          percentile: last.percentile,
-          date: last.date,
-        });
-      }
-    }
-    return { latest, percentiles };
-  });
-
+  const data = raw ? { latest: new Map(raw.latestEntries), percentiles: raw.percentiles } : null;
   const snapshot = data?.latest.get(code);
 
   return (
@@ -96,9 +117,9 @@ export default async function Page({
                     const extreme =
                       p.percentile === null
                         ? null
-                        : p.percentile >= 90
+                        : p.percentile >= hi
                           ? "long"
-                          : p.percentile <= 10
+                          : p.percentile <= lo
                             ? "short"
                             : null;
                     return (

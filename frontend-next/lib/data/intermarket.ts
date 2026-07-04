@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getPrices } from "./cot";
+import { getPrices, getPricesBatch } from "./cot";
 import { getFredSeries } from "./fred";
 import { computeDxy } from "@/lib/calc/dxy";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
@@ -43,19 +43,23 @@ export async function loadIntermarketData(db: SupabaseClient): Promise<Intermark
     (i) => i.baseCcy === "USD" || i.quoteCcy === "USD",
   );
   const impactSince = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
-  const impact: IntermarketData["impact"] = [];
-  for (const inst of usdPairs) {
-    const prices = await getPrices(db, inst.instrument, impactSince);
+  const pricesByInstrument = await getPricesBatch(
+    db,
+    usdPairs.map((i) => i.instrument),
+    impactSince,
+  );
+  const impact: IntermarketData["impact"] = usdPairs.map((inst) => {
+    const prices = pricesByInstrument.get(inst.instrument) ?? [];
     const ret =
       prices.length > 21
         ? (prices[prices.length - 1].close / prices[prices.length - 22].close - 1) * 100
         : null;
-    impact.push({
+    return {
       pair: inst.displayName,
       ret1M: ret,
       usdSide: inst.baseCcy === "USD" ? "base" : "quote",
-    });
-  }
+    };
+  });
 
   return { dxy, broad, impact };
 }

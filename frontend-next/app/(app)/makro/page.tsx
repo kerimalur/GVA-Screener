@@ -3,11 +3,13 @@ import RegionCompare, { type RegionData } from "@/components/makro/RegionCompare
 import SpreadChart from "@/components/makro/SpreadChart";
 import ExpectationsPanel from "@/components/makro/ExpectationsPanel";
 import OverlayChart from "@/components/intermarket/OverlayChart";
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getCategoryValue, getStaleFlags, getFredSeries } from "@/lib/data/fred";
 import { tryQuery } from "@/lib/data/util";
 import { G8_CURRENCIES, FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import { seriesFor, type FredCategory } from "@/lib/constants/fredSeries";
+import { getServerSettings } from "@/lib/settings/server";
 import type { CbMeetingRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -37,53 +39,65 @@ async function loadRegion(
   return { ccy, values };
 }
 
+// Globale Daten (Service-Client, Cron-Updates) — 5 min Server-Cache je Regionen-Paar.
+const getMakroData = (ccyA: string, ccyB: string) =>
+  unstable_cache(
+    () =>
+      tryQuery(async () => {
+        const db = createServiceClient();
+        const staleFlags = await getStaleFlags(db);
+        const recentSince = new Date();
+        recentSince.setFullYear(recentSince.getFullYear() - 2);
+        const recentStr = recentSince.toISOString().slice(0, 10);
+
+        // Regionen, Zins-Tabelle, Erwartungen, Meetings — alles parallel
+        const [regionA, regionB, latestRows, dgs2, fedfunds, meetingsRes] = await Promise.all([
+          loadRegion(db, ccyA, staleFlags),
+          loadRegion(db, ccyB, staleFlags),
+          Promise.all(
+            G8_CURRENCIES.map(async (ccy) => {
+              const [rate, y10] = await Promise.all([
+                getCategoryValue(db, ccy, "policy_rate", staleFlags, recentStr),
+                getCategoryValue(db, ccy, "yield_10y", staleFlags, recentStr),
+              ]);
+              return [ccy, { rate: rate?.latest ?? null, y10: y10?.latest ?? null }] as const;
+            }),
+          ),
+          getFredSeries(db, "DGS2", recentStr),
+          getFredSeries(db, "FEDFUNDS", recentStr),
+          db.from("cb_meetings").select("*").order("meeting_date", { ascending: true }),
+        ]);
+
+        return {
+          regionA,
+          regionB,
+          latestRows,
+          dgs2: dgs2[dgs2.length - 1]?.value ?? null,
+          fedfunds: fedfunds[fedfunds.length - 1]?.value ?? null,
+          meetings: (meetingsRes.data ?? []) as CbMeetingRow[],
+        };
+      }),
+    ["makro-data", ccyA, ccyB],
+    { revalidate: 300 },
+  )();
+
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ a?: string; b?: string }>;
 }) {
-  const params = await searchParams;
-  const ccyA = G8_CURRENCIES.includes(params.a as never) ? (params.a as string) : "USD";
-  const ccyB = G8_CURRENCIES.includes(params.b as never) ? (params.b as string) : "EUR";
+  const [params, settings] = await Promise.all([searchParams, getServerSettings()]);
+  const defA = G8_CURRENCIES.includes(settings.terminal.makroA as never)
+    ? settings.terminal.makroA
+    : "USD";
+  const defB = G8_CURRENCIES.includes(settings.terminal.makroB as never)
+    ? settings.terminal.makroB
+    : "EUR";
+  const ccyA = G8_CURRENCIES.includes(params.a as never) ? (params.a as string) : defA;
+  const ccyB = G8_CURRENCIES.includes(params.b as never) ? (params.b as string) : defB;
 
-  const data = await tryQuery(async () => {
-    const db = createServiceClient();
-    const staleFlags = await getStaleFlags(db);
-
-    const [regionA, regionB] = await Promise.all([
-      loadRegion(db, ccyA, staleFlags),
-      loadRegion(db, ccyB, staleFlags),
-    ]);
-
-    // Zins-/Renditetabelle: letzte Werte je Währung
-    const latestByCcy = new Map<string, { rate: number | null; y10: number | null }>();
-    for (const ccy of G8_CURRENCIES) {
-      const [rate, y10] = await Promise.all([
-        getCategoryValue(db, ccy, "policy_rate", staleFlags),
-        getCategoryValue(db, ccy, "yield_10y", staleFlags),
-      ]);
-      latestByCcy.set(ccy, { rate: rate?.latest ?? null, y10: y10?.latest ?? null });
-    }
-
-    // Erwartungen
-    const [dgs2, fedfunds] = await Promise.all([
-      getFredSeries(db, "DGS2"),
-      getFredSeries(db, "FEDFUNDS"),
-    ]);
-    const { data: meetings } = await db
-      .from("cb_meetings")
-      .select("*")
-      .order("meeting_date", { ascending: true });
-
-    return {
-      regionA,
-      regionB,
-      latestByCcy,
-      dgs2: dgs2[dgs2.length - 1]?.value ?? null,
-      fedfunds: fedfunds[fedfunds.length - 1]?.value ?? null,
-      meetings: (meetings ?? []) as CbMeetingRow[],
-    };
-  });
+  const raw = await getMakroData(ccyA, ccyB);
+  const data = raw ? { ...raw, latestByCcy: new Map(raw.latestRows) } : null;
 
   if (!data) {
     return (

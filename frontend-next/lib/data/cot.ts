@@ -14,19 +14,7 @@ export interface CotSeriesPoint {
   percentile: number | null;
 }
 
-/** Volle COT-Historie eines Contracts mit Netto-Positionen + Rolling-Perzentil. */
-export async function getCotSeries(
-  db: SupabaseClient,
-  contractCode: string,
-  windowWeeks = 260,
-): Promise<CotSeriesPoint[]> {
-  const rows = await pagedSelect<CotReportRow>(
-    db,
-    "cot_reports",
-    "*",
-    (q) => q.eq("contract_code", contractCode).order("report_date", { ascending: true }),
-  );
-
+function toSeriesPoints(rows: CotReportRow[], windowWeeks: number): CotSeriesPoint[] {
   const nets = rows.map((r) => (r.noncomm_long ?? 0) - (r.noncomm_short ?? 0));
   const percentiles = rollingPercentile(nets, windowWeeks);
 
@@ -40,6 +28,53 @@ export async function getCotSeries(
     openInterest: r.open_interest,
     percentile: percentiles[i],
   }));
+}
+
+/** Volle COT-Historie eines Contracts mit Netto-Positionen + Rolling-Perzentil. */
+export async function getCotSeries(
+  db: SupabaseClient,
+  contractCode: string,
+  windowWeeks = 260,
+): Promise<CotSeriesPoint[]> {
+  const rows = await pagedSelect<CotReportRow>(
+    db,
+    "cot_reports",
+    "*",
+    (q) => q.eq("contract_code", contractCode).order("report_date", { ascending: true }),
+  );
+  return toSeriesPoints(rows, windowWeeks);
+}
+
+/**
+ * COT-Historien mehrerer Contracts in EINEM (paginierten) Query statt
+ * einer Query-Schleife — spart pro Seite dutzende Roundtrips.
+ */
+export async function getCotSeriesBatch(
+  db: SupabaseClient,
+  contractCodes: string[],
+  windowWeeks = 260,
+): Promise<Map<string, CotSeriesPoint[]>> {
+  const rows = await pagedSelect<CotReportRow>(
+    db,
+    "cot_reports",
+    "*",
+    (q) =>
+      q
+        .in("contract_code", contractCodes)
+        .order("contract_code", { ascending: true })
+        .order("report_date", { ascending: true }),
+  );
+
+  const byCode = new Map<string, CotReportRow[]>();
+  for (const row of rows) {
+    const arr = byCode.get(row.contract_code) ?? [];
+    arr.push(row);
+    byCode.set(row.contract_code, arr);
+  }
+
+  const out = new Map<string, CotSeriesPoint[]>();
+  for (const [code, group] of byCode) out.set(code, toSeriesPoints(group, windowWeeks));
+  return out;
 }
 
 /** Letzte zwei Reports je Contract (aktuell + Vorwoche) für Snapshot-Tabelle. */
@@ -63,6 +98,34 @@ export async function getLatestReports(
     else if (!entry.prev) entry.prev = row;
   }
   return map;
+}
+
+/** Tagesschlusskurse mehrerer Instrumente in einem Query (gruppiert). */
+export async function getPricesBatch(
+  db: SupabaseClient,
+  instruments: string[],
+  since?: string,
+): Promise<Map<string, Array<Pick<PriceDailyRow, "date" | "close">>>> {
+  const rows = await pagedSelect<Pick<PriceDailyRow, "instrument" | "date" | "close">>(
+    db,
+    "price_daily",
+    "instrument, date, close",
+    (q) => {
+      let query = q
+        .in("instrument", instruments)
+        .order("instrument", { ascending: true })
+        .order("date", { ascending: true });
+      if (since) query = query.gte("date", since);
+      return query;
+    },
+  );
+  const out = new Map<string, Array<Pick<PriceDailyRow, "date" | "close">>>();
+  for (const r of rows) {
+    const arr = out.get(r.instrument) ?? [];
+    arr.push({ date: r.date, close: r.close });
+    out.set(r.instrument, arr);
+  }
+  return out;
 }
 
 /** Tagesschlusskurse eines Instruments (chronologisch). */

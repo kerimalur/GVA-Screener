@@ -31,6 +31,13 @@ export async function getStaleFlags(db: SupabaseClient): Promise<Map<string, boo
   return new Map((data ?? []).map((r) => [r.series_id as string, Boolean(r.is_stale)]));
 }
 
+/** 5 Jahre zurück — reicht für YoY (12/4 Lags) + 24er-Sparkline aller Frequenzen. */
+function defaultCategorySince(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 5);
+  return d.toISOString().slice(0, 10);
+}
+
 export interface CategoryValue {
   seriesId: string;
   label: string;
@@ -51,11 +58,14 @@ export async function getCategoryValue(
   ccy: string,
   category: FredCategory,
   staleFlags: Map<string, boolean>,
+  since?: string,
 ): Promise<CategoryValue | null> {
   const def = seriesFor(ccy, category);
   if (!def) return null;
 
-  let series = await getFredSeries(db, def.id);
+  // Nur Latest + 24-Punkte-Sparkline nötig — ohne Cutoff lädt z.B. DGS10
+  // die komplette Tageshistorie seit 1962 (16+ paginierte Requests).
+  let series = await getFredSeries(db, def.id, since ?? defaultCategorySince());
   let isYoY = false;
   if (def.isIndex && series.length > 0) {
     const quarterly = def.id.includes("Q") || category === "gdp";

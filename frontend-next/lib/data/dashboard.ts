@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pagedSelect } from "./util";
-import { getCotSeries } from "./cot";
+import { getCotSeriesBatch } from "./cot";
 import { getSeasonalityStats } from "./seasonality";
 import type { SeriesPoint } from "@/lib/calc/seriesMath";
 import { currencyStrength, type StrengthResult } from "@/lib/calc/strength";
@@ -53,39 +53,51 @@ async function getFredBatch(
 }
 
 export async function loadDashboardData(db: SupabaseClient): Promise<DashboardData> {
-  // — Preise: letzte ~10 Monate aller Instrumente (Strength, Risk-Gauge) —
   const priceCutoff = new Date();
   priceCutoff.setMonth(priceCutoff.getMonth() - 10);
-  const priceRows = await pagedSelect<{ instrument: string; date: string; close: number }>(
-    db,
-    "price_daily",
-    "instrument, date, close",
-    (q) =>
-      q.gte("date", priceCutoff.toISOString().slice(0, 10)).order("instrument").order("date"),
-  );
-  const closesByInstrument = new Map<string, number[]>();
-  for (const r of priceRows) {
-    const arr = closesByInstrument.get(r.instrument) ?? [];
-    arr.push(r.close);
-    closesByInstrument.set(r.instrument, arr);
-  }
+  const fredCutoff = new Date();
+  fredCutoff.setFullYear(fredCutoff.getFullYear() - 10);
+  const vixCutoff = new Date();
+  vixCutoff.setFullYear(vixCutoff.getFullYear() - 5);
 
-  // — FRED: Leitzinsen + 10Y (10 Jahre) + VIX (5 Jahre) —
   const policyIds = G8_CURRENCIES.map((c) => seriesFor(c, "policy_rate")?.id).filter(
     (x): x is string => Boolean(x),
   );
   const yieldIds = G8_CURRENCIES.map((c) => seriesFor(c, "yield_10y")?.id).filter(
     (x): x is string => Boolean(x),
   );
-  const fredCutoff = new Date();
-  fredCutoff.setFullYear(fredCutoff.getFullYear() - 10);
-  const vixCutoff = new Date();
-  vixCutoff.setFullYear(vixCutoff.getFullYear() - 5);
+  const cotCodes = G8_CURRENCIES.map((c) => CONTRACT_BY_CCY.get(c)?.code).filter(
+    (x): x is string => Boolean(x),
+  );
 
-  const [rateSeries, vixSeries] = await Promise.all([
-    getFredBatch(db, [...policyIds, ...yieldIds], fredCutoff.toISOString().slice(0, 10)),
-    getFredBatch(db, ["VIXCLS"], vixCutoff.toISOString().slice(0, 10)),
-  ]);
+  // Alle unabhängigen Blöcke parallel — statt sequenzieller Roundtrips
+  const [priceRows, rateSeries, vixSeries, cotByCode, seasonalityByInstrument, sentRes, stanceRes] =
+    await Promise.all([
+      pagedSelect<{ instrument: string; date: string; close: number }>(
+        db,
+        "price_daily",
+        "instrument, date, close",
+        (q) =>
+          q.gte("date", priceCutoff.toISOString().slice(0, 10)).order("instrument").order("date"),
+      ),
+      getFredBatch(db, [...policyIds, ...yieldIds], fredCutoff.toISOString().slice(0, 10)),
+      getFredBatch(db, ["VIXCLS"], vixCutoff.toISOString().slice(0, 10)),
+      getCotSeriesBatch(db, cotCodes),
+      getSeasonalityStats(db),
+      db
+        .from("sentiment_snapshots")
+        .select("pair, captured_at, long_pct")
+        .order("captured_at", { ascending: false })
+        .limit(60),
+      db.from("cb_stance").select("*"),
+    ]);
+
+  const closesByInstrument = new Map<string, number[]>();
+  for (const r of priceRows) {
+    const arr = closesByInstrument.get(r.instrument) ?? [];
+    arr.push(r.close);
+    closesByInstrument.set(r.instrument, arr);
+  }
 
   const policyByCcy = new Map<string, SeriesPoint[]>();
   const yield10ByCcy = new Map<string, SeriesPoint[]>();
@@ -101,35 +113,25 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
   for (const ccy of G8_CURRENCIES) {
     const contract = CONTRACT_BY_CCY.get(ccy);
     if (!contract) continue;
-    const series = await getCotSeries(db, contract.code);
+    const series = cotByCode.get(contract.code) ?? [];
     const last = series[series.length - 1];
     if (last?.percentile !== null && last?.percentile !== undefined) {
       cotPercentileByCcy.set(ccy, last.percentile);
     }
   }
 
-  // — Saisonalität (View) —
-  const seasonalityByInstrument = await getSeasonalityStats(db);
-
   // — Sentiment: letzter Snapshot je Pair —
-  const { data: sentRows } = await db
-    .from("sentiment_snapshots")
-    .select("pair, captured_at, long_pct")
-    .order("captured_at", { ascending: false })
-    .limit(60);
   const sentimentByPair = new Map<string, number>();
   let sentimentAge: string | null = null;
-  for (const r of sentRows ?? []) {
+  for (const r of sentRes.data ?? []) {
     if (!sentimentByPair.has(r.pair) && r.long_pct !== null) {
       sentimentByPair.set(r.pair, r.long_pct);
       sentimentAge = sentimentAge ?? r.captured_at;
     }
   }
 
-  // — CB-Stances —
-  const { data: stanceRows } = await db.from("cb_stance").select("*");
   const stanceByBank = new Map(
-    ((stanceRows ?? []) as CbStanceRow[]).map((r) => [r.bank, r]),
+    ((stanceRes.data ?? []) as CbStanceRow[]).map((r) => [r.bank, r]),
   );
 
   // ===== Berechnungen =====

@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import Panel from "@/components/layout/Panel";
 import CorrelationMatrix from "@/components/intermarket/CorrelationMatrix";
 import OverlayTool from "@/components/intermarket/OverlayTool";
@@ -9,8 +10,15 @@ import { DXY_WEIGHTS } from "@/lib/calc/dxy";
 
 export const dynamic = "force-dynamic";
 
+// Globale Daten — 5 min Server-Cache.
+const getIntermarket = unstable_cache(
+  () => tryQuery(() => loadIntermarketData(createServiceClient())),
+  ["intermarket-data"],
+  { revalidate: 300 },
+);
+
 export default async function Page() {
-  const data = await tryQuery(() => loadIntermarketData(createServiceClient()));
+  const data = await getIntermarket();
 
   return (
     <div className="space-y-5 max-w-[1500px] mx-auto">

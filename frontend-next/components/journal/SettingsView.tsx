@@ -19,6 +19,14 @@ import {
   type TransactionType,
 } from "@/lib/journal/types";
 import { loadPref, savePref } from "@/lib/journal/prefs";
+import {
+  hydrateAppSettings,
+  loadAppSettings,
+  saveAppSettings,
+  type AppSettings,
+} from "@/lib/settings/client";
+import { CFTC_CONTRACTS } from "@/lib/constants/cftcContracts";
+import { G8_CURRENCIES } from "@/lib/constants/instruments";
 import { loadTransactions, saveTransaction, removeTransaction } from "@/lib/journal/accounts";
 import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
@@ -94,6 +102,17 @@ export default function SettingsView() {
     note: "",
   });
   const [exporting, setExporting] = useState(false);
+  const [app, setApp] = useState<AppSettings>(() => loadAppSettings());
+
+  const updateApp = (next: AppSettings) => {
+    setApp(next);
+    saveAppSettings(next).catch(() => {});
+  };
+
+  useEffect(() => {
+    // Backend-Stand der App-Settings gewinnt (geräteübergreifend)
+    hydrateAppSettings().then(setApp).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Lokale Listen sofort, dann Backend-Hydrierung (Backend gewinnt)
@@ -215,6 +234,135 @@ export default function SettingsView() {
           </div>
         </div>
       </Panel>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Panel title="Terminal" subtitle="Voreinstellungen für COT, Makro & Dashboard — greifen beim nächsten Seitenaufruf">
+          <div className="space-y-3">
+            <Field label="Standard-COT-Contract">
+              <Select
+                value={app.terminal.defaultCot}
+                onChange={(e) =>
+                  updateApp({ ...app, terminal: { ...app.terminal, defaultCot: e.target.value } })
+                }
+              >
+                {CFTC_CONTRACTS.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Makro-Region A">
+                <Select
+                  value={app.terminal.makroA}
+                  onChange={(e) =>
+                    updateApp({ ...app, terminal: { ...app.terminal, makroA: e.target.value } })
+                  }
+                >
+                  {G8_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Makro-Region B">
+                <Select
+                  value={app.terminal.makroB}
+                  onChange={(e) =>
+                    updateApp({ ...app, terminal: { ...app.terminal, makroB: e.target.value } })
+                  }
+                >
+                  {G8_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Currency-Strength-Zeitfenster (Dashboard)">
+              <Select
+                value={app.terminal.strengthLookback}
+                onChange={(e) =>
+                  updateApp({
+                    ...app,
+                    terminal: {
+                      ...app.terminal,
+                      strengthLookback: e.target.value as AppSettings["terminal"]["strengthLookback"],
+                    },
+                  })
+                }
+              >
+                <option value="1W">1 Woche</option>
+                <option value="1M">1 Monat</option>
+                <option value="3M">3 Monate</option>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="COT-Extrem ab Perzentil">
+                <Input
+                  type="number"
+                  min={55}
+                  max={99}
+                  value={app.terminal.cotExtremePct}
+                  onChange={(e) =>
+                    updateApp({
+                      ...app,
+                      terminal: { ...app.terminal, cotExtremePct: parseInt(e.target.value) || 90 },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Sentiment-Konträr ab %">
+                <Input
+                  type="number"
+                  min={55}
+                  max={95}
+                  value={app.terminal.sentimentExtremePct}
+                  onChange={(e) =>
+                    updateApp({
+                      ...app,
+                      terminal: {
+                        ...app.terminal,
+                        sentimentExtremePct: parseInt(e.target.value) || 70,
+                      },
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            <p className="text-[11px] text-muted">
+              Extrem-Schwellen färben COT-Tabelle, Dashboard-Schnellübersicht und
+              Konträr-Signale. Short-Seite = 100&nbsp;−&nbsp;Wert.
+            </p>
+          </div>
+        </Panel>
+
+        <Panel title="Markt-Scanner" subtitle="GVA-Screener (Radar, Heatmap)">
+          <div className="space-y-3">
+            <Field label="Aktualisierungs-Intervall (Sekunden)">
+              <Input
+                type="number"
+                min={5}
+                max={600}
+                value={app.scanner.pollSec}
+                onChange={(e) =>
+                  updateApp({
+                    ...app,
+                    scanner: { ...app.scanner, pollSec: parseInt(e.target.value) || 30 },
+                  })
+                }
+              />
+            </Field>
+            <p className="text-[11px] text-muted">
+              Wie oft Radar/Heatmap das FastAPI-Backend abfragen. Kleinere Werte =
+              aktueller, aber mehr Last. Greift beim nächsten Öffnen der Scanner-Seite.
+            </p>
+          </div>
+        </Panel>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-4">
         <TagListEditor

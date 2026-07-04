@@ -9,8 +9,14 @@ const LOOKBACKS = ["1W", "1M", "3M"] as const;
 type Lookback = (typeof LOOKBACKS)[number];
 
 /** Currency Strength: Ranking-Liste + Heatmap (Währung × Lookback). */
-export default function StrengthPanel({ strength }: { strength: StrengthResult }) {
-  const [lb, setLb] = useState<Lookback>("1M");
+export default function StrengthPanel({
+  strength,
+  initialLookback = "1M",
+}: {
+  strength: StrengthResult;
+  initialLookback?: Lookback;
+}) {
+  const [lb, setLb] = useState<Lookback>(initialLookback);
 
   const ranking = strength.ranking[lb];
   const maxAbs = Math.max(
