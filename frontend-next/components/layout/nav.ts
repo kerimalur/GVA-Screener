@@ -36,6 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
       { href: "/journal", label: "Trades", icon: "ph-notebook" },
       { href: "/journal/equity", label: "Equity", icon: "ph-chart-line-up" },
+      { href: "/journal/outlook", label: "Outlook", icon: "ph-crosshair" },
     ],
   },
 ];
@@ -54,4 +55,5 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal": "Trade-Journal",
   "/journal/dashboard": "Journal-Dashboard",
   "/journal/equity": "Equity-Kurve",
+  "/journal/outlook": "Outlook — Trading-Thesen",
 };

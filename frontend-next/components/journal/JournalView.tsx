@@ -23,21 +23,25 @@ import {
   setDefaultAccount,
 } from "@/lib/journal/accounts";
 import { recomputeBalances } from "@/lib/journal/calculations";
+import { updateOutlook } from "@/lib/journal/outlooks";
 
 const ACCOUNT_TYPE_KEY = "journal_account_type";
 
 interface JournalViewProps {
-  /** Vorbefüllung aus Signals-Inbox / Outlook */
+  /** Vorbefüllung (zusätzlich wird sessionStorage `tradePrefill` gelesen) */
   prefill?: TradePrefill | null;
 }
 
-export default function JournalView({ prefill }: JournalViewProps) {
+export default function JournalView({ prefill: prefillProp }: JournalViewProps) {
   const [accountType, setAccountType] = useState<AccountType>("funded");
   const [configs, setConfigs] = useState<AccountConfigs | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [prefill, setPrefill] = useState<(TradePrefill & { outlookId?: string; signalId?: string }) | null>(
+    prefillProp ?? null,
+  );
 
-  const [showForm, setShowForm] = useState(!!prefill);
+  const [showForm, setShowForm] = useState(!!prefillProp);
   const [editingTrade, setEditingTrade] = useState<Trade | undefined>();
   const [viewingTrade, setViewingTrade] = useState<Trade | null>(null);
   const [showSetup, setShowSetup] = useState(false);
@@ -51,6 +55,21 @@ export default function JournalView({ prefill }: JournalViewProps) {
     const saved = localStorage.getItem(ACCOUNT_TYPE_KEY);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- externe Quelle (localStorage), einmalig
     if (saved === "ek" || saved === "funded") setAccountType(saved);
+  }, []);
+
+  // Prefill aus Outlook/Signals-Inbox (sessionStorage, wie im alten Journal)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("tradePrefill");
+      if (raw) {
+        sessionStorage.removeItem("tradePrefill");
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- externe Quelle (sessionStorage), einmalig
+        setPrefill(JSON.parse(raw));
+        setShowForm(true);
+      }
+    } catch {
+      // ungültiges Prefill ignorieren
+    }
   }, []);
 
   const config = configs?.[accountType] ?? null;
@@ -125,6 +144,19 @@ export default function JournalView({ prefill }: JournalViewProps) {
       const saved = await tradeService.saveTrade({ ...tradeData, type: accountType });
       if (screenshot && saved.id) await saveScreenshot(saved.id, screenshot);
       else if (!screenshot && tradeData.id) await deleteScreenshot(tradeData.id);
+      // Aus Outlook journaliert → Outlook als ausgeführt markieren
+      if (prefill?.outlookId && !tradeData.id) {
+        try {
+          await updateOutlook(prefill.outlookId, {
+            status: "executed",
+            executedTradeId: saved.id,
+            journaledTo: [accountType],
+          });
+        } catch {
+          // Outlook-Verknüpfung ist Komfort, kein Blocker
+        }
+        setPrefill(null);
+      }
       await recomputeAccount();
       toast.success(tradeData.id ? "Trade aktualisiert" : "Trade gespeichert");
       setShowForm(false);
