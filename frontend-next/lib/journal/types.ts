@@ -230,3 +230,20 @@ export function getProblems(): string[] {
 export function saveProblems(list: string[]): void {
   localStorage.setItem(PROBLEMS_KEY, JSON.stringify(list));
 }
+
+// Wiederverwendbare Notiz-Bausteine für Backtest-Trades (gleiches Muster)
+const NOTE_SNIPPETS_KEY = "tradingJournal_noteSnippets";
+
+export function getNoteSnippets(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(NOTE_SNIPPETS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveNoteSnippets(list: string[]): void {
+  localStorage.setItem(NOTE_SNIPPETS_KEY, JSON.stringify(list));
+}

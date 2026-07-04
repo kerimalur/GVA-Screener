@@ -79,8 +79,8 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Dateien | `features/backtest/Backtest.tsx`, `BacktestLanding.tsx`, `BacktestRoom.tsx` (432), `BacktestWizard.tsx`, `BacktestAnalysis.tsx` (367), `backtestStats.ts`, `useBacktestSessions.ts`, `types.ts` |
 | Services/Stores | `backtestService` (Sessions inkl. Trades+Config als JSONB in `backtest_sessions`) |
 | UI | Card, Modal, Button, CommandInput, charts |
-| Supabase | `backtest_sessions` (+ Spalten aus `RUN_THIS_backtest_problems.sql`) |
-| Status | ⬜ |
+| Supabase | `backtest_sessions` (+ Spalten aus `RUN_THIS_backtest_problems.sql`), `user_preferences` (Problem-Tags + Notiz-Bausteine) |
+| Status | ✅ — Route `/journal/backtest`. Landing (Session-Liste mit Live-Stats), Wizard (Name/Paar/Strategie/RR/Risiko/Account/Startdatum), Fokus-Raum (Timer mit Pause, Tastatur-first: L/S, W/X/B, 1–9, +/−, Enter; Setups, Problem-Tags mit eigener Liste, Notiz-Bausteine, Strg+V-Screenshots komprimiert), Auswertung (Equity nach Datum mit Zeitraum-Zoom, €-Modell, Setup-Performance, Problem-Leaks mit n≥20-Verlässlichkeit, Filter, Trade-Liste). Bewusst geändert: localStorage⇄Supabase-Hybrid entfällt (Login ist Pflicht, Supabase alleinige Quelle — die Einmal-Migration localStorage→Supabase ist im alten Journal bereits gelaufen). |
 
 ### g) settings
 | | |
