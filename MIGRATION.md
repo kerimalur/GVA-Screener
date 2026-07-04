@@ -62,7 +62,7 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Services/Stores | `tradeStore` (Trades pro Tag, P&L-Färbung) |
 | UI | Card, Modal |
 | Supabase | `trades` |
-| Status | ⬜ — Route wird `/journal/kalender`, Terminal-`/kalender` (ForexFactory) bleibt unverändert |
+| Status | ✅ — Route `/journal/kalender` (Terminal-`/kalender` = Econ-Kalender bleibt unverändert). Monats-Grid mit R-Färbung je Tag, Jahresansicht mit Monats-Summen, Tages-Detailpanel mit Trade-Liste, Konto-Filter. Bugfix beim Port: Datums-Strings jetzt lokal statt UTC (`toISOString` kippte Randtage). |
 
 ### e) strategy
 | | |
