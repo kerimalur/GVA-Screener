@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from data_pipeline import fetch_and_resample_3d, fetch_live_prices
 from analyzer import analyze_gva_zones
 import macro
+import supabase_signals
 
 load_dotenv()
 
@@ -174,6 +175,10 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                 if ALERT_CACHE.get(cache_key) != level:
                     msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
                     send_telegram_alert(msg)
+                    # Additiv: HIT auch als Signal in Supabase ablegen (Journal-Inbox).
+                    # Fire-and-forget im eigenen Thread, no-op ohne Konfiguration.
+                    snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
+                    supabase_signals.record_hit_async(pair, side, level, snapshot)
                     ALERT_CACHE[cache_key] = level
                 save_state()
             near = side
