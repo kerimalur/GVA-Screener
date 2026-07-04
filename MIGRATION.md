@@ -71,7 +71,7 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Services/Stores | `strategyService` → generisches `supabaseService`-CRUD |
 | UI | Card, Modal, Button |
 | Supabase | `strategies` (+ `trades.strategy_id`-Verknüpfung aus `RUN_THIS_strategy_link.sql`) |
-| Status | ⬜ |
+| Status | ✅ — Route `/journal/strategie`. Karten-Liste + Editor: Name/Beschreibung/Richtung, Zeiteinheiten, Paar-Auswahl, Regeln in 4 Typen (Entry/Exit/Filter/Risk) mit Templates + Pflicht-Flag, Notizen, komprimierte Chart-Beispielbilder, aktiv-Toggle. Regeln speisen die Outlook-Checkliste; Strategie-Tag im TradeForm. |
 
 ### f) backtest
 | | |
