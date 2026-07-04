@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "./nav";
+import SignalsBadge from "./SignalsBadge";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -40,6 +41,7 @@ export default function Sidebar() {
                 >
                   <i className={`ph-bold ${item.icon} text-base`} />
                   {item.label}
+                  {item.href === "/scanner/signale" && <SignalsBadge />}
                 </Link>
               );
             })}

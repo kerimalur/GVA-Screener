@@ -28,6 +28,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar" },
       { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine" },
+      { href: "/scanner/signale", label: "Signale", icon: "ph-tray" },
     ],
   },
   {
@@ -56,6 +57,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/vergleich": "Vergleichs-Tool",
   "/scanner/radar": "Visuelles Radar",
   "/scanner/heatmap": "Heatmap 28",
+  "/scanner/signale": "Signals-Inbox",
   "/journal": "Trade-Journal",
   "/journal/dashboard": "Journal-Dashboard",
   "/journal/equity": "Equity-Kurve",

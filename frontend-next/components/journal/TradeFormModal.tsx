@@ -21,6 +21,8 @@ export interface TradePrefill {
   date?: string;
   notes?: string;
   confluences?: string[];
+  /** Setup-Flags, z.B. ["setup_3day_gva"] aus der Signals-Inbox */
+  setups?: string[];
 }
 
 interface TradeFormModalProps {
@@ -64,6 +66,7 @@ export default function TradeFormModal({
       profitAmount: 0,
       notes: prefill?.notes || "",
       confluences: prefill?.confluences || trade?.confluences || [],
+      ...Object.fromEntries((prefill?.setups || []).map((key) => [key, true])),
       ...trade,
       ...(prefill?.date ? { date: prefill.date } : {}),
     };

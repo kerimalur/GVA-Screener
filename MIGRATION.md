@@ -145,11 +145,12 @@ und kurz verifizieren, dass `trades`/`accounts` mit Bestandsdaten vorhanden sind
 (= richtiges Projekt). Ein automatischer Restore aus dieser Session wurde bewusst
 nicht durchgeführt.
 
-## Live-Kopplung Scanner → Journal (Block 5)
+## Live-Kopplung Scanner → Journal (Block 5) — ✅
 
-- Backend (`Backend/main.py`): beim HIT **additiv** INSERT in `signals` (Supabase, Service-Role) mit Fundamental-Snapshot beider Währungen. Keine Änderung an `data_pipeline.py`, `analyzer.py`, `_zones_loop`, `_price_loop`, Sticky-HIT, CONSUMED, `state.json`.
-- Neuer Endpoint `GET /api/fundamentals` (Master aus `fundamentals.py`); einziger Fundamentals-Lieferant fürs Frontend.
-- Signals-Inbox im Scanner-Feature: Journalieren (TradeForm vorausgefüllt: Pair, Datum, Setup „GVA", Snapshot-Notiz) / Später ansehen (bleibt `new`, Badge) / Verwerfen (`dismissed`).
+- **Backend**: neues Modul `Backend/supabase_signals.py`. Beim HIT (im Telegram-Alert-Zweig von `evaluate_pair`) additiv INSERT in `signals` — fire-and-forget im eigenen Daemon-Thread, no-op ohne Konfiguration. `data_pipeline.py`, `analyzer.py`, `_zones_loop`, `_price_loop`, Sticky-HIT, CONSUMED, `state.json` unverändert. `user_id` kommt aus `SIGNALS_USER_ID` (Render-Env) oder wird einmalig via Auth-Admin-API ermittelt (erster/einziger User) und gecacht. Snapshot = beide Währungen aus dem Makro-Cache (ohne 52-Wochen-COT-Array).
+- **`GET /api/fundamentals`** existierte bereits (Makro-Loop, `macro.py` + `fundamentals.py`, 6h-Refresh, STATIC-Fallback) — der Frontend-Client (`lib/journal/fundamentals.ts`) wurde auf dieses Format (Liste `currencies` mit `code/score/realRate/cpi/tenY/rate`) ausgerichtet. Damit einzige Fundamentals-Quelle; `fundamentalDrivers` hat 0 Treffer im Frontend.
+- **Signals-Inbox**: Route `/scanner/signale` + Badge (Anzahl `new`, Poll 2 min) in der Sidebar. Aktionen je Signal: **Journalieren** → Status `journaled` + TradeForm-Prefill (Pair, HIT-Datum, Richtung aus Line-Typ, Setup `3D-GVA`, Notiz mit Fundamental-Snapshot beider Währungen) · **Später ansehen** → Status bleibt `new` (klappt Details auf) · **Verwerfen** → `dismissed`.
+- **Render-Env neu**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SIGNALS_USER_ID`.
 
 ## Setup-Anleitung (einmalig, manuell)
 

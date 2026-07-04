@@ -22,7 +22,7 @@ import {
 import {
   fetchFundamentals,
   splitPair,
-  type FundamentalsResponse,
+  type FundamentalsData,
 } from "@/lib/journal/fundamentals";
 
 type StatusFilter = "all" | "starred" | OutlookStatus;
@@ -41,12 +41,12 @@ function FundamentalsCompare({
   fundamentals,
 }: {
   symbol: string;
-  fundamentals: FundamentalsResponse | null;
+  fundamentals: FundamentalsData | null;
 }) {
   if (!fundamentals) return null;
   const { base, quote } = splitPair(symbol);
-  const b = fundamentals.currencies[base];
-  const q = fundamentals.currencies[quote];
+  const b = fundamentals.byCode[base];
+  const q = fundamentals.byCode[quote];
   if (!b && !q) return null;
 
   const fmt = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "—");
@@ -55,14 +55,14 @@ function FundamentalsCompare({
       {[{ ccy: base, d: b }, { ccy: quote, d: q }].map(({ ccy, d }) => (
         <div key={ccy} className="flex items-center gap-2">
           <span className="font-bold text-muted">{ccy}</span>
-          <span title="Realzins" className={Number(d?.real_rate) >= 0 ? "text-up" : "text-down"}>
-            RR {fmt(d?.real_rate)}
-          </span>
           {d?.score !== undefined && (
-            <span title="Score" className={Number(d.score) >= 0 ? "text-up" : "text-down"}>
+            <span title="Stärke-Score" className={Number(d.score) >= 0 ? "text-up" : "text-down"}>
               S {fmt(d.score)}
             </span>
           )}
+          <span title="Realzins" className={Number(d?.realRate) >= 0 ? "text-up" : "text-down"}>
+            RR {fmt(d?.realRate)}
+          </span>
         </div>
       ))}
     </div>
@@ -72,7 +72,7 @@ function FundamentalsCompare({
 export default function OutlookView() {
   const router = useRouter();
   const [outlooks, setOutlooks] = useState<OutlookRecord[]>([]);
-  const [fundamentals, setFundamentals] = useState<FundamentalsResponse | null>(null);
+  const [fundamentals, setFundamentals] = useState<FundamentalsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [showWizard, setShowWizard] = useState(false);
@@ -175,9 +175,9 @@ export default function OutlookView() {
           onChange={setFilter}
         />
         <div className="ml-auto flex items-center gap-2">
-          {fundamentals?.updated_at && (
+          {fundamentals?.updated != null && (
             <span className="text-[10px] text-faint font-mono">
-              Fundamentals: {new Date(fundamentals.updated_at).toLocaleString("de-DE")}
+              Fundamentals: {new Date(Number(fundamentals.updated) * 1000 || String(fundamentals.updated)).toLocaleString("de-DE")}
             </span>
           )}
           <Button size="sm" icon="ph-plus" onClick={() => setShowWizard(true)}>
