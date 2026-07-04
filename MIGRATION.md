@@ -88,7 +88,7 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Dateien | `features/settings/Settings.tsx` (847) |
 | Services/Stores | `preferencesService` (`user_preferences` Key/Value), `accountConfigService`, `uiStore`, Export/Import (JSON) |
 | Supabase | `user_preferences`, `user_profiles`, `risk_settings` |
-| Status | ⬜ — Electron-spezifische Teile (Speicherpfad, Auto-Update) entfallen |
+| Status | ✅ — Route `/journal/einstellungen`. Konto-Info (Google-User), Confluences/Problem-Tags/Notiz-Bausteine verwalten (localStorage-Mirror + `user_preferences`-Sync), Transaktionen (Einzahlung/Auszahlung/Payout) anlegen+löschen, JSON-Komplett-Export aller Journal-Daten. Bewusst weggelassen: Electron-Teile (Speicherpfad, Auto-Update), JSON-**Import** (Supabase ist Quelle der Wahrheit; blindes Re-Importieren riskiert Duplikate — bei Bedarf gezielt nachrüstbar), `risk_settings`/`user_profiles`-UI (im alten Journal praktisch ungenutzt; Tabellen bleiben erhalten). |
 
 ### Shared-Schicht
 | Journal | Ziel in frontend-next | Status |
