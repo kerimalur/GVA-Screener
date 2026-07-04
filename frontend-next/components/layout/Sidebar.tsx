@@ -25,8 +25,9 @@ export default function Sidebar() {
               {group.title}
             </div>
             {group.items.map((item) => {
-              const active =
-                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              // Exakter Match — Nav listet konkrete Seiten, Prefix-Matching würde
+              // z.B. /journal auch auf /journal/equity hervorheben.
+              const active = pathname === item.href;
               return (
                 <Link
                   key={item.href}

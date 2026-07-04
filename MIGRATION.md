@@ -43,7 +43,7 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Services/Stores | `tradeStore` (Metrics via `utils/calculations.ts`, 447 Z.), `accountStore`, `analyticsStore`, `widgetSettingsStore` |
 | UI | BentoGrid, StatCard, MetricDisplay, SparklineChart, AnimatedNumber, ProgressRing, TradeStreak, charts/EquityChart+WinRateChart+RMultipleChart |
 | Supabase | `trades`, `accounts`, `user_widget_settings` |
-| Status | ⬜ |
+| Status | ✅ — Routen `/journal/dashboard` + `/journal/equity`. KPI-StatCards (Balance, P&L, Total R, Win Rate, PF+Expectancy, Max DD), Equity-Chart (Währung, DD-Fläche, Recharts), R-Histogramm, Win/Loss-Donut, Streak-Dots, Zeitraum-/Kontofilter, Kontoziel-Ring, Letzte Trades. Bewusst weggelassen: Widget-Customizer (`user_widget_settings`) und PDF-/HTML-Export — Single-User-Nutzen gering vs. Komplexität; Layout ist kuratiert statt konfigurierbar. Bei Bedarf nachrüstbar. |
 
 ### c) outlook
 | | |
