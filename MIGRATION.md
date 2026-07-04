@@ -34,7 +34,7 @@ Status-Legende: ⬜ offen · 🟨 in Arbeit · ✅ migriert · ⛔ bewusst nicht
 | Services/Stores | `tradeService` (Supabase-CRUD + Feld-Mapping symbol/side↔pair/direction), `accountConfigService` (accounts + transactions), `tradeStore`, `accountStore` |
 | UI | Modal, Button, Card, TradeRow, Toaster, Pagination |
 | Supabase | `trades`, `accounts`, `transactions`, `trade_screenshots` (siehe Hinweis Screenshots) |
-| Status | ⬜ |
+| Status | ✅ — Route `/journal` (EK/Funded per Umschalter statt zwei Routen), Trade-CRUD + Screenshots (jetzt in `trade_screenshots` statt localStorage) + Balance-Neuberechnung (#11) + Konto-Setup/-Verwaltung/-Wechsler + Filter + Karten-/Tabellenansicht. Ziel: `lib/journal/*` + `components/journal/*`. Bewusst weggelassen: separates EK-„Kapitalziel" aus localStorage (redundant zum Konto-Ziel `profitTarget` — eine Quelle statt zwei). |
 
 ### b) dashboard + equity
 | | |

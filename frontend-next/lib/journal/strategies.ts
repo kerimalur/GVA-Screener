@@ -26,8 +26,10 @@ export async function loadStrategies(): Promise<StrategyRecord[]> {
 }
 
 export async function saveStrategy(data: StrategyRecord): Promise<StrategyRecord> {
-  if (data.id) return (await updateOne("strategies", data.id, data)) as StrategyRecord;
-  return (await insertOne("strategies", data)) as StrategyRecord;
+  if (data.id) {
+    return (await updateOne("strategies", data.id, data)) as unknown as StrategyRecord;
+  }
+  return (await insertOne("strategies", data)) as unknown as StrategyRecord;
 }
 
 export async function removeStrategy(id: string): Promise<boolean> {

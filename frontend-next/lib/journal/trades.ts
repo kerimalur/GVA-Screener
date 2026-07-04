@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 1:1-Port aus dem Journal (dynamische Supabase-Rows) */
 /**
  * Trade-CRUD — Port von shared/services/tradeService.ts.
  * DB-Spalten: symbol/side (App: pair/direction).

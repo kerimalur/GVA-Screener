@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 1:1-Port aus dem Journal (dynamische Supabase-Rows) */
 /**
  * Account-Verwaltung (accounts + transactions) —
  * Port des Supabase-Zweigs von accountConfigService.ts

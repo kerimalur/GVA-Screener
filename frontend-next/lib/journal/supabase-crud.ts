@@ -75,14 +75,14 @@ export async function fetchAll<T>(options: FetchOptions): Promise<T[]> {
   return (data || []).map((row) => objectToCamel(row) as T);
 }
 
-export async function insertOne<T extends Record<string, unknown>>(
+export async function insertOne<T extends object>(
   table: string,
   data: T,
 ) {
   const supabase = createBrowserSupabase();
   const user = await requireSession();
 
-  const payload = objectToSnake(data);
+  const payload = objectToSnake(data as Record<string, unknown>);
   payload.user_id = user.id;
   for (const key of Object.keys(payload)) {
     if (payload[key] === undefined) delete payload[key];
@@ -97,7 +97,7 @@ export async function insertOne<T extends Record<string, unknown>>(
   return result ? objectToCamel(result) : null;
 }
 
-export async function updateOne<T extends Record<string, unknown>>(
+export async function updateOne<T extends object>(
   table: string,
   id: string,
   data: T,
@@ -105,7 +105,7 @@ export async function updateOne<T extends Record<string, unknown>>(
   const supabase = createBrowserSupabase();
   const user = await requireSession();
 
-  const payload = objectToSnake(data);
+  const payload = objectToSnake(data as Record<string, unknown>);
   delete payload.id;
   delete payload.user_id;
   delete payload.created_at;
@@ -131,7 +131,7 @@ export async function deleteOne(table: string, id: string): Promise<boolean> {
   return true;
 }
 
-export async function upsertOne<T extends Record<string, unknown>>(
+export async function upsertOne<T extends object>(
   table: string,
   data: T,
   uniqueColumns: string[] = ["id"],
@@ -139,7 +139,7 @@ export async function upsertOne<T extends Record<string, unknown>>(
   const supabase = createBrowserSupabase();
   const user = await requireSession();
 
-  const payload = objectToSnake(data);
+  const payload = objectToSnake(data as Record<string, unknown>);
   payload.user_id = user.id;
   payload.updated_at = new Date().toISOString();
 

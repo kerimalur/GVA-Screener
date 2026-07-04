@@ -30,6 +30,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine" },
     ],
   },
+  {
+    title: "Journal",
+    items: [
+      { href: "/journal", label: "Trades", icon: "ph-notebook" },
+    ],
+  },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
@@ -43,4 +49,5 @@ export const PAGE_TITLES: Record<string, string> = {
   "/vergleich": "Vergleichs-Tool",
   "/scanner/radar": "Visuelles Radar",
   "/scanner/heatmap": "Heatmap 28",
+  "/journal": "Trade-Journal",
 };
