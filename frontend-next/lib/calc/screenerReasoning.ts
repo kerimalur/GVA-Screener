@@ -2,6 +2,7 @@ import type { SeriesPoint } from "./seriesMath";
 import type { SeasonalityResult } from "./seasonality";
 import { MONTH_LABELS } from "./seasonality";
 import type { InstrumentDef } from "@/lib/constants/instruments";
+import type { CotFlowSummary } from "./cotDelta";
 
 export interface ScreenerFactor {
   name: string;
@@ -21,6 +22,12 @@ export interface ScreenerVerdict {
 export interface ScreenerInputs {
   /** aktuelles NonComm-Perzentil je Währung (USD über Dollar-Index-Future) */
   cotPercentileByCcy: Map<string, number>;
+  /**
+   * COT-Flow je Währung (TFF Leveraged Funds, Fallback Legacy NonComm):
+   * Δ-zentrierte Sicht — primäres COT-Signal. Fehlt die Map/Währung,
+   * fällt der COT-Faktor auf den Niveau-Perzentil-Vergleich zurück.
+   */
+  cotFlowByCcy?: Map<string, CotFlowSummary>;
   /** Leitzins-Serien je Währung */
   policyByCcy: Map<string, SeriesPoint[]>;
   /** 10Y-Serien je Währung */
@@ -76,16 +83,40 @@ export function evaluatePair(inst: InstrumentDef, inputs: ScreenerInputs): Scree
     }
   }
 
-  // 2) COT-Positionierung (Perzentil-Differenz Basis vs. Quote)
+  // 2) COT — Δ-zentriert: 4W-Flow-Differenz (in % OI) Basis vs. Quote.
+  //    Niveau-Perzentil nur noch Kontext/Extrem-Warnung; ohne Flow-Daten
+  //    (TFF-Tabelle leer) Fallback auf den alten Niveau-Vergleich.
   {
+    const fb = inputs.cotFlowByCcy?.get(base);
+    const fq = inputs.cotFlowByCcy?.get(quote);
     const pb = inputs.cotPercentileByCcy.get(base);
     const pq = inputs.cotPercentileByCcy.get(quote);
-    if (pb !== undefined && pq !== undefined) {
+    const extreme =
+      pb !== undefined && pb >= 90 ? ` ${base} im Niveau-Extrem-Long (Konträr-Risiko!).` :
+      pb !== undefined && pb <= 10 ? ` ${base} im Niveau-Extrem-Short.` : "";
+
+    if (fb?.delta4wPctOi != null && fq?.delta4wPctOi != null) {
+      const flowGap = fb.delta4wPctOi - fq.delta4wPctOi;
+      const dir: -1 | 0 | 1 = flowGap >= 4 ? 1 : flowGap <= -4 ? -1 : 0;
+      const fmt = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+      const streak =
+        fb.streakWeeks >= 3 && fb.direction !== 0
+          ? ` ${base}-Flow seit ${fb.streakWeeks} Wochen ${fb.direction > 0 ? "positiv (Akkumulation)" : "negativ (Distribution)"}.`
+          : "";
+      factors.push({
+        name: "COT-Flow",
+        dir,
+        text: `Smart-Money-Flow 4W (% OI): ${base} ${fmt(fb.delta4wPctOi)} vs. ${quote} ${fmt(fq.delta4wPctOi)} — ${
+          dir === 1
+            ? `Momentum-Kapital rotiert Richtung ${base}`
+            : dir === -1
+              ? `Momentum-Kapital rotiert Richtung ${quote}`
+              : "kein klarer Rotations-Trend"
+        }.${streak}${extreme}`,
+      });
+    } else if (pb !== undefined && pq !== undefined) {
       const gap = pb - pq;
       const dir: -1 | 0 | 1 = gap >= 30 ? 1 : gap <= -30 ? -1 : 0;
-      const extreme =
-        pb >= 90 ? ` ${base} im Extrem-Long (Konträr-Risiko!).` :
-        pb <= 10 ? ` ${base} im Extrem-Short.` : "";
       factors.push({
         name: "COT",
         dir,

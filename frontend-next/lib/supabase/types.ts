@@ -5,7 +5,7 @@ export interface InstrumentRow {
   display_name: string;
   base_ccy: string | null;
   quote_ccy: string | null;
-  kind: "fx" | "commodity" | "index";
+  kind: "fx" | "commodity" | "index" | "crypto";
   cftc_code: string | null;
 }
 
@@ -31,6 +31,23 @@ export interface CotReportRow {
   nonrept_short: number | null;
   chg_noncomm_long: number | null;
   chg_noncomm_short: number | null;
+}
+
+/** TFF-Report ("Traders in Financial Futures", futures-only) — nur Financial Futures. */
+export interface CotTffRow {
+  contract_code: string;
+  report_date: string;
+  open_interest: number | null;
+  dealer_long: number | null;
+  dealer_short: number | null;
+  asset_mgr_long: number | null;
+  asset_mgr_short: number | null;
+  lev_money_long: number | null;
+  lev_money_short: number | null;
+  other_long: number | null;
+  other_short: number | null;
+  nonrept_long: number | null;
+  nonrept_short: number | null;
 }
 
 export interface FredSeriesRow {

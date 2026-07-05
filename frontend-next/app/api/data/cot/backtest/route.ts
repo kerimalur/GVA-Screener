@@ -1,20 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getCotSeries, getPrices } from "@/lib/data/cot";
+import { getCotSeries, getPrices, getTffSeriesBatch } from "@/lib/data/cot";
 import { CONTRACT_BY_CODE } from "@/lib/constants/cftcContracts";
-import { cotBacktest } from "@/lib/calc/cotBacktest";
+import { cotBacktest, type CotPoint } from "@/lib/calc/cotBacktest";
 
 export const revalidate = 3600;
 
 /**
- * COT-Extrem-Backtest.
- * GET /api/data/cot/backtest?code=099741&pct=10&direction=top&window=260
+ * COT-Backtest (Niveau- oder Δ-Extrem, Legacy- oder TFF-Quelle).
+ * GET /api/data/cot/backtest?code=099741&pct=10&direction=top&mode=delta&source=tff&window=260
  */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const code = params.get("code") ?? "";
   const pct = parseFloat(params.get("pct") ?? "10");
   const direction = params.get("direction") === "bottom" ? "bottom" : "top";
+  const mode = params.get("mode") === "delta" ? "delta" : "level";
+  const requestedSource = params.get("source") === "tff" ? "tff" : "legacy";
   const window = parseInt(params.get("window") ?? "260", 10);
 
   const contract = CONTRACT_BY_CODE.get(code);
@@ -30,14 +32,31 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = createServiceClient();
-    const series = await getCotSeries(db, code, window);
+
+    // TFF nur wenn angefragt, Contract enthalten und Daten vorhanden — sonst Legacy
+    let source: "tff" | "legacy" = "legacy";
+    let series: CotPoint[] = [];
+    if (requestedSource === "tff" && contract.inTff) {
+      const tff = (await getTffSeriesBatch(db, [code], window)).get(code) ?? [];
+      if (tff.length > 0) {
+        source = "tff";
+        series = tff.map((s) => ({ date: s.date, net: s.levNet }));
+      }
+    }
+    if (series.length === 0) {
+      const legacy = await getCotSeries(db, code, window);
+      series = legacy.map((s) => ({ date: s.date, net: s.net }));
+    }
+
     const prices = await getPrices(db, contract.priceInstrument, series[0]?.date);
 
-    const result = cotBacktest(
-      series.map((s) => ({ date: s.date, net: s.net })),
-      prices,
-      { thresholdPct: pct, direction, windowWeeks: window, invertPrice: contract.invertPrice },
-    );
+    const result = cotBacktest(series, prices, {
+      thresholdPct: pct,
+      direction,
+      mode,
+      windowWeeks: window,
+      invertPrice: contract.invertPrice,
+    });
 
     return NextResponse.json({
       contract: {
@@ -46,7 +65,7 @@ export async function GET(req: NextRequest) {
         priceInstrument: contract.priceInstrument,
         invertPrice: contract.invertPrice,
       },
-      params: { pct, direction, window },
+      params: { pct, direction, mode, source, window },
       ...result,
     });
   } catch (e) {

@@ -2,6 +2,8 @@ export type FredCategory =
   | "policy_rate"   // Leitzins / kurzfristiger Geldmarktsatz
   | "rate_2y"       // 2Y-Rendite (Erwartungs-Proxy)
   | "yield_10y"     // 10Y-Staatsanleihen
+  | "real_10y"      // 10Y-Realrendite (TIPS) — Treiber für Gold/BTC
+  | "breakeven"     // Inflationserwartung (Breakeven)
   | "cpi"           // Verbraucherpreise (Index oder YoY)
   | "unemployment"  // Arbeitslosenquote
   | "gdp"           // reales BIP
@@ -26,11 +28,17 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "ECBDFR", ccy: "EUR", category: "policy_rate", label: "EZB Einlagensatz" },
   { id: "IRSTCI01GBM156N", ccy: "GBP", category: "policy_rate", label: "UK Geldmarktsatz" },
   { id: "IRSTCI01JPM156N", ccy: "JPY", category: "policy_rate", label: "Japan Geldmarktsatz" },
-  { id: "IRSTCI01CHM156N", ccy: "CHF", category: "policy_rate", label: "Schweiz Geldmarktsatz" },
+  // CH/NZ: IRSTCI01…-Serien seit 2024 tot -> 3M-Interbank als Proxy (Audit 2026-07)
+  { id: "IR3TIB01CHM156N", ccy: "CHF", category: "policy_rate", label: "Schweiz 3M-Geldmarktsatz" },
   { id: "IRSTCI01AUM156N", ccy: "AUD", category: "policy_rate", label: "Australien Geldmarktsatz" },
-  { id: "IRSTCI01NZM156N", ccy: "NZD", category: "policy_rate", label: "Neuseeland Geldmarktsatz" },
+  { id: "IR3TIB01NZM156N", ccy: "NZD", category: "policy_rate", label: "Neuseeland 3M-Geldmarktsatz" },
   { id: "IRSTCI01CAM156N", ccy: "CAD", category: "policy_rate", label: "Kanada Geldmarktsatz" },
   { id: "DGS2", ccy: "USD", category: "rate_2y", label: "US 2Y Treasury" },
+
+  // — Realrendite + Inflationserwartung (US; Treiber für Gold/BTC-Flüsse) —
+  { id: "DFII10", ccy: "USD", category: "real_10y", label: "US 10Y TIPS (Realrendite)" },
+  { id: "T10YIE", ccy: "USD", category: "breakeven", label: "US 10Y Breakeven-Inflation" },
+  { id: "T5YIE", ccy: "USD", category: "breakeven", label: "US 5Y Breakeven-Inflation" },
 
   // — 10Y-Renditen (US täglich, Rest OECD monatlich; DE = EUR-Proxy) —
   { id: "DGS10", ccy: "USD", category: "yield_10y", label: "US 10Y (täglich)" },
@@ -43,6 +51,9 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "IRLTLT01CAM156N", ccy: "CAD", category: "yield_10y", label: "Kanada 10Y" },
 
   // — CPI —
+  // Audit 2026-07: Nicht-US/EZ-CPI auf FRED tot (OECD-Feed eingestellt, letzte
+  // Werte 2021–2025); auch CPALTT01…-Alternativen stale. Serien bleiben für
+  // Historie, is_stale markiert sie. Aktuelle CPI-Werte: calendar_events.actual.
   { id: "CPIAUCSL", ccy: "USD", category: "cpi", label: "US CPI", isIndex: true },
   { id: "CP0000EZ19M086NEST", ccy: "EUR", category: "cpi", label: "Eurozone HICP", isIndex: true },
   { id: "GBRCPIALLMINMEI", ccy: "GBP", category: "cpi", label: "UK CPI", isIndex: true },
@@ -57,7 +68,8 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "LRHUTTTTEZM156S", ccy: "EUR", category: "unemployment", label: "Eurozone Arbeitslosenquote" },
   { id: "LRHUTTTTGBM156S", ccy: "GBP", category: "unemployment", label: "UK Arbeitslosenquote" },
   { id: "LRHUTTTTJPM156S", ccy: "JPY", category: "unemployment", label: "Japan Arbeitslosenquote" },
-  { id: "LRHUTTTTCHM156S", ccy: "CHF", category: "unemployment", label: "Schweiz Arbeitslosenquote" },
+  // Monatsserie tot (404) -> Quartalsserie (Audit 2026-07); EZ-Serie stale, keine Alternative
+  { id: "LRHUTTTTCHQ156S", ccy: "CHF", category: "unemployment", label: "Schweiz Arbeitslosenquote (Q)" },
   { id: "LRHUTTTTAUQ156S", ccy: "AUD", category: "unemployment", label: "Australien Arbeitslosenquote (Q)" },
   { id: "LRHUTTTTNZQ156S", ccy: "NZD", category: "unemployment", label: "Neuseeland Arbeitslosenquote (Q)" },
   { id: "LRHUTTTTCAM156S", ccy: "CAD", category: "unemployment", label: "Kanada Arbeitslosenquote" },

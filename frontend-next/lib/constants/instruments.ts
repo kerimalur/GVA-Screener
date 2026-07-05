@@ -1,4 +1,4 @@
-export type InstrumentKind = "fx" | "commodity" | "index";
+export type InstrumentKind = "fx" | "commodity" | "index" | "crypto";
 
 export interface InstrumentDef {
   instrument: string; // OANDA-Notation, z.B. 'EUR_USD'
@@ -44,6 +44,7 @@ export const INSTRUMENTS: InstrumentDef[] = [
   { instrument: "BCO_USD", displayName: "Brent Öl", baseCcy: "BCO", quoteCcy: "USD", kind: "commodity", cftcCode: null },
   { instrument: "XCU_USD", displayName: "Kupfer", baseCcy: "XCU", quoteCcy: "USD", kind: "commodity", cftcCode: "085692" },
   { instrument: "SPX500_USD", displayName: "S&P 500", baseCcy: "SPX", quoteCcy: "USD", kind: "index", cftcCode: "13874A" },
+  { instrument: "BTC_USD", displayName: "Bitcoin", baseCcy: "BTC", quoteCcy: "USD", kind: "crypto", cftcCode: "133741" },
 ];
 
 export const G8_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD"] as const;

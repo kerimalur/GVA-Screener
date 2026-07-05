@@ -5,11 +5,17 @@ function fmt(n: number | null): string {
   return n.toLocaleString("de-DE");
 }
 
-function delta(cur: number | null, prev: number | null): { text: string; cls: string } {
+function delta(
+  cur: number | null,
+  prev: number | null,
+  oi?: number | null,
+): { text: string; cls: string } {
   if (cur === null || prev === null) return { text: "–", cls: "text-faint" };
   const d = cur - prev;
+  // Δ in % des Open Interest macht die Flow-Größe über Contracts vergleichbar
+  const pctOi = oi && oi > 0 ? ` (${d > 0 ? "+" : ""}${((d / oi) * 100).toFixed(1)} % OI)` : "";
   return {
-    text: `${d > 0 ? "+" : ""}${d.toLocaleString("de-DE")}`,
+    text: `${d > 0 ? "+" : ""}${d.toLocaleString("de-DE")}${pctOi}`,
     cls: d > 0 ? "text-up" : d < 0 ? "text-down" : "text-muted",
   };
 }
@@ -65,7 +71,7 @@ export default function CotSnapshotTable({ latest, prev }: CotSnapshotTableProps
             const net = g.long !== null && g.short !== null ? g.long - g.short : null;
             const prevNet =
               g.prevLong !== null && g.prevShort !== null ? g.prevLong - g.prevShort : null;
-            const d = delta(net, prevNet);
+            const d = delta(net, prevNet, g.emphasis ? latest.open_interest : null);
             return (
               <tr key={g.name} className="border-b border-border/50">
                 <td className={`py-2 pr-3 font-sans ${g.emphasis ? "font-semibold" : "text-muted"}`}>

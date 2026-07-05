@@ -483,9 +483,13 @@ create table if not exists instruments (
   display_name text not null,
   base_ccy     text,
   quote_ccy    text,
-  kind         text not null check (kind in ('fx','commodity','index')),
+  kind         text not null check (kind in ('fx','commodity','index','crypto')),
   cftc_code    text                       -- Join-Schlüssel -> cot_reports
 );
+-- Nachrüstung: 'crypto' (BTC_USD) im kind-Check erlauben
+alter table instruments drop constraint if exists instruments_kind_check;
+alter table instruments add constraint instruments_kind_check
+  check (kind in ('fx','commodity','index','crypto'));
 
 create table if not exists price_daily (
   instrument text not null references instruments(instrument),
@@ -508,6 +512,22 @@ create table if not exists cot_reports (
   primary key (contract_code, report_date)
 );
 create index if not exists cot_reports_date_idx on cot_reports(report_date);
+
+-- TFF-Report ("Traders in Financial Futures", futures-only): isoliert
+-- Leveraged Funds (Hedgefonds) von Asset Managern — präziser für FX/BTC.
+-- Nur Financial Futures (8 FX + DXY + BTC + SPX); Gold/Öl/Kupfer bleiben Legacy.
+create table if not exists cot_tff_reports (
+  contract_code   text not null,
+  report_date     date not null,
+  open_interest   integer,
+  dealer_long integer,    dealer_short integer,
+  asset_mgr_long integer, asset_mgr_short integer,
+  lev_money_long integer, lev_money_short integer,
+  other_long integer,     other_short integer,
+  nonrept_long integer,   nonrept_short integer,
+  primary key (contract_code, report_date)
+);
+create index if not exists cot_tff_reports_date_idx on cot_tff_reports(report_date);
 
 create table if not exists fred_series (
   series_id text not null,
@@ -602,6 +622,7 @@ group by 1, 2;
 alter table instruments         enable row level security;
 alter table price_daily         enable row level security;
 alter table cot_reports         enable row level security;
+alter table cot_tff_reports     enable row level security;
 alter table fred_series         enable row level security;
 alter table fred_series_meta    enable row level security;
 alter table sentiment_snapshots enable row level security;

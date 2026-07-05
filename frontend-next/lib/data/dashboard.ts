@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pagedSelect } from "./util";
-import { getCotSeriesBatch } from "./cot";
+import { getCotSeriesBatch, getTffSeriesBatch } from "./cot";
 import { getSeasonalityStats } from "./seasonality";
+import { computeCotFlow, latestFlow, type CotFlowSummary } from "@/lib/calc/cotDelta";
 import type { SeriesPoint } from "@/lib/calc/seriesMath";
 import { currencyStrength, type StrengthResult } from "@/lib/calc/strength";
 import { riskGauge, type RiskGaugeResult } from "@/lib/calc/riskGauge";
@@ -23,11 +24,13 @@ export interface DashboardData {
   stances: StanceResult[];
   verdicts: ScreenerVerdict[];
   cotPercentiles: Array<{ ccy: string; percentile: number }>;
+  /** Δ-zentrierter COT-Flow je Währung (TFF Leveraged Funds, Fallback Legacy) */
+  cotFlows: Array<{ ccy: string } & CotFlowSummary>;
   sentimentAge: string | null;
 }
 
 /** Mehrere FRED-Serien in einem Query (gruppiert). */
-async function getFredBatch(
+export async function getFredBatch(
   db: SupabaseClient,
   ids: string[],
   since?: string,
@@ -71,7 +74,7 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
   );
 
   // Alle unabhängigen Blöcke parallel — statt sequenzieller Roundtrips
-  const [priceRows, rateSeries, vixSeries, cotByCode, seasonalityByInstrument, sentRes, stanceRes] =
+  const [priceRows, rateSeries, vixSeries, cotByCode, tffByCode, seasonalityByInstrument, sentRes, stanceRes] =
     await Promise.all([
       pagedSelect<{ instrument: string; date: string; close: number }>(
         db,
@@ -83,6 +86,7 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
       getFredBatch(db, [...policyIds, ...yieldIds], fredCutoff.toISOString().slice(0, 10)),
       getFredBatch(db, ["VIXCLS"], vixCutoff.toISOString().slice(0, 10)),
       getCotSeriesBatch(db, cotCodes),
+      getTffSeriesBatch(db, cotCodes),
       getSeasonalityStats(db),
       db
         .from("sentiment_snapshots")
@@ -118,6 +122,23 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     if (last?.percentile !== null && last?.percentile !== undefined) {
       cotPercentileByCcy.set(ccy, last.percentile);
     }
+  }
+
+  // — COT-Flow (Δ-zentriert) je Währung: TFF Leveraged Funds, Fallback Legacy —
+  const cotFlowByCcy = new Map<string, CotFlowSummary>();
+  for (const ccy of G8_CURRENCIES) {
+    const contract = CONTRACT_BY_CCY.get(ccy);
+    if (!contract) continue;
+    const tff = tffByCode.get(contract.code);
+    const flowInput = tff?.length
+      ? tff.map((p) => ({ date: p.date, net: p.levNet, openInterest: p.openInterest }))
+      : (cotByCode.get(contract.code) ?? []).map((p) => ({
+          date: p.date,
+          net: p.net,
+          openInterest: p.openInterest,
+        }));
+    const summary = latestFlow(computeCotFlow(flowInput));
+    if (summary) cotFlowByCcy.set(ccy, summary);
   }
 
   // — Sentiment: letzter Snapshot je Pair —
@@ -158,6 +179,7 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
 
   const inputs: ScreenerInputs = {
     cotPercentileByCcy,
+    cotFlowByCcy,
     policyByCcy,
     yield10ByCcy,
     seasonalityByInstrument,
@@ -177,6 +199,7 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
       ccy,
       percentile,
     })),
+    cotFlows: [...cotFlowByCcy.entries()].map(([ccy, flow]) => ({ ccy, ...flow })),
     sentimentAge,
   };
 }

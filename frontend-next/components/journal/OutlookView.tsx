@@ -93,6 +93,30 @@ export default function OutlookView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount
     reload();
     fetchFundamentals().then(setFundamentals);
+
+    // Dossier-Übergabe aus dem Weekly-Cockpit (/weekly): Wizard vorbefüllt öffnen
+    const raw = sessionStorage.getItem("outlook-prefill");
+    if (raw) {
+      sessionStorage.removeItem("outlook-prefill");
+      try {
+        const p = JSON.parse(raw) as {
+          symbol?: string;
+          direction?: "long" | "short" | null;
+          fundamental?: string;
+        };
+        setEditing({
+          symbol: p.symbol || "EURUSD",
+          direction: p.direction ?? "long",
+          thesis: "",
+          confidence: 3,
+          status: "observation",
+          fundamentalOutlook: p.fundamental || "",
+        });
+        setShowWizard(true);
+      } catch {
+        // defekter Prefill — Wizard normal nutzbar
+      }
+    }
   }, [reload]);
 
   const filtered = useMemo(() => {

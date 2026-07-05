@@ -2,7 +2,7 @@
 -- FX Terminal — Seeds (nach schema.sql ausführen)
 -- ============================================================
 
--- 33 Instrumente (28 FX + Gold, WTI, Brent, Kupfer, S&P 500)
+-- 34 Instrumente (28 FX + Gold, WTI, Brent, Kupfer, S&P 500, Bitcoin)
 insert into instruments (instrument, display_name, base_ccy, quote_ccy, kind, cftc_code) values
   ('EUR_USD','EUR/USD','EUR','USD','fx','099741'),
   ('GBP_USD','GBP/USD','GBP','USD','fx','096742'),
@@ -36,7 +36,8 @@ insert into instruments (instrument, display_name, base_ccy, quote_ccy, kind, cf
   ('WTICO_USD','WTI Öl','WTI','USD','commodity','067651'),
   ('BCO_USD','Brent Öl','BCO','USD','commodity',null),
   ('XCU_USD','Kupfer','XCU','USD','commodity','085692'),
-  ('SPX500_USD','S&P 500','SPX','USD','index','13874A')
+  ('SPX500_USD','S&P 500','SPX','USD','index','13874A'),
+  ('BTC_USD','Bitcoin','BTC','USD','crypto','133741')
 on conflict (instrument) do update set
   display_name = excluded.display_name,
   base_ccy = excluded.base_ccy,

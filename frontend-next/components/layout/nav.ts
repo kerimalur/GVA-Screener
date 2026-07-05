@@ -14,6 +14,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Terminal",
     items: [
       { href: "/", label: "Dashboard", icon: "ph-gauge" },
+      { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
       { href: "/cot", label: "COT-Analyse", icon: "ph-chart-line-up" },
       { href: "/makro", label: "Makro & Zinsen", icon: "ph-bank" },
       { href: "/sentiment", label: "Retail Sentiment", icon: "ph-users-three" },
@@ -51,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 export const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard — Pair-Übersicht",
+  "/weekly": "Weekly Outlook — Sonntags-Cockpit",
   "/cot": "Commitment of Traders",
   "/makro": "Makro & Fundamentaldaten",
   "/sentiment": "Retail Sentiment",

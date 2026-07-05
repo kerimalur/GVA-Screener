@@ -3,6 +3,7 @@ import ContractSelector from "@/components/cot/ContractSelector";
 import CotSnapshotTable from "@/components/cot/CotSnapshotTable";
 import CotHistoryChart from "@/components/cot/CotHistoryChart";
 import BacktestPanel from "@/components/cot/BacktestPanel";
+import ConditionalOutcomePanel from "@/components/cot/ConditionalOutcomePanel";
 import MultiCompare from "@/components/cot/MultiCompare";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -160,8 +161,8 @@ export default async function Page({
           </Panel>
 
           <Panel
-            title={`Backtest — Was passierte nach Positionierungs-Extremen? (${contract.label})`}
-            subtitle="Ø-Forward-Returns nach Top-/Bottom-Perzentil-Signalen der Non-Commercials"
+            title={`Backtest — Was passierte nach COT-Extremen? (${contract.label})`}
+            subtitle="Ø-Forward-Returns nach Niveau- oder Δ-Extremen (Flow) — mit Basisrate und Klartext-Fazit"
           >
             {contract.priceInstrument ? (
               <BacktestPanel code={code} />
@@ -171,6 +172,15 @@ export default async function Page({
               </p>
             )}
           </Panel>
+
+          {contract.ccy && contract.ccy !== "USD" && contract.priceInstrument && (
+            <Panel
+              title={`Conditional-Outcome — Konfluenz Flow × Zins-Drehung (${contract.label})`}
+              subtitle="Bei welcher Kombination aus Smart-Money-Flow und 10Y-Spread-Drehung lief das Pair historisch wohin?"
+            >
+              <ConditionalOutcomePanel code={code} />
+            </Panel>
+          )}
 
           <Panel
             title="Contract-Vergleich"
