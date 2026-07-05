@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import Panel from "@/components/layout/Panel";
 import EventList from "@/components/kalender/EventList";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -7,29 +8,37 @@ import type { CalendarEventRow, CbMeetingRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const data = await tryQuery(async () => {
-    const db = createServiceClient();
-    const from = new Date();
-    from.setDate(from.getDate() - 1);
+// Kalender ändert sich täglich per Cron — 5 min Server-Cache.
+const getCalendarData = unstable_cache(
+  () =>
+    tryQuery(async () => {
+      const db = createServiceClient();
+      const from = new Date();
+      from.setDate(from.getDate() - 1);
 
-    const [{ data: events }, { data: meetings }] = await Promise.all([
-      db
-        .from("calendar_events")
-        .select("*")
-        .gte("event_time", from.toISOString())
-        .order("event_time", { ascending: true }),
-      db
-        .from("cb_meetings")
-        .select("*")
-        .gte("meeting_date", new Date().toISOString().slice(0, 10))
-        .order("meeting_date", { ascending: true }),
-    ]);
-    return {
-      events: (events ?? []) as CalendarEventRow[],
-      meetings: (meetings ?? []) as CbMeetingRow[],
-    };
-  });
+      const [{ data: events }, { data: meetings }] = await Promise.all([
+        db
+          .from("calendar_events")
+          .select("*")
+          .gte("event_time", from.toISOString())
+          .order("event_time", { ascending: true }),
+        db
+          .from("cb_meetings")
+          .select("*")
+          .gte("meeting_date", new Date().toISOString().slice(0, 10))
+          .order("meeting_date", { ascending: true }),
+      ]);
+      return {
+        events: (events ?? []) as CalendarEventRow[],
+        meetings: (meetings ?? []) as CbMeetingRow[],
+      };
+    }),
+  ["kalender-data"],
+  { revalidate: 300 },
+);
+
+export default async function Page() {
+  const data = await getCalendarData();
 
   const bankName = new Map(BANKS.map((b) => [b.bank, b]));
 

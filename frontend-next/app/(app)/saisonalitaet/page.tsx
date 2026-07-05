@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import Panel from "@/components/layout/Panel";
 import SeasonalityHeatmap, { type SeasonRow } from "@/components/saisonalitaet/SeasonalityHeatmap";
 import SeasonalityDetail from "@/components/saisonalitaet/SeasonalityDetail";
@@ -9,13 +10,27 @@ import { MONTH_LABELS } from "@/lib/calc/seasonality";
 
 export const dynamic = "force-dynamic";
 
+// Map nicht JSON-serialisierbar → Entries cachen (5 min).
+const getSeasonality = unstable_cache(
+  () =>
+    tryQuery(async () => {
+      const stats = await getSeasonalityStats(createServiceClient());
+      return [...stats.entries()];
+    }),
+  ["seasonality-data"],
+  { revalidate: 300 },
+);
+
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ instrument?: string }>;
 }) {
-  const { instrument: rawInstrument } = await searchParams;
-  const stats = await tryQuery(() => getSeasonalityStats(createServiceClient()));
+  const [{ instrument: rawInstrument }, entries] = await Promise.all([
+    searchParams,
+    getSeasonality(),
+  ]);
+  const stats = entries ? new Map(entries) : null;
 
   if (!stats || stats.size === 0) {
     return (

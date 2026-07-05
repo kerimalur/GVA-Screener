@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchScreener, markPair, type MarketData } from "@/lib/gva/api";
+import { loadAppSettings } from "@/lib/settings/client";
 import RadarView from "./RadarView";
 import HeatmapView from "./HeatmapView";
 import DetailsModal from "./DetailsModal";
-
-const POLL_MS = 30_000;
 
 interface ScannerShellProps {
   mode: "radar" | "heatmap";
@@ -34,7 +33,9 @@ export default function ScannerShell({ mode }: ScannerShellProps) {
 
   useEffect(() => {
     queueMicrotask(load);
-    const t = setInterval(load, POLL_MS);
+    // Intervall aus App-Settings (Einstellungen → Markt-Scanner)
+    const pollMs = loadAppSettings().scanner.pollSec * 1000;
+    const t = setInterval(load, pollMs);
     return () => clearInterval(t);
   }, [load]);
 
