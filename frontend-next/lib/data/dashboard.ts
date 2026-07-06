@@ -12,6 +12,7 @@ import {
   type ScreenerVerdict,
   type ScreenerInputs,
 } from "@/lib/calc/screenerReasoning";
+import { evaluateAllCurrencies, type CurrencyBias } from "@/lib/calc/currencyBias";
 import { G8_CURRENCIES, FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import { CONTRACT_BY_CCY } from "@/lib/constants/cftcContracts";
 import { seriesFor } from "@/lib/constants/fredSeries";
@@ -26,6 +27,8 @@ export interface DashboardData {
   cotPercentiles: Array<{ ccy: string; percentile: number }>;
   /** Δ-zentrierter COT-Flow je Währung (TFF Leveraged Funds, Fallback Legacy) */
   cotFlows: Array<{ ccy: string } & CotFlowSummary>;
+  /** Long/Short-Bias je Währung (4-Faktoren-Modell) für den Währungs-Kompass */
+  currencyBias: CurrencyBias[];
   sentimentAge: string | null;
 }
 
@@ -190,11 +193,20 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     (a, b) => b.alignedCount - a.alignedCount,
   );
 
+  const currencyBias = evaluateAllCurrencies(G8_CURRENCIES, {
+    cotFlowByCcy,
+    cotPercentileByCcy,
+    policyByCcy,
+    stanceByCcy: new Map(stances.map((s) => [s.ccy, s])),
+    strength,
+  });
+
   return {
     strength,
     risk,
     stances,
     verdicts,
+    currencyBias,
     cotPercentiles: [...cotPercentileByCcy.entries()].map(([ccy, percentile]) => ({
       ccy,
       percentile,
