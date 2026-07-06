@@ -3,6 +3,7 @@ import StrengthPanel from "@/components/dashboard/StrengthPanel";
 import ScreenerPanel from "@/components/dashboard/ScreenerPanel";
 import CbSpectrumPanel from "@/components/dashboard/CbSpectrumPanel";
 import RiskGaugePanel from "@/components/dashboard/RiskGaugePanel";
+import CurrencyBiasPanel from "@/components/dashboard/CurrencyBiasPanel";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadDashboardData } from "@/lib/data/dashboard";
@@ -87,29 +88,11 @@ export default async function Page() {
         </Panel>
       </div>
 
-      <Panel title="COT-Schnellübersicht" subtitle="Non-Comm-Perzentil je Währung (5J-Fenster) — Details auf der COT-Seite">
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {data.cotPercentiles.map((c) => (
-            <div key={c.ccy} className="bg-surface2 border border-border rounded p-2.5 text-center">
-              <div className="text-[12px] font-mono font-bold">{c.ccy}</div>
-              <div
-                className={`text-lg font-black font-mono ${
-                  c.percentile >= hi ? "text-up" : c.percentile <= lo ? "text-down" : "text-text"
-                }`}
-              >
-                {c.percentile.toFixed(0)}
-              </div>
-              <div className="text-[9px] text-faint uppercase tracking-wider">
-                {c.percentile >= hi ? "Extrem-Long" : c.percentile <= lo ? "Extrem-Short" : "Perzentil"}
-              </div>
-            </div>
-          ))}
-          {data.cotPercentiles.length === 0 && (
-            <p className="col-span-full text-muted text-sm font-mono">
-              COT-Daten fehlen — Backfill ausführen.
-            </p>
-          )}
-        </div>
+      <Panel
+        title="Währungs-Kompass"
+        subtitle="Long/Short-Bias je Währung aus 4 Faktoren (COT-Flow, Leitzins-Trend, CB-Stance, Stärke) — Details per Klick"
+      >
+        <CurrencyBiasPanel biases={data.currencyBias} extremeHi={hi} extremeLo={lo} />
       </Panel>
     </div>
   );
