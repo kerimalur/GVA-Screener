@@ -114,6 +114,7 @@ function Picker() {
         b={{ type: typeB, key: keyB }}
         height={380}
         normalize={normalize}
+        showStats
       />
 
       <p className="text-[10px] text-faint">

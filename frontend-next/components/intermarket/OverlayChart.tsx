@@ -5,6 +5,7 @@ import TimeSeriesChart, { type TimeSeriesPoint } from "@/components/charts/TimeS
 import { chart } from "@/components/charts/chartTheme";
 import { rollingCorrelation } from "@/lib/calc/correlations";
 import type { SeriesPoint } from "@/lib/calc/seriesMath";
+import CompareStatsTable from "@/components/vergleich/CompareStatsTable";
 
 export interface OverlaySpec {
   type: string; // SeriesType
@@ -20,6 +21,8 @@ interface OverlayChartProps {
   normalize?: boolean;
   /** rollierende Korrelation (Fenster in Tagen) im Untertitel */
   corrWindow?: number;
+  /** Δ-Stats-Tabelle (1W/1M/3M/1J) unter dem Chart */
+  showStats?: boolean;
 }
 
 async function loadSeries(spec: OverlaySpec): Promise<{ label: string; points: SeriesPoint[] }> {
@@ -36,6 +39,7 @@ export default function OverlayChart({
   height = 300,
   normalize = false,
   corrWindow = 60,
+  showStats = false,
 }: OverlayChartProps) {
   const [seriesA, setSeriesA] = useState<{ label: string; points: SeriesPoint[] } | null>(null);
   const [seriesB, setSeriesB] = useState<{ label: string; points: SeriesPoint[] } | null>(null);
@@ -98,6 +102,16 @@ export default function OverlayChart({
           <span className={corr > 0.3 ? "text-up" : corr < -0.3 ? "text-down" : "text-warn"}>
             {corr.toFixed(2)}
           </span>
+        </div>
+      )}
+      {showStats && (
+        <div className="mt-3">
+          <CompareStatsTable
+            rows={[
+              { label: seriesA.label, points: seriesA.points },
+              { label: seriesB.label, points: seriesB.points },
+            ]}
+          />
         </div>
       )}
     </div>
