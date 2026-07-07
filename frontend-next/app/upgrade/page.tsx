@@ -46,6 +46,14 @@ function UpgradeContent() {
     setLoading(true);
     setError("");
     try {
+      // Prüfen ob eingeloggt
+      const supabase = createBrowserSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login?next=/upgrade");
+        return;
+      }
+
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Unbekannter Fehler");

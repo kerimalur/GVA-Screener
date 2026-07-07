@@ -37,7 +37,9 @@ export async function proxy(request: NextRequest) {
     pathname === "/" ||                   // Landing Page
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/upgrade");
+    pathname.startsWith("/upgrade") ||
+    pathname.startsWith("/agb") ||
+    pathname.startsWith("/datenschutz");
   // Hinweis: /api/* ist laut matcher bereits ausgenommen (inkl. /api/stripe/webhook)
 
   if (!user && !isPublic) {

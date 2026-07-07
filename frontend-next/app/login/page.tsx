@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const params = useSearchParams();
+  const next = params.get("next") ?? "/dashboard";
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -13,13 +16,14 @@ export default function LoginPage() {
     const supabase = createBrowserSupabase();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
     if (error) {
       setError(error.message);
       setLoading(false);
     }
-    // Bei Erfolg übernimmt der Redirect zu Google — kein Reset nötig.
   };
 
   return (
@@ -54,5 +58,13 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg" />}>
+      <LoginContent />
+    </Suspense>
   );
 }
