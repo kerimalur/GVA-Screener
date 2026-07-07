@@ -62,9 +62,6 @@ export async function POST(request: Request) {
       success_url: `${origin}/upgrade?success=1`,
       cancel_url: `${origin}/upgrade?canceled=1`,
       allow_promotion_codes: true,
-      billing_address_collection: "auto",
-      customer_update: { address: "auto" },
-      automatic_tax: { enabled: true },
     });
 
     return NextResponse.json({ url: session.url });
