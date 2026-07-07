@@ -55,4 +55,42 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
- 
+  }
+
+  // ── Subscription-Check ────────────────────────────────────────────────────
+  // Eingeloggte User auf nicht-öffentlichen Routen: aktive Subscription prüfen.
+  if (user && !isPublic) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const now = new Date();
+    const isActive =
+      sub?.status === "active" ||
+      sub?.status === "trialing" ||
+      // kurze Kulanz bei fehlgeschlagener Zahlung: bis Period-End weiter zugänglich
+      (sub?.status === "past_due" &&
+        sub.current_period_end != null &&
+        new Date(sub.current_period_end) > now);
+
+    if (!isActive) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/upgrade";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  return response;
+}
+
+export const config = {
+  // /api/* ausgenommen: Cron/Backfill/Data-Routen schützen sich selbst
+  // (CRON_SECRET) und müssen ohne Browser-Session erreichbar bleiben.
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
+};

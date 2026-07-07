@@ -45,8 +45,6 @@ export default function Sidebar() {
               {group.title}
             </div>
             {group.items.map((item) => {
-              // Exakter Match — Nav listet konkrete Seiten, Prefix-Matching würde
-              // z.B. /journal auch auf /journal/equity hervorheben.
               const active = pathname === item.href;
               return (
                 <Link
@@ -64,4 +62,39 @@ export default function Sidebar() {
                 </Link>
               );
             })}
-    
+          </div>
+        ))}
+      </nav>
+      <div className="border-t border-border">
+        {/* User-Info */}
+        <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
+          {userAvatar ? (
+            <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0">
+              <span className="text-accent text-[11px] font-bold">
+                {userName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-[12px] font-medium text-text truncate">{userName}</div>
+            <div className="text-[10px] text-faint">Aktiv</div>
+          </div>
+        </div>
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            className="w-full flex items-center gap-2.5 px-5 py-2.5 text-[13px] text-muted hover:text-text hover:bg-surface2/50 transition-colors"
+          >
+            <i className="ph-bold ph-sign-out text-base" />
+            Abmelden
+          </button>
+        </form>
+        <div className="px-5 pb-3 text-[10px] text-faint font-mono">
+          Daten: CFTC · FRED · OANDA · Myfxbook
+        </div>
+      </div>
+    </aside>
+  );
+}
