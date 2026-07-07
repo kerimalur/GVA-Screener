@@ -215,10 +215,10 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/upgrade"
+                href="/upgrade?autostart=1"
                 className="px-6 py-3 rounded-lg bg-[#58a6ff] text-[#0b0f14] font-semibold text-sm hover:bg-[#79b8ff] transition-colors"
               >
-                Jetzt abonnieren — CHF 34.95/Woche
+                Jetzt abonnieren — CHF 34.95/Monat
               </Link>
               <Link
                 href="/login"
@@ -578,9 +578,9 @@ export default function LandingPage() {
             <div className="p-8 border-b border-[#232c38]">
               <div className="flex items-baseline gap-1 mb-1">
                 <span className="text-4xl font-bold text-white">CHF 34.95</span>
-                <span className="text-[#8b96a5]">/ Woche</span>
+                <span className="text-[#8b96a5]">/ Monat</span>
               </div>
-              <p className="text-[13px] text-[#5f6b7a]">Wöchentlich kündbar · keine Mindestlaufzeit</p>
+              <p className="text-[13px] text-[#5f6b7a]">Monatlich kündbar · keine Mindestlaufzeit</p>
             </div>
 
             <div className="p-8 border-b border-[#232c38]">
@@ -606,7 +606,7 @@ export default function LandingPage() {
 
             <div className="p-8">
               <Link
-                href="/upgrade"
+                href="/upgrade?autostart=1"
                 className="block w-full py-3.5 rounded-xl bg-[#58a6ff] text-[#0b0f14] font-bold text-center text-sm hover:bg-[#79b8ff] transition-colors"
               >
                 Jetzt abonnieren
@@ -646,10 +646,10 @@ export default function LandingPage() {
             Alle fundamentalen FX-Daten in einem Terminal. Täglich aktualisiert. Wöchentlich kündbar.
           </p>
           <Link
-            href="/upgrade"
+            href="/upgrade?autostart=1"
             className="inline-block px-8 py-3.5 rounded-xl bg-[#58a6ff] text-[#0b0f14] font-bold text-sm hover:bg-[#79b8ff] transition-colors"
           >
-            Jetzt starten — CHF 34.95/Woche
+            Jetzt starten — CHF 34.95/Monat
           </Link>
         </div>
       </section>

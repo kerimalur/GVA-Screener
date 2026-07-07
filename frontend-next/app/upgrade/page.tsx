@@ -23,9 +23,17 @@ function UpgradeContent() {
   const success = params.get("success") === "1";
   const canceled = params.get("canceled") === "1";
 
+  const autostart = params.get("autostart") === "1";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(4);
+
+  // Auto-Checkout wenn von Landing Page weitergeleitet (nach Login)
+  useEffect(() => {
+    if (!autostart || success || canceled) return;
+    handleSubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autostart]);
 
   useEffect(() => {
     if (!success) return;
@@ -50,7 +58,7 @@ function UpgradeContent() {
       const supabase = createBrowserSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/login?next=/upgrade");
+        router.push("/login?next=/upgrade?autostart=1");
         return;
       }
 
@@ -109,10 +117,10 @@ function UpgradeContent() {
           <div className="p-6 border-b border-border">
             <div className="flex items-baseline gap-1">
               <span className="text-3xl font-bold">CHF 34.95</span>
-              <span className="text-muted text-sm">/ Woche</span>
+              <span className="text-muted text-sm">/ Monat</span>
             </div>
             <p className="text-xs text-muted mt-1">
-              Wöchentlich kündbar · keine Mindestlaufzeit
+              Monatlich kündbar · keine Mindestlaufzeit
             </p>
           </div>
 
