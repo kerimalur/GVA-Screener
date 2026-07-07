@@ -39,7 +39,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/auth") ||
     pathname.startsWith("/upgrade") ||
     pathname.startsWith("/agb") ||
-    pathname.startsWith("/datenschutz");
+    pathname.startsWith("/datenschutz") ||
+    pathname.startsWith("/impressum");
   // Hinweis: /api/* ist laut matcher bereits ausgenommen (inkl. /api/stripe/webhook)
 
   if (!user && !isPublic) {

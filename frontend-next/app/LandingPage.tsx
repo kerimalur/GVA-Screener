@@ -664,6 +664,7 @@ export default function LandingPage() {
             <span>© 2026 FX Terminal</span>
           </div>
           <div className="flex flex-wrap gap-5">
+            <Link href="/impressum" className="hover:text-[#c9d3df] transition-colors">Impressum</Link>
             <Link href="/datenschutz" className="hover:text-[#c9d3df] transition-colors">Datenschutz</Link>
             <Link href="/agb" className="hover:text-[#c9d3df] transition-colors">AGB</Link>
             <Link href="/login" className="hover:text-[#c9d3df] transition-colors">Anmelden</Link>
