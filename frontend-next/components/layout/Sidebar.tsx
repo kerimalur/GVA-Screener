@@ -2,11 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { NAV_GROUPS } from "./nav";
 import SignalsBadge from "./SignalsBadge";
+import { createBrowserSupabase } from "@/lib/supabase/client";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [userName, setUserName] = useState<string>("");
+  const [userAvatar, setUserAvatar] = useState<string>("");
+
+  useEffect(() => {
+    const supabase = createBrowserSupabase();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserName(
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split("@")[0] ||
+          "Trader"
+        );
+        setUserAvatar(user.user_metadata?.avatar_url || "");
+      }
+    });
+  }, []);
 
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col h-screen sticky top-0">
@@ -49,6 +68,22 @@ export default function Sidebar() {
         ))}
       </nav>
       <div className="border-t border-border">
+        {/* User-Info */}
+        <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
+          {userAvatar ? (
+            <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0">
+              <span className="text-accent text-[11px] font-bold">
+                {userName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-[12px] font-medium text-text truncate">{userName}</div>
+            <div className="text-[10px] text-faint">Aktiv</div>
+          </div>
+        </div>
         <form action="/auth/signout" method="post">
           <button
             type="submit"
