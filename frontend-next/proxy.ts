@@ -33,7 +33,11 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/auth");
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/upgrade");
+  // Hinweis: /api/* ist laut matcher bereits ausgenommen (inkl. /api/stripe/webhook)
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -48,6 +52,33 @@ export async function proxy(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
+
+  // ── Subscription-Check ────────────────────────────────────────────────────
+  // Eingeloggte User auf nicht-öffentlichen Routen: aktive Subscription prüfen.
+  if (user && !isPublic) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const now = new Date();
+    const isActive =
+      sub?.status === "active" ||
+      sub?.status === "trialing" ||
+      // kurze Kulanz bei fehlgeschlagener Zahlung: bis Period-End weiter zugänglich
+      (sub?.status === "past_due" &&
+        sub.current_period_end != null &&
+        new Date(sub.current_period_end) > now);
+
+    if (!isActive) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/upgrade";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   return response;
 }
