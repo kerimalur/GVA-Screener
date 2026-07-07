@@ -250,6 +250,32 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* ── MODULE ÜBERSICHT ── */}
+      <section className="max-w-6xl mx-auto px-5 py-16">
+        <div className="text-center mb-10">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#58a6ff]">Was du bekommst</span>
+          <h2 className="text-2xl font-bold text-white mt-2 tracking-tight">8 Module. Ein Terminal.</h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { icon: "⚖️", title: "Währungsstärke", desc: "G8 · 28 Paare · Live-Bias" },
+            { icon: "📊", title: "COT-Analyse", desc: "Institutionelle Positionierung" },
+            { icon: "🏦", title: "Zentralbanken", desc: "Stance · Zinsdiff · Trends" },
+            { icon: "🌡️", title: "Retail-Sentiment", desc: "Myfxbook · Contrarian-Signal" },
+            { icon: "📅", title: "Saisonalität", desc: "20 Jahre · Trefferquote" },
+            { icon: "🔬", title: "COT-Backtest", desc: "Historischer Edge-Test" },
+            { icon: "📓", title: "Trading Journal", desc: "R-Multiple · Equity-Kurve" },
+            { icon: "📡", title: "Weekly Outlook", desc: "Kalender · Ereignisse" },
+          ].map(({ icon, title, desc }) => (
+            <div key={title} className="bg-[#10151c] border border-[#232c38] rounded-xl p-4 hover:border-[#313c4b] transition-colors">
+              <div className="text-2xl mb-2">{icon}</div>
+              <div className="text-sm font-semibold text-white mb-1">{title}</div>
+              <div className="text-[11px] text-[#5f6b7a]">{desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── PROBLEM → LÖSUNG ── */}
       <section className="max-w-6xl mx-auto px-5 py-20">
         <div className="text-center mb-12">
