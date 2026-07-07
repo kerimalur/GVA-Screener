@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 const FEATURES = [
@@ -58,7 +59,7 @@ function UpgradeContent() {
       const supabase = createBrowserSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/login?next=/upgrade?autostart=1");
+        router.push("/login?next=" + encodeURIComponent("/upgrade?autostart=1"));
         return;
       }
 
@@ -100,6 +101,9 @@ function UpgradeContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg p-4">
+      <Link href="/" className="fixed top-5 left-5 flex items-center gap-1.5 text-sm text-muted hover:text-text transition-colors">
+        ← Zurück
+      </Link>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="text-[10px] text-accent uppercase tracking-widest font-semibold mb-2">
