@@ -27,7 +27,7 @@ function UpgradeContent() {
   const autostart = params.get("autostart") === "1";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [countdown, setCountdown] = useState(4);
+  const [activating, setActivating] = useState(false);
 
   // Auto-Checkout wenn von Landing Page weitergeleitet (nach Login)
   useEffect(() => {
@@ -36,19 +36,37 @@ function UpgradeContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autostart]);
 
+  // Pollt Supabase bis Subscription aktiv ist, dann weiterleiten
   useEffect(() => {
     if (!success) return;
-    const timer = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(timer);
-          router.push("/dashboard");
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
+    setActivating(true);
+    let attempts = 0;
+    const maxAttempts = 20; // max 10 Sekunden
+
+    const poll = async () => {
+      attempts++;
+      const supabase = createBrowserSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push("/login"); return; }
+
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const isActive = sub?.status === "active" || sub?.status === "trialing";
+
+      if (isActive) {
+        router.push("/dashboard");
+      } else if (attempts >= maxAttempts) {
+        // Timeout — trotzdem weiterleiten, Middleware zeigt ggf. Upgrade-Seite
+        router.push("/dashboard");
+      }
+    };
+
+    const interval = setInterval(poll, 500);
+    return () => clearInterval(interval);
   }, [success, router]);
 
   const handleSubscribe = async () => {
@@ -85,14 +103,15 @@ function UpgradeContent() {
         <div className="w-full max-w-sm mx-4 p-8 bg-surface border border-border rounded-xl text-center">
           <div className="text-3xl mb-3">✅</div>
           <h1 className="text-lg font-semibold mb-2">Zahlung erfolgreich</h1>
-          <p className="text-sm text-muted mb-4">
-            Dein Zugang wird aktiviert. Du wirst in {countdown} Sekunden weitergeleitet…
+          <p className="text-sm text-muted mb-6">
+            Dein Zugang wird aktiviert…
           </p>
-          <div className="w-full bg-surface2 rounded-full h-1">
-            <div
-              className="bg-accent h-1 rounded-full transition-all duration-1000"
-              style={{ width: `${((4 - countdown) / 4) * 100}%` }}
-            />
+          <div className="flex items-center justify-center gap-2 text-sm text-muted">
+            <svg className="animate-spin w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+            Weiterleitung zum Terminal…
           </div>
         </div>
       </div>
