@@ -70,5 +70,4 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal/kalender": "Trade-Kalender",
   "/journal/strategie": "Strategie-Builder",
   "/journal/backtest": "Backtest-Lab",
-  "/einstellungen": "Einstellungen",
-};
+  "/einstellungen": "Ein

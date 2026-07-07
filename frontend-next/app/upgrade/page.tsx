@@ -30,9 +30,26 @@ function UpgradeContent() {
   const [activating, setActivating] = useState(false);
 
   // Auto-Checkout wenn von Landing Page weitergeleitet (nach Login)
+  // Aber zuerst prüfen ob bereits aktives Abo → dann direkt zum Dashboard
   useEffect(() => {
     if (!autostart || success || canceled) return;
-    handleSubscribe();
+    const check = async () => {
+      const supabase = createBrowserSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { handleSubscribe(); return; }
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const isActive = sub?.status === "active" || sub?.status === "trialing";
+      if (isActive) {
+        router.push("/dashboard");
+      } else {
+        handleSubscribe();
+      }
+    };
+    check();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autostart]);
 
