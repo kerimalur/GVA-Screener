@@ -36,7 +36,20 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
       .single();
 
-    let customerId = existingSub?.stripe_customer_id;
+    let customerId = existingSub?.stripe_customer_id ?? null;
+
+    // Prüfen ob die gespeicherte Customer-ID im aktiven Stripe-Konto existiert
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        // Customer existiert nicht (z.B. Sandbox-ID im Live-Modus) → neu erstellen
+        customerId = null;
+        await db.from("subscriptions")
+          .update({ stripe_customer_id: null })
+          .eq("user_id", user.id);
+      }
+    }
 
     if (!customerId) {
       // Neuen Stripe-Kunden anlegen
