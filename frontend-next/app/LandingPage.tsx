@@ -218,7 +218,7 @@ export default function LandingPage() {
                 href="/upgrade"
                 className="px-6 py-3 rounded-lg bg-[#58a6ff] text-[#0b0f14] font-semibold text-sm hover:bg-[#79b8ff] transition-colors"
               >
-                Jetzt abonnieren — €29/Monat
+                Jetzt abonnieren — CHF 34.95/Woche
               </Link>
               <Link
                 href="/login"
@@ -577,10 +577,10 @@ export default function LandingPage() {
           <div className="bg-[#10151c] border border-[#313c4b] rounded-2xl overflow-hidden shadow-xl">
             <div className="p-8 border-b border-[#232c38]">
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-bold text-white">€29</span>
-                <span className="text-[#8b96a5]">/ Monat</span>
+                <span className="text-4xl font-bold text-white">CHF 34.95</span>
+                <span className="text-[#8b96a5]">/ Woche</span>
               </div>
-              <p className="text-[13px] text-[#5f6b7a]">Monatlich kündbar · keine Mindestlaufzeit</p>
+              <p className="text-[13px] text-[#5f6b7a]">Wöchentlich kündbar · keine Mindestlaufzeit</p>
             </div>
 
             <div className="p-8 border-b border-[#232c38]">
@@ -629,10 +629,10 @@ export default function LandingPage() {
             {[
               ["Brauche ich Trading-Vorwissen?", "Die App richtet sich an aktive FX-Trader mit Grundkenntnissen in Fundamentalanalyse. Begriffe wie COT-Report, Leitzins und R-Multiple sollten bekannt sein. In der App gibt es jedoch zu jedem Bereich eine kurze Erklärung."],
               ["Wie aktuell sind die Daten?", "Preise, Zinsen und Sentiment werden täglich aktualisiert. Der COT-Report erscheint wöchentlich freitags. Makrodaten (CPI, Arbeitslosigkeit, BIP) kommen monatlich von FRED."],
-              ["Kann ich jederzeit kündigen?", "Ja. Das Abo läuft monatlich und kann jederzeit gekündigt werden. Es gibt keine Mindestlaufzeit und keine Kündigungsfrist."],
+              ["Kann ich jederzeit kündigen?", "Ja. Das Abo läuft wöchentlich und kann jederzeit gekündigt werden. Es gibt keine Mindestlaufzeit und keine Kündigungsfrist."],
               ["Welche Währungspaare werden abgedeckt?", "Alle 28 Major- und Minor-Paare der G8-Währungen: USD, EUR, GBP, JPY, CHF, CAD, AUD und NZD. Zusätzlich Bitcoin für die BTC-Karte im Weekly Outlook."],
               ["Funktioniert das auch für Day-Trading?", "FX Terminal ist auf Swing-Trading ausgelegt (Haltedauer 1–10 Tage). Fundamentaldaten wirken auf mittelfristigen Zeithorizonten — für Intraday-Trading sind die Signale weniger relevant."],
-              ["Gibt es eine Testphase?", "Derzeit keine kostenlose Testphase. Du kannst jedoch nach einem Monat kündigen, wenn das Terminal nicht deinen Erwartungen entspricht."],
+              ["Gibt es eine Testphase?", "Derzeit keine kostenlose Testphase. Du kannst jedoch nach einer Woche kündigen, wenn das Terminal nicht deinen Erwartungen entspricht."],
             ].map(([q, a]) => <FaqItem key={q} q={q} a={a} />)}
           </div>
         </div>
@@ -643,13 +643,13 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-5 py-16 text-center">
           <h2 className="text-3xl font-bold text-white tracking-tight mb-3">Bereit, fundierter zu handeln?</h2>
           <p className="text-[#8b96a5] mb-8 max-w-md mx-auto">
-            Alle fundamentalen FX-Daten in einem Terminal. Täglich aktualisiert. Monatlich kündbar.
+            Alle fundamentalen FX-Daten in einem Terminal. Täglich aktualisiert. Wöchentlich kündbar.
           </p>
           <Link
             href="/upgrade"
             className="inline-block px-8 py-3.5 rounded-xl bg-[#58a6ff] text-[#0b0f14] font-bold text-sm hover:bg-[#79b8ff] transition-colors"
           >
-            Jetzt starten — €29/Monat
+            Jetzt starten — CHF 34.95/Woche
           </Link>
         </div>
       </section>

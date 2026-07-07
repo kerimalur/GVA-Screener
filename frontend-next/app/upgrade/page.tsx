@@ -100,11 +100,11 @@ function UpgradeContent() {
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           <div className="p-6 border-b border-border">
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold">€29</span>
-              <span className="text-muted text-sm">/ Monat</span>
+              <span className="text-3xl font-bold">CHF 34.95</span>
+              <span className="text-muted text-sm">/ Woche</span>
             </div>
             <p className="text-xs text-muted mt-1">
-              Monatlich kündbar · keine Mindestlaufzeit
+              Wöchentlich kündbar · keine Mindestlaufzeit
             </p>
           </div>
 
