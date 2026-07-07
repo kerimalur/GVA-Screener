@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
@@ -16,7 +16,8 @@ const FEATURES = [
   "Täglich automatisch aktualisiert",
 ];
 
-export default function UpgradePage() {
+// useSearchParams() muss in einer eigenen Komponente sein, die in Suspense gewrappt wird
+function UpgradeContent() {
   const router = useRouter();
   const params = useSearchParams();
   const success = params.get("success") === "1";
@@ -26,14 +27,13 @@ export default function UpgradePage() {
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(4);
 
-  // Nach erfolgreichem Checkout: kurz warten, dann Dashboard
   useEffect(() => {
     if (!success) return;
     const timer = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timer);
-          router.push("/");
+          router.push("/dashboard");
           return 0;
         }
         return c - 1;
@@ -85,7 +85,6 @@ export default function UpgradePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg p-4">
       <div className="w-full max-w-md">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-[10px] text-accent uppercase tracking-widest font-semibold mb-2">
             FX Terminal
@@ -98,9 +97,7 @@ export default function UpgradePage() {
           </p>
         </div>
 
-        {/* Card */}
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          {/* Price */}
           <div className="p-6 border-b border-border">
             <div className="flex items-baseline gap-1">
               <span className="text-3xl font-bold">€29</span>
@@ -111,7 +108,6 @@ export default function UpgradePage() {
             </p>
           </div>
 
-          {/* Features */}
           <div className="p-6 border-b border-border">
             <ul className="space-y-2.5">
               {FEATURES.map((f) => (
@@ -123,7 +119,6 @@ export default function UpgradePage() {
             </ul>
           </div>
 
-          {/* CTA */}
           <div className="p-6 space-y-3">
             {canceled && (
               <p className="text-xs text-down text-center">
@@ -133,7 +128,6 @@ export default function UpgradePage() {
             {error && (
               <p className="text-xs text-down text-center">{error}</p>
             )}
-
             <button
               onClick={handleSubscribe}
               disabled={loading}
@@ -141,14 +135,12 @@ export default function UpgradePage() {
             >
               {loading ? "Weiterleitung zu Stripe…" : "Jetzt abonnieren"}
             </button>
-
             <p className="text-[11px] text-faint text-center">
               Sichere Zahlung via Stripe · SSL-verschlüsselt
             </p>
           </div>
         </div>
 
-        {/* Sign out */}
         <div className="mt-6 text-center">
           <button
             onClick={handleSignOut}
@@ -159,5 +151,14 @@ export default function UpgradePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Suspense-Wrapper: Next.js Pflicht bei useSearchParams()
+export default function UpgradePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg" />}>
+      <UpgradeContent />
+    </Suspense>
   );
 }
