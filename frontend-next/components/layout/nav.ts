@@ -12,7 +12,7 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Terminal",
+    title: "Analyse",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },

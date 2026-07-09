@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Manrope, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Toaster from "@/components/ui/Toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
   title: "FX Terminal — Swing-Trading Suite",
-  description: "Fundamentales Swing-Trading-Terminal: COT, Makro, Sentiment, Intermarket, Saisonalität",
+  description: "Fundamentales Swing-Trading-Terminal: COT, Makro, Sentiment, Intermarket, Saisonalitat",
 };
 
 export default function RootLayout({
@@ -26,10 +28,9 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${manrope.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Phosphor Icons (wie bisherige App) */}
         <link
           rel="stylesheet"
           href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css"

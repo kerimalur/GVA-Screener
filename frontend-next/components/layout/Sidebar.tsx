@@ -29,90 +29,163 @@ export default function Sidebar() {
     });
   }, []);
 
+  const initial = userName.charAt(0).toUpperCase();
+
   return (
-    <aside className="w-48 shrink-0 border-r border-border bg-surface flex flex-col h-screen sticky top-0">
+    <aside
+      className="shrink-0 flex flex-col h-screen sticky top-0"
+      style={{
+        width: "248px",
+        minWidth: "248px",
+        background: "var(--color-sidebar)",
+        borderRight: "1px solid var(--color-border)",
+      }}
+    >
       {/* Logo */}
-      <div className="px-5 py-4">
-        <div className="flex items-center gap-2">
-          <i className="ph-bold ph-pulse text-accent text-base" />
-          <div>
-            <div className="text-[13px] font-semibold tracking-wide">FX Terminal</div>
-            <div className="text-[9px] text-faint uppercase tracking-widest">Swing-Trading Suite</div>
+      <div style={{ padding: "22px 14px 0 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "11px", padding: "6px 10px 24px 10px" }}>
+          <div style={{
+            width: "28px", height: "28px", borderRadius: "8px",
+            background: "linear-gradient(135deg, #6c8cff, #a6b8ff)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <div style={{
+              width: "10px", height: "10px",
+              background: "#0a0b0e", borderRadius: "3px", transform: "rotate(45deg)",
+            }} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", lineHeight: "1.15" }}>
+            <div style={{ fontSize: "14.5px", fontWeight: 800, letterSpacing: "-0.2px" }}>FX Terminal</div>
+            <div style={{ fontSize: "9px", fontWeight: 600, letterSpacing: "1.2px", color: "var(--color-faint)", textTransform: "uppercase" }}>
+              Swing-Trading Suite
+            </div>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.title} className="mb-3">
-            <div className="px-5 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-faint">
-              {group.title}
+      <nav style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", padding: "0 14px" }}>
+        {NAV_GROUPS.map((group, gi) => {
+          return (
+            <div
+              key={group.title}
+              style={{
+                borderTop: gi > 0 ? "1px solid var(--color-border)" : "none",
+                padding: gi > 0 ? "16px 0 18px 0" : "0 0 18px 0",
+              }}
+            >
+              <div style={{
+                fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
+                color: "var(--color-faint)", padding: "0 10px 8px 10px",
+                textTransform: "uppercase",
+              }}>
+                {group.title}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                {group.items.map((item) => {
+                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  const locked = item.requiresAdmin && !isAdmin;
+
+                  if (locked) {
+                    return (
+                      <div
+                        key={item.href}
+                        title="Nur fuer Admins verfuegbar"
+                        style={{
+                          padding: "8px 10px", borderRadius: "8px",
+                          fontSize: "13.5px", fontWeight: 500,
+                          color: "var(--color-faint)", cursor: "not-allowed",
+                          display: "flex", alignItems: "center", justifyContent: "space-between",
+                          opacity: 0.5,
+                        }}
+                      >
+                        <span>{item.label}</span>
+                        <i className="ph-bold ph-lock-simple" style={{ fontSize: "11px" }} />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      style={{
+                        padding: active ? "8px 10px 8px 12px" : "8px 10px",
+                        borderRadius: "8px",
+                        fontSize: "13.5px",
+                        fontWeight: active ? 600 : 500,
+                        color: active ? "var(--color-text)" : "var(--color-muted)",
+                        background: active ? "var(--color-surface2)" : "transparent",
+                        borderLeft: active ? "2px solid var(--color-accent)" : "none",
+                        marginLeft: active ? "-2px" : "0",
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        textDecoration: "none",
+                        transition: "background 120ms, color 120ms",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) {
+                          (e.currentTarget as HTMLElement).style.background = "var(--color-surface2)";
+                          (e.currentTarget as HTMLElement).style.color = "var(--color-text)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) {
+                          (e.currentTarget as HTMLElement).style.background = "transparent";
+                          (e.currentTarget as HTMLElement).style.color = "var(--color-muted)";
+                        }
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {item.href === "/scanner/signale" && <SignalsBadge />}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-            {group.items.map((item) => {
-              const active = pathname === item.href;
-              const locked = item.requiresAdmin && !isAdmin;
-
-              if (locked) {
-                return (
-                  <div
-                    key={item.href}
-                    className="flex items-center justify-between px-5 py-1.5 text-[12px] text-faint cursor-not-allowed select-none opacity-40"
-                    title="Nur fuer Admins verfuegbar"
-                  >
-                    <span>{item.label}</span>
-                    <i className="ph-bold ph-lock-simple text-[10px]" />
-                  </div>
-                );
-              }
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center justify-between px-5 py-1.5 text-[12px] transition-colors ${
-                    active
-                      ? "text-text font-medium"
-                      : "text-muted hover:text-text"
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {item.href === "/scanner/signale" && <SignalsBadge />}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* User */}
-      <div className="border-t border-border px-5 py-3">
-        <div className="flex items-center gap-2.5 mb-2">
-          {userAvatar ? (
-            <img src={userAvatar} alt={userName} className="w-6 h-6 rounded-full shrink-0" />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0">
-              <span className="text-accent text-[10px] font-bold">
-                {userName.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-          <div className="min-w-0">
-            <div className="text-[11px] font-medium text-text truncate">{userName}</div>
-            <div className="flex items-center gap-1 text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-up inline-block" />
-              <span className="text-faint">{isAdmin ? "Admin" : "Aktiv"}</span>
-            </div>
+      <div style={{
+        borderTop: "1px solid var(--color-border)",
+        paddingTop: "14px",
+        marginTop: "8px",
+        paddingBottom: "14px",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        paddingLeft: "22px",
+        paddingRight: "14px",
+      }}>
+        {userAvatar ? (
+          <img
+            src={userAvatar}
+            alt={userName}
+            style={{ width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0 }}
+          />
+        ) : (
+          <div style={{
+            width: "30px", height: "30px", borderRadius: "50%",
+            background: "linear-gradient(135deg,#3a3f4c,#22252c)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "12.5px", fontWeight: 700, color: "var(--color-text)",
+            border: "1px solid var(--color-border2)", flexShrink: 0,
+          }}>
+            {initial}
+          </div>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {userName}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "1px" }}>
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-up)", display: "inline-block" }} />
+            <span style={{ fontSize: "11px", color: "var(--color-faint)", fontWeight: 500 }}>
+              {isAdmin ? "Admin" : "Aktiv"}
+            </span>
           </div>
         </div>
-        <form action="/auth/signout" method="post">
-          <button
-            type="submit"
-            className="text-[11px] text-faint hover:text-muted transition-colors"
-          >
-            Abmelden
-          </button>
-        </form>
       </div>
     </aside>
   );

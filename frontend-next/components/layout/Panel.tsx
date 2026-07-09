@@ -10,18 +10,44 @@ interface PanelProps {
 
 export default function Panel({ title, subtitle, actions, children, className = "" }: PanelProps) {
   return (
-    <section className={`bg-surface border border-border rounded-md ${className}`}>
+    <section
+      className={className}
+      style={{
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "12px",
+      }}
+    >
       {(title || actions) && (
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 20px",
+            borderBottom: "1px solid var(--color-border)",
+          }}
+        >
           <div>
-            {title && <h2 className="text-[13px] font-semibold">{title}</h2>}
-            {subtitle && <p className="text-[11px] text-muted mt-0.5">{subtitle}</p>}
+            {title && (
+              <h2 style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.1px" }}>
+                {title}
+              </h2>
+            )}
+            {subtitle && (
+              <p style={{ fontSize: "12px", color: "var(--color-muted)", marginTop: "2px" }}>
+                {subtitle}
+              </p>
+            )}
           </div>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {actions}
+            </div>
+          )}
         </div>
       )}
-      <div className="p-4">{children}</div>
+      <div style={{ padding: "20px" }}>{children}</div>
     </section>
   );
-
 }
