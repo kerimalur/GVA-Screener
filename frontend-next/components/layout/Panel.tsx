@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 interface PanelProps {
   title?: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;

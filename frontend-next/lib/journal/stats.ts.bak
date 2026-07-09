@@ -16,7 +16,6 @@ export interface TradeStatistics {
   avgR: number;
   profitFactor: number;
   expectancy: number;
-  sharpeRatio: number;
 }
 
 export function calculateTradeStatistics(trades: Trade[]): TradeStatistics {
@@ -24,7 +23,6 @@ export function calculateTradeStatistics(trades: Trade[]): TradeStatistics {
     return {
       totalTrades: 0, wins: 0, losses: 0, breakevens: 0, winRate: 0,
       avgWinR: 0, avgLossR: 0, totalR: 0, avgR: 0, profitFactor: 0, expectancy: 0,
-      sharpeRatio: 0,
     };
   }
 
@@ -47,21 +45,12 @@ export function calculateTradeStatistics(trades: Trade[]): TradeStatistics {
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
   const expectancy = (winRate / 100) * avgWinR - ((100 - winRate) / 100) * avgLossR;
 
-  // Sharpe Ratio (per-trade): avgR / stddev(R)
-  const sharpeRatio = (() => {
-    if (trades.length < 2) return 0;
-    const variance =
-      trades.reduce((s, t) => s + Math.pow(t.rMultiple - avgR, 2), 0) / trades.length;
-    const stddev = Math.sqrt(variance);
-    return stddev > 0 ? parseFloat((avgR / stddev).toFixed(2)) : 0;
-  })();
-
   return {
     totalTrades: trades.length,
     wins: wins.length,
     losses: losses.length,
     breakevens: breakevens.length,
-    winRate, avgWinR, avgLossR, totalR, avgR, profitFactor, expectancy, sharpeRatio,
+    winRate, avgWinR, avgLossR, totalR, avgR, profitFactor, expectancy,
   };
 }
 

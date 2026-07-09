@@ -83,6 +83,8 @@ export default function EquityView() {
     (accountFilter === "ek"
       ? configs?.ek?.initialStartBalance
       : configs?.funded?.initialStartBalance) ?? (accountFilter === "ek" ? 10000 : 100000);
+  const currency =
+    (accountFilter === "ek" ? configs?.ek?.currency : configs?.funded?.currency) ?? "USD";
 
   if (loading) {
     return (
@@ -128,53 +130,72 @@ export default function EquityView() {
         </div>
       </div>
 
-      {/* Kennzahlen-Leiste */}
-      <div className="flex flex-wrap items-end gap-x-8 gap-y-2 px-1">
-        <div>
-          <p className="text-[10px] text-muted uppercase tracking-widest">Total R</p>
-          <p
-            className={`text-2xl font-semibold font-mono ${
-              stats.totalR >= 0 ? "text-up" : "text-down"
-            }`}
-          >
-            {stats.totalR >= 0 ? "+" : ""}
-            {stats.totalR.toFixed(2)} R
-          </p>
-          <p className="text-[10px] text-muted font-mono">
-            Ø {stats.avgR >= 0 ? "+" : ""}
-            {stats.avgR.toFixed(2)}R
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-muted uppercase tracking-widest">Win Rate</p>
-          <p className="text-xl font-semibold font-mono">{stats.winRate.toFixed(1)}%</p>
-          <p className="text-[10px] text-muted font-mono">
-            {stats.wins}W / {stats.losses}L
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-muted uppercase tracking-widest">Profit Factor</p>
-          <p className="text-xl font-semibold font-mono">
-            {stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-muted uppercase tracking-widest">Max Drawdown</p>
-          <p className="text-xl font-semibold font-mono text-down">
-            −{dd.maxDrawdown.toFixed(2)} R
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-muted uppercase tracking-widest">Expectancy</p>
-          <p className="text-xl font-semibold font-mono">
-            {stats.expectancy >= 0 ? "+" : ""}
-            {stats.expectancy.toFixed(3)}
-          </p>
-        </div>
+      {/* Kennzahlen-Karten */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {[
+          {
+            label: "Total R",
+            value: `${stats.totalR >= 0 ? "+" : ""}${stats.totalR.toFixed(2)} R`,
+            sub: `Ø ${stats.avgR >= 0 ? "+" : ""}${stats.avgR.toFixed(2)}R`,
+            tone: stats.totalR >= 0 ? "up" : "down",
+          },
+          {
+            label: "Win Rate",
+            value: `${stats.winRate.toFixed(1)}%`,
+            sub: `${stats.wins}W / ${stats.losses}L`,
+            tone: null,
+          },
+          {
+            label: "Profit Factor",
+            value: stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2),
+            sub: null,
+            tone: null,
+          },
+          {
+            label: "Max Drawdown",
+            value: `−${dd.maxDrawdown.toFixed(2)} R`,
+            sub: `aktuell −${dd.currentDrawdown.toFixed(2)} R`,
+            tone: "down",
+          },
+          {
+            label: "Expectancy",
+            value: `${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`,
+            sub: "pro Trade (R)",
+            tone: stats.expectancy >= 0 ? "up" : "down",
+          },
+          {
+            label: "Sharpe Ratio",
+            value: stats.sharpeRatio.toFixed(2),
+            sub: "per-trade",
+            tone: stats.sharpeRatio >= 1 ? "up" : stats.sharpeRatio < 0 ? "down" : null,
+          },
+        ].map(({ label, value, sub, tone }) => (
+          <div key={label} className="bg-surface2 rounded-md px-4 py-3 border border-border">
+            <p className="text-[10px] text-muted uppercase tracking-widest mb-1">{label}</p>
+            <p
+              className={`text-lg font-semibold font-mono ${
+                tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text"
+              }`}
+            >
+              {value}
+            </p>
+            {sub && <p className="text-[10px] text-faint font-mono mt-0.5">{sub}</p>}
+          </div>
+        ))}
       </div>
 
       {/* Haupt-Chart */}
-      <Panel title="Equity-Verlauf" subtitle={`Start-Balance ${startBalance.toLocaleString("de-DE")}`}>
+      <Panel
+        title="Equity-Kurve"
+        subtitle={
+          <span className="font-mono">
+            Start-Balance{" "}
+            <span className="text-text font-semibold">
+              {startBalance.toLocaleString("de-DE")} {currency}
+            </span>
+          </span>
+        }
+      >
         {filteredTrades.length === 0 ? (
           <EmptyState
             icon="ph-chart-line"

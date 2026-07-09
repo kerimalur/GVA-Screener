@@ -13,7 +13,7 @@ export default function TopBar() {
       <div className="flex items-center gap-3 text-[11px] text-muted font-mono">
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-up animate-pulse" />
-          Supabase-Cache
+          Live
         </span>
         <span suppressHydrationWarning>
           {new Date().toLocaleDateString("de-DE", {

@@ -1,7 +1,8 @@
 export interface NavItem {
   href: string;
   label: string;
-  icon: string; // Phosphor icon class suffix
+  icon: string;
+  requiresPro?: boolean;
 }
 
 export interface NavGroup {
@@ -19,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/makro", label: "Makro & Zinsen", icon: "ph-bank" },
       { href: "/sentiment", label: "Retail Sentiment", icon: "ph-users-three" },
       { href: "/intermarket", label: "Intermarket", icon: "ph-arrows-left-right" },
-      { href: "/saisonalitaet", label: "Saisonalität", icon: "ph-calendar-dots" },
+      { href: "/saisonalitaet", label: "Saisonalitaet", icon: "ph-calendar-dots" },
       { href: "/kalender", label: "Kalender", icon: "ph-calendar-check" },
       { href: "/vergleich", label: "Vergleich", icon: "ph-chart-scatter" },
     ],
@@ -27,9 +28,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Markt-Scanner",
     items: [
-      { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar" },
-      { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine" },
-      { href: "/scanner/signale", label: "Signale", icon: "ph-tray" },
+      { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresPro: true },
+      { href: "/scanner/signale", label: "Signale", icon: "ph-tray", requiresPro: true },
     ],
   },
   {
@@ -51,17 +51,16 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard — Pair-Übersicht",
+  "/dashboard": "Dashboard — Pair-Uebersicht",
   "/weekly": "Weekly Outlook — Sonntags-Cockpit",
   "/cot": "Commitment of Traders",
   "/makro": "Makro & Fundamentaldaten",
   "/sentiment": "Retail Sentiment",
   "/intermarket": "Intermarket-Analyse",
-  "/saisonalitaet": "Saisonalität",
+  "/saisonalitaet": "Saisonalitaet",
   "/kalender": "Wirtschaftskalender",
   "/vergleich": "Vergleichs-Tool",
   "/scanner/radar": "Visuelles Radar",
-  "/scanner/heatmap": "Heatmap 28",
   "/scanner/signale": "Signals-Inbox",
   "/journal": "Trade-Journal",
   "/journal/dashboard": "Journal-Dashboard",

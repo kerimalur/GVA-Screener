@@ -9,34 +9,46 @@ import { SkeletonRows } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toaster";
 import type { Trade } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
+import { loadAccountConfigs } from "@/lib/journal/accounts";
 
-const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const WEEKDAYS_ALL  = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const WEEKDAYS_WORK = ["Mo", "Di", "Mi", "Do", "Fr"];
 const MONTHS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 
 type AccountFilter = "all" | "ek" | "funded";
 type ViewMode = "month" | "year";
 
 function toDateStr(d: Date): string {
-  // Lokales Datum, nicht UTC — sonst kippen Randtage in den Nachbartag
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
+/** Wochentag (0=Mo … 6=So) */
+function weekdayIndex(date: Date): number {
+  return (date.getDay() + 6) % 7;
+}
+
 export default function CalendarView() {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [currency, setCurrency] = useState<string>("USD");
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
+  const [showWeekends, setShowWeekends] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount
     setLoading(true);
-    loadTrades()
-      .then(setTrades)
+    Promise.all([loadTrades(), loadAccountConfigs()])
+      .then(([t, c]) => {
+        setTrades(t);
+        // Währung aus aktivem Konto
+        setCurrency(c?.funded?.currency || c?.ek?.currency || "USD");
+      })
       .catch(() => toast.error("Fehler beim Laden"))
       .finally(() => setLoading(false));
   }, []);
@@ -57,11 +69,13 @@ export default function CalendarView() {
       return d.getFullYear() === year && d.getMonth() === month;
     });
     const totalR = monthTrades.reduce((s, t) => s + t.rMultiple, 0);
+    const totalEur = monthTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0);
     const wins = monthTrades.filter((t) => t.result === "win").length;
     return {
       total: monthTrades.length,
       wins,
       totalR,
+      totalEur,
       winRate: monthTrades.length > 0 ? (wins / monthTrades.length) * 100 : 0,
       tradingDays: new Set(monthTrades.map((t) => t.date)).size,
     };
@@ -72,8 +86,6 @@ export default function CalendarView() {
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    let startOffset = firstDay.getDay() - 1;
-    if (startOffset < 0) startOffset = 6;
 
     const today = toDateStr(new Date());
     const days: {
@@ -81,11 +93,19 @@ export default function CalendarView() {
       dateStr: string;
       isCurrentMonth: boolean;
       isToday: boolean;
+      isWeekend: boolean;
       trades: Trade[];
       totalR: number;
+      totalEur: number;
     }[] = [];
 
+    // Mo-offset für ersten Tag des Monats
+    let startOffset = weekdayIndex(firstDay);
+
     const push = (date: Date, isCurrentMonth: boolean) => {
+      const dow = weekdayIndex(date);
+      const isWeekend = dow >= 5;
+      if (!showWeekends && isWeekend) return;
       const dateStr = toDateStr(date);
       const dayTrades = filteredTrades.filter((t) => t.date === dateStr);
       days.push({
@@ -93,17 +113,25 @@ export default function CalendarView() {
         dateStr,
         isCurrentMonth,
         isToday: dateStr === today,
+        isWeekend,
         trades: dayTrades,
         totalR: dayTrades.reduce((s, t) => s + t.rMultiple, 0),
+        totalEur: dayTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0),
       });
     };
 
+    // Vortage (voriger Monat)
     for (let i = startOffset - 1; i >= 0; i--) push(new Date(year, month, -i), false);
+    // Tage des Monats
     for (let i = 1; i <= lastDay.getDate(); i++) push(new Date(year, month, i), true);
-    const remaining = 42 - days.length;
-    for (let i = 1; i <= remaining; i++) push(new Date(year, month + 1, i), false);
+    // Füll-Tage (nächster Monat) — bis Zeilen voll sind
+    const cols = showWeekends ? 7 : 5;
+    const remaining = cols - (days.length % cols === 0 ? 0 : days.length % cols);
+    if (remaining < cols) {
+      for (let i = 1; i <= remaining; i++) push(new Date(year, month + 1, i), false);
+    }
     return days;
-  }, [currentDate, filteredTrades]);
+  }, [currentDate, filteredTrades, showWeekends]);
 
   const yearData = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -116,6 +144,7 @@ export default function CalendarView() {
         month,
         trades: monthTrades.length,
         totalR: monthTrades.reduce((s, t) => s + t.rMultiple, 0),
+        totalEur: monthTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0),
         wins: monthTrades.filter((t) => t.result === "win").length,
         losses: monthTrades.filter((t) => t.result === "loss").length,
       };
@@ -126,10 +155,12 @@ export default function CalendarView() {
     if (!selectedDate) return null;
     const dayTrades = filteredTrades.filter((t) => t.date === selectedDate);
     const totalR = dayTrades.reduce((s, t) => s + t.rMultiple, 0);
+    const totalEur = dayTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0);
     const wins = dayTrades.filter((t) => t.result === "win").length;
     return {
       trades: dayTrades,
       totalR,
+      totalEur,
       winRate: dayTrades.length > 0 ? (wins / dayTrades.length) * 100 : 0,
     };
   }, [selectedDate, filteredTrades]);
@@ -143,6 +174,12 @@ export default function CalendarView() {
     });
     setSelectedDate(null);
   };
+
+  const cols = showWeekends ? 7 : 5;
+  const weekdays = showWeekends ? WEEKDAYS_ALL : WEEKDAYS_WORK;
+
+  const fmtEur = (v: number) =>
+    `${v >= 0 ? "+" : ""}${v.toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${currency}`;
 
   if (loading) {
     return (
@@ -173,13 +210,28 @@ export default function CalendarView() {
           value={viewMode}
           onChange={setViewMode}
         />
-        <div className="ml-auto flex items-center gap-5 text-[12px] font-mono">
+        {/* Wochenenden-Toggle */}
+        <label className="flex items-center gap-1.5 text-[12px] text-muted cursor-pointer ml-1">
+          <input
+            type="checkbox"
+            checked={showWeekends}
+            onChange={(e) => setShowWeekends(e.target.checked)}
+            className="w-3.5 h-3.5 accent-[var(--color-accent)]"
+          />
+          Sa / So
+        </label>
+
+        {/* Monatszusammenfassung */}
+        <div className="ml-auto flex items-center gap-4 text-[12px] font-mono">
           <span className="text-muted">
             {monthStats.total} Trades · {monthStats.tradingDays} Tage
           </span>
           <span className={monthStats.totalR >= 0 ? "text-up" : "text-down"}>
             {monthStats.totalR >= 0 ? "+" : ""}
             {monthStats.totalR.toFixed(1)} R
+          </span>
+          <span className={monthStats.totalEur >= 0 ? "text-up" : "text-down"}>
+            {fmtEur(monthStats.totalEur)}
           </span>
           <span className="text-muted">{monthStats.winRate.toFixed(0)}% WR</span>
         </div>
@@ -219,19 +271,21 @@ export default function CalendarView() {
 
         {viewMode === "month" ? (
           <>
-            <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-              {WEEKDAYS.map((d) => (
+            {/* Wochentag-Header */}
+            <div className={`grid gap-1.5 mb-1.5`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+              {weekdays.map((d) => (
                 <div key={d} className="text-center text-[10px] font-semibold text-faint uppercase py-1">
                   {d}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1.5">
+            {/* Tage */}
+            <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
               {calendarDays.map((day) => (
                 <button
                   key={day.dateStr}
                   onClick={() => setSelectedDate(day.dateStr)}
-                  className={`min-h-[68px] p-1.5 rounded-md text-left flex flex-col border transition-colors ${
+                  className={`min-h-[72px] p-1.5 rounded-md text-left flex flex-col border transition-colors ${
                     selectedDate === day.dateStr
                       ? "border-accent bg-accent/10"
                       : day.isToday
@@ -243,7 +297,7 @@ export default function CalendarView() {
                         ? "bg-up/10 hover:bg-up/15"
                         : "bg-down/10 hover:bg-down/15"
                       : "bg-bg hover:bg-surface2"
-                  } ${day.isCurrentMonth ? "" : "opacity-35"}`}
+                  } ${day.isCurrentMonth ? "" : "opacity-30"}`}
                 >
                   <span className="text-[11px] font-medium">{day.date.getDate()}</span>
                   {day.trades.length > 0 && (
@@ -256,6 +310,14 @@ export default function CalendarView() {
                         {day.totalR >= 0 ? "+" : ""}
                         {day.totalR.toFixed(1)}R
                       </span>
+                      <span
+                        className={`text-[10px] font-mono ${
+                          day.totalEur >= 0 ? "text-up/70" : "text-down/70"
+                        }`}
+                      >
+                        {day.totalEur >= 0 ? "+" : ""}
+                        {day.totalEur.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
+                      </span>
                       <span className="text-[9px] text-muted">{day.trades.length}×</span>
                     </>
                   )}
@@ -264,6 +326,7 @@ export default function CalendarView() {
             </div>
           </>
         ) : (
+          /* Jahresansicht */
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             {yearData.map((m) => (
               <button
@@ -291,6 +354,9 @@ export default function CalendarView() {
                       {m.totalR >= 0 ? "+" : ""}
                       {m.totalR.toFixed(1)}R
                     </div>
+                    <div className={`text-[11px] font-mono ${m.totalEur >= 0 ? "text-up/70" : "text-down/70"}`}>
+                      {fmtEur(m.totalEur)}
+                    </div>
                     <div className="text-[10px] text-muted font-mono">
                       {m.wins}W / {m.losses}L
                     </div>
@@ -307,7 +373,7 @@ export default function CalendarView() {
       {/* Tages-Detail */}
       {selectedDate && selectedDayData && (
         <Panel
-          title={new Date(selectedDate).toLocaleDateString("de-DE", {
+          title={new Date(selectedDate + "T12:00:00").toLocaleDateString("de-DE", {
             weekday: "long",
             day: "numeric",
             month: "long",
@@ -335,6 +401,9 @@ export default function CalendarView() {
               {selectedDayData.totalR >= 0 ? "+" : ""}
               {selectedDayData.totalR.toFixed(2)} R
             </span>
+            <span className={selectedDayData.totalEur >= 0 ? "text-up" : "text-down"}>
+              {fmtEur(selectedDayData.totalEur)}
+            </span>
             <span className="text-muted">{selectedDayData.winRate.toFixed(0)}% WR</span>
           </div>
           {selectedDayData.trades.length === 0 ? (
@@ -354,13 +423,23 @@ export default function CalendarView() {
                     {t.direction.toUpperCase()}
                   </span>
                   <span
-                    className={`ml-auto font-semibold ${
+                    className={`font-semibold ${
                       t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
                     }`}
                   >
                     {t.rMultiple > 0 ? "+" : ""}
                     {t.rMultiple.toFixed(2)} R
                   </span>
+                  {t.profitAmount != null && (
+                    <span
+                      className={`ml-auto text-[11px] ${
+                        t.profitAmount > 0 ? "text-up/70" : t.profitAmount < 0 ? "text-down/70" : "text-muted"
+                      }`}
+                    >
+                      {t.profitAmount > 0 ? "+" : ""}
+                      {t.profitAmount.toLocaleString("de-DE", { maximumFractionDigits: 0 })} {currency}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
