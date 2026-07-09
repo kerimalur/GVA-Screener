@@ -2,7 +2,7 @@ export interface NavItem {
   href: string;
   label: string;
   icon: string;
-  requiresPro?: boolean;
+  requiresAdmin?: boolean;
 }
 
 export interface NavGroup {
@@ -28,8 +28,9 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Markt-Scanner",
     items: [
-      { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresPro: true },
-      { href: "/scanner/signale", label: "Signale", icon: "ph-tray", requiresPro: true },
+      { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresAdmin: true },
+      { href: "/scanner/signale", label: "Signale", icon: "ph-tray", requiresAdmin: true },
+      { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine", requiresAdmin: true },
     ],
   },
   {
@@ -62,6 +63,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/vergleich": "Vergleichs-Tool",
   "/scanner/radar": "Visuelles Radar",
   "/scanner/signale": "Signals-Inbox",
+  "/scanner/heatmap": "Heatmap 28",
   "/journal": "Trade-Journal",
   "/journal/dashboard": "Journal-Dashboard",
   "/journal/equity": "Equity-Kurve",

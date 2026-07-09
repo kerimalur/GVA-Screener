@@ -11,7 +11,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [userName, setUserName] = useState<string>("");
   const [userAvatar, setUserAvatar] = useState<string>("");
-  const [hasPro, setHasPro] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   useEffect(() => {
     const supabase = createBrowserSupabase();
@@ -24,13 +24,7 @@ export default function Sidebar() {
           "Trader"
         );
         setUserAvatar(user.user_metadata?.avatar_url || "");
-        supabase
-          .from("user_subscriptions")
-          .select("status")
-          .eq("user_id", user.id)
-          .eq("status", "active")
-          .maybeSingle()
-          .then(({ data }) => setHasPro(!!data));
+        setIsAdmin(user.app_metadata?.role === "admin");
       }
     });
   }, []);
@@ -54,14 +48,14 @@ export default function Sidebar() {
             </div>
             {group.items.map((item) => {
               const active = pathname === item.href;
-              const locked = item.requiresPro && !hasPro;
+              const locked = item.requiresAdmin && !isAdmin;
 
               if (locked) {
                 return (
                   <div
                     key={item.href}
                     className="flex items-center gap-2.5 px-5 py-2 text-[13px] text-faint cursor-not-allowed select-none"
-                    title="Verfuegbar mit aktivem Abo"
+                    title="Nur fuer Admins verfuegbar"
                   >
                     <i className={`ph-bold ${item.icon} text-base opacity-40`} />
                     <span className="opacity-40">{item.label}</span>
@@ -104,7 +98,7 @@ export default function Sidebar() {
             <div className="text-[12px] font-medium text-text truncate">{userName}</div>
             <div className="flex items-center gap-1 text-[10px]">
               <span className="w-1.5 h-1.5 rounded-full bg-up inline-block" />
-              <span className="text-faint">{hasPro ? "Pro" : "Aktiv"}</span>
+              <span className="text-faint">{isAdmin ? "Admin" : "Aktiv"}</span>
             </div>
           </div>
         </div>
