@@ -8,9 +8,8 @@ import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
 import { updateCot } from "@/lib/jobs/updateCot";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
-
-const TIME_BUDGET_MS = 250_000;
+// Vercel Hobby: max 60s. Pro: bis 300s.
+export const maxDuration = 60;
 
 /** COT nur Sa/So/Mo (Release Fr ~20:30 UTC) oder wenn Daten > 8 Tage alt. */
 async function cotDue(db: ReturnType<typeof createServiceClient>): Promise<boolean> {
@@ -35,33 +34,22 @@ export async function GET(req: NextRequest) {
 
   const db = createServiceClient();
   const started = Date.now();
-  const results: JobResult[] = [];
 
-  const tasks: Array<[string, () => Promise<Record<string, unknown>>]> = [
-    ["cron:prices", () => updatePrices(db)],
-    ["cron:fred", () => updateFred(db)],
-    ["cron:calendar", () => updateCalendar(db)],
+  // Parallel ausführen — alle Jobs gleichzeitig starten damit sie in 60s passen.
+  // runJob fängt Fehler intern ab und loggt in cron_runs.
+  const cotNeeded = await cotDue(db);
+
+  const jobDefs: Array<[string, () => Promise<Record<string, unknown>>]> = [
+    ["cron:prices",    () => updatePrices(db)],
+    ["cron:fred",      () => updateFred(db)],
+    ["cron:calendar",  () => updateCalendar(db)],
     ["cron:sentiment", () => snapshotSentiment(db)],
   ];
-  if (await cotDue(db)) tasks.push(["cron:cot", () => updateCot(db)]);
+  if (cotNeeded) jobDefs.push(["cron:cot", () => updateCot(db)]);
 
-  for (const [name, fn] of tasks) {
-    if (Date.now() - started > TIME_BUDGET_MS) {
-      const deferred: JobResult = {
-        job: name,
-        status: "skipped",
-        detail: { deferred: true, reason: "Zeitbudget erschöpft — nächster Lauf holt auf" },
-      };
-      results.push(deferred);
-      await db.from("cron_runs").insert({
-        job: name,
-        status: "deferred",
-        detail: deferred.detail,
-      });
-      continue;
-    }
-    results.push(await runJob(db, name, fn));
-  }
+  const results = await Promise.all(
+    jobDefs.map(([name, fn]) => runJob(db, name, fn)),
+  );
 
   return NextResponse.json({
     ok: results.every((r) => r.status !== "error"),

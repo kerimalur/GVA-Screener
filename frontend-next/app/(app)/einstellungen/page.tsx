@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
-// ── Types ─────────────────────────────────────────────────────────────────
 type SubStatus = "active" | "trialing" | "past_due" | "canceled" | "inactive" | null;
 
 interface DataJob {
@@ -15,23 +14,21 @@ interface DataJob {
   detail: Record<string, unknown> | null;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────
 const SUB_STATUS: Record<NonNullable<SubStatus>, { label: string; color: string }> = {
   active:   { label: "Aktiv",         color: "#3FB950" },
   trialing: { label: "Testphase",     color: "#58A6FF" },
   past_due: { label: "Zahlung offen", color: "#D8A430" },
-  canceled: { label: "Gekündigt",     color: "#F85149" },
+  canceled: { label: "Gekuendigt",    color: "#F85149" },
   inactive: { label: "Inaktiv",       color: "#566273" },
 };
 
 const JOB_STATUS: Record<string, { label: string; color: string }> = {
-  ok:       { label: "OK",           color: "#3FB950" },
-  error:    { label: "Fehler",       color: "#F85149" },
-  skipped:  { label: "Übersprungen", color: "#D8A430" },
-  deferred: { label: "Verzögert",    color: "#D8A430" },
+  ok:       { label: "OK",            color: "#3FB950" },
+  error:    { label: "Fehler",        color: "#F85149" },
+  skipped:  { label: "Uebersprungen", color: "#D8A430" },
+  deferred: { label: "Verzoegert",    color: "#D8A430" },
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("de-CH", { day: "2-digit", month: "long", year: "numeric" });
 
@@ -45,23 +42,20 @@ const fmtRelative = (iso: string) => {
   return `vor ${days} Tag${days > 1 ? "en" : ""}`;
 };
 
-// ── Component ──────────────────────────────────────────────────────────────
 export default function EinstellungenPage() {
-  const [email, setEmail]                     = useState("");
-  const [isAdmin, setIsAdmin]                 = useState(false);
-  const [subStatus, setSubStatus]             = useState<SubStatus>(null);
-  const [periodEnd, setPeriodEnd]             = useState<string | null>(null);
+  const [email, setEmail]                         = useState("");
+  const [isAdmin, setIsAdmin]                     = useState(false);
+  const [subStatus, setSubStatus]                 = useState<SubStatus>(null);
+  const [periodEnd, setPeriodEnd]                 = useState<string | null>(null);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
-  const [subLoading, setSubLoading]           = useState(true);
-  const [portalLoading, setPortalLoading]     = useState(false);
-  const [portalError, setPortalError]         = useState("");
-  const [jobs, setJobs]                       = useState<DataJob[]>([]);
-  const [nextRun, setNextRun]                 = useState<string | null>(null);
-  const [dataLoading, setDataLoading]         = useState(true);
+  const [subLoading, setSubLoading]               = useState(true);
+  const [portalLoading, setPortalLoading]         = useState(false);
+  const [portalError, setPortalError]             = useState("");
+  const [jobs, setJobs]                           = useState<DataJob[]>([]);
+  const [nextRun, setNextRun]                     = useState<string | null>(null);
+  const [dataLoading, setDataLoading]             = useState(true);
 
-  // Load user + subscription
   useEffect(() => {
-    // Admin-Check via sicherer API-Route (prüft ADMIN_USER_IDS Env-Var serverseitig)
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((me) => {
@@ -86,7 +80,6 @@ export default function EinstellungenPage() {
     });
   }, []);
 
-  // Load data status
   useEffect(() => {
     fetch("/api/data/status")
       .then((r) => r.json())
@@ -112,7 +105,6 @@ export default function EinstellungenPage() {
     }
   };
 
-  // ── Styles ─────────────────────────────────────────────────────────────
   const mono = "'Geist Mono', monospace";
   const card: React.CSSProperties = {
     background: "#0E131A",
@@ -135,17 +127,15 @@ export default function EinstellungenPage() {
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
 
-      {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.2em", color: "#58A6FF", textTransform: "uppercase" as const, marginBottom: 8 }}>
           Einstellungen
         </div>
         <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: "#F4F8FC", margin: 0 }}>
-          Konto & Abonnement
+          Konto &amp; Abonnement
         </h1>
       </div>
 
-      {/* ── Account ── */}
       <div style={card}>
         <div style={sectionLabel}>Konto</div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -154,7 +144,7 @@ export default function EinstellungenPage() {
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 14, color: "#E7EDF5", fontWeight: 500 }}>{email || "—"}</div>
+              <div style={{ fontSize: 14, color: "#E7EDF5", fontWeight: 500 }}>{email || "---"}</div>
               {isAdmin && (
                 <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", padding: "2px 7px", borderRadius: 5, background: "rgba(216,164,48,.15)", color: "#D8A430", border: "1px solid rgba(216,164,48,.3)", textTransform: "uppercase" as const }}>
                   Admin
@@ -166,11 +156,10 @@ export default function EinstellungenPage() {
         </div>
       </div>
 
-      {/* ── Abonnement ── */}
       <div style={card}>
         <div style={sectionLabel}>Abonnement</div>
         {subLoading ? (
-          <div style={{ fontSize: 13, color: "#566273" }}>Lädt…</div>
+          <div style={{ fontSize: 13, color: "#566273" }}>Laedt...</div>
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -184,15 +173,13 @@ export default function EinstellungenPage() {
                 </span>
               )}
             </div>
-
             {periodEnd && (
               <div style={{ fontSize: 12.5, color: "#7E8B9C", marginBottom: 18 }}>
                 {subStatus === "canceled"
                   ? `Zugang bis: ${fmtDate(periodEnd)}`
-                  : `Nächste Abrechnung: ${fmtDate(periodEnd)}`}
+                  : `Naechste Abrechnung: ${fmtDate(periodEnd)}`}
               </div>
             )}
-
             <div style={{ borderTop: "1px solid #1A222D", paddingTop: 18 }}>
               {hasStripeCustomer ? (
                 <>
@@ -202,10 +189,10 @@ export default function EinstellungenPage() {
                     style={{ padding: "10px 18px", borderRadius: 9, background: "transparent", border: "1px solid #2E3844", color: "#C7D1DD", fontSize: 13.5, fontWeight: 600, cursor: portalLoading ? "not-allowed" : "pointer", opacity: portalLoading ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
                   >
                     <i className="ph-bold ph-credit-card" style={{ fontSize: 15 }} />
-                    {portalLoading ? "Weiterleitung…" : "Abo verwalten / kündigen"}
+                    {portalLoading ? "Weiterleitung..." : "Abo verwalten / kuendigen"}
                   </button>
                   <div style={{ fontSize: 11.5, color: "#566273", marginTop: 10 }}>
-                    Öffnet das Stripe Kundenportal — Zahlungsmethode ändern, Rechnungen, Abo kündigen.
+                    Oeffnet das Stripe Kundenportal
                   </div>
                   {portalError && <div style={{ fontSize: 12, color: "#F85149", marginTop: 8 }}>{portalError}</div>}
                 </>
@@ -213,7 +200,7 @@ export default function EinstellungenPage() {
                 <div style={{ display: "flex", flexDirection: "column" as const, gap: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#D8A430" }}>
                     <i className="ph-bold ph-info" style={{ fontSize: 14 }} />
-                    Admin-Konto — kein Stripe-Kunde verknüpft.
+                    Admin-Konto -- kein Stripe-Kunde verknuepft.
                   </div>
                   <a
                     href="https://dashboard.stripe.com/customers"
@@ -222,32 +209,28 @@ export default function EinstellungenPage() {
                     style={{ padding: "10px 18px", borderRadius: 9, background: "transparent", border: "1px solid #2E3844", color: "#C7D1DD", fontSize: 13.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none" }}
                   >
                     <i className="ph-bold ph-arrow-square-out" style={{ fontSize: 15 }} />
-                    Stripe Dashboard öffnen
+                    Stripe Dashboard oeffnen
                   </a>
                 </div>
               ) : (
-                <div style={{ fontSize: 13, color: "#566273" }}>
-                  Kein aktives Abonnement.
-                </div>
+                <div style={{ fontSize: 13, color: "#566273" }}>Kein aktives Abonnement.</div>
               )}
             </div>
           </>
         )}
       </div>
 
-      {/* ── Daten ── */}
       <div style={card}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div style={sectionLabel}>Daten</div>
           {nextRun && !dataLoading && (
             <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>
-              Nächste Aktualisierung: {new Date(nextRun).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr
+              Naechste Aktualisierung: {new Date(nextRun).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr
             </span>
           )}
         </div>
-
         {dataLoading ? (
-          <div style={{ fontSize: 13, color: "#566273" }}>Lädt…</div>
+          <div style={{ fontSize: 13, color: "#566273" }}>Laedt...</div>
         ) : jobs.length === 0 ? (
           <div style={{ fontSize: 13, color: "#566273" }}>Noch keine Daten geladen.</div>
         ) : (
@@ -265,7 +248,7 @@ export default function EinstellungenPage() {
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
                           <span style={{ width: 6, height: 6, borderRadius: "50%", background: st?.color ?? "#566273", display: "inline-block" }} />
-                          <span style={{ fontFamily: mono, fontSize: 10.5, color: st?.color ?? "#566273" }}>{st?.label ?? "—"}</span>
+                          <span style={{ fontFamily: mono, fontSize: 10.5, color: st?.color ?? "#566273" }}>{st?.label ?? "---"}</span>
                         </div>
                         <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{fmtRelative(job.lastRun)}</div>
                       </>
@@ -278,16 +261,21 @@ export default function EinstellungenPage() {
             })}
           </div>
         )}
-
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #161D27", display: "flex", alignItems: "center", gap: 7 }}>
           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3FB950", display: "inline-block" }} />
-          <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>Automatisch täglich um 06:30 Uhr (Schweizer Zeit)</span>
+          <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>Automatisch taeglich um 06:30 Uhr (Schweizer Zeit)</span>
         </div>
       </div>
 
-      {/* ── Rechtliches ── */}
       <div style={{ ...card, marginBottom: 0 }}>
         <div style={sectionLabel}>Rechtliches</div>
         <div style={{ display: "flex", gap: 20, fontSize: 13 }}>
           {([["AGB", "/agb"], ["Datenschutz", "/datenschutz"], ["Impressum", "/impressum"]] as [string, string][]).map(([label, href]) => (
-            <a key={href} href={href} style={{ color: "#7E8B9C", textDecoration: "none" }}>{
+            <a key={href} href={href} style={{ color: "#7E8B9C", textDecoration: "none" }}>{label}</a>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}

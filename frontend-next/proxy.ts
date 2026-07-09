@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-// Auth-Guard: alles außer /login und /auth/* erfordert eine Google-Session.
-// Refresht nebenbei die Supabase-Session-Cookies (Pattern aus Supabase-SSR-Doku).
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -27,21 +25,19 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Kein Code zwischen createServerClient und getUser — sonst Session-Bugs.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
   const isPublic =
-    pathname === "/" ||                   // Landing Page
+    pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/upgrade") ||
     pathname.startsWith("/agb") ||
     pathname.startsWith("/datenschutz") ||
     pathname.startsWith("/impressum");
-  // Hinweis: /api/* ist laut matcher bereits ausgenommen (inkl. /api/stripe/webhook)
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -57,32 +53,49 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ── Admin-Only-Routen ────────────────────────────────────────────────────
-  // /admin/* nur für User-IDs in ADMIN_USER_IDS (kommagetrennt).
-  if (user && pathname.startsWith("/admin")) {
-    const adminIds = (process.env.ADMIN_USER_IDS ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (!adminIds.includes(user.id)) {
+  // Admin-only routes (/admin/*)
+  const adminIds = (process.env.ADMIN_USER_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const isAdminUser = user ? adminIds.includes(user.id) : false;
+
+  if (user && pathname.startsWith("/admin") && !isAdminUser) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Subscription check for logged-in non-admin users on protected routes
+  if (user && !isPublic && !isAdminUser) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const now = new Date();
+    const isActive =
+      sub?.status === "active" ||
+      sub?.status === "trialing" ||
+      (sub?.status === "past_due" &&
+        sub.current_period_end != null &&
+        new Date(sub.current_period_end) > now);
+
+    if (!isActive) {
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
+      url.pathname = "/upgrade";
       url.search = "";
       return NextResponse.redirect(url);
     }
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
-  // ── Subscription-Check ────────────────────────────────────────────────────
-  // Eingeloggte User auf nicht-öffentlichen Routen: aktive Subscription prüfen.
-  // Admin-User überspringen — kein Stripe-Abo nötig.
-  const adminIdsForSub = (process.env.ADMIN_USER_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const isAdminUser = user ? adminIdsForSub.includes(user.id) : false;
+  return response;
+}
 
-  if (user && !isPublic && !isAdminUser) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status, cu
+export const config = {
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon\.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
+};
