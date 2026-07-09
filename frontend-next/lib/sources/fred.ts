@@ -8,11 +8,20 @@ export interface FredObservation {
  * FRED-CSV (keyless, immer Vollhistorie). '.'-Werte werden übersprungen.
  * Liefert null bei unbekannter/eingestellter Serie (Aufrufer markiert is_stale).
  */
-export async function fetchSeries(seriesId: string): Promise<FredObservation[] | null> {
-  const res = await fetch(
-    `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`,
-    { cache: "no-store", headers: { "User-Agent": "Mozilla/5.0 (fx-terminal)" } },
-  );
+export async function fetchSeries(seriesId: string, timeoutMs = 8000): Promise<FredObservation[] | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`,
+      { cache: "no-store", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (fx-terminal)" } },
+    );
+  } catch {
+    return null; // timeout or network error -> as stale
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) return null;
 
   const text = await res.text();
