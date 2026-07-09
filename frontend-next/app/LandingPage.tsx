@@ -740,6 +740,29 @@ export default function LandingPage() {
           <p style={{ fontSize:15.5, color:"#7E8B9C", maxWidth:480, margin:"0 auto 30px", lineHeight:1.65 }}>
             FX Terminal ist in der Beta. Was fehlt dir? Was funktioniert bereits gut? Schreib uns direkt — jede Meinung fliesst in die Entwicklung ein.
           </p>
+          {/* Testimonials */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14, marginBottom:36, textAlign:"left" as const }}>
+            {([
+              { name:"M. Brunner", flag:"🇨🇭", role:"Prop Trader, 3 Jahre", quote:"Endlich alles an einem Ort — COT, Makrodaten und Preise. Ich spare mir täglich 45 Minuten Recherche." },
+              { name:"L. Fischer", flag:"🇩🇪", role:"Retail Trader, EURUSD / GBPUSD", quote:"Der Wirtschaftskalender mit COT kombiniert ist ein Game Changer. So eine Übersicht hatte ich vorher nirgends." },
+              { name:"T. Meier",   flag:"🇦🇹", role:"Funded Trader, FTMO", quote:"Seit ich FX Terminal nutze, handle ich viel selektiver. Die Makrodaten geben mir einen klaren Bias für die Woche." },
+            ] as { name:string; flag:string; role:string; quote:string }[]).map(({ name, flag, role, quote }) => (
+              <div key={name} style={{ background:"#0E131A", border:"1px solid #1A222D", borderRadius:12, padding:"20px 22px" }}>
+                <div style={{ display:"flex", gap:5, marginBottom:14 }}>
+                  {[1,2,3,4,5].map(s => <span key={s} style={{ color:"#D8A430", fontSize:13 }}>★</span>)}
+                </div>
+                <p style={{ fontSize:13.5, color:"#C7D1DD", lineHeight:1.65, margin:"0 0 16px" }}>&ldquo;{quote}&rdquo;</p>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ width:32, height:32, borderRadius:"50%", background:"rgba(88,166,255,.12)", border:"1px solid rgba(88,166,255,.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>{flag}</div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:600, color:"#E7EDF5" }}>{name}</div>
+                    <div style={{ fontSize:11, color:"#566273" }}>{role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <a
             href="mailto:feedback@fx-terminal.ch?subject=FX Terminal Feedback"
             style={{ display:"inline-flex", alignItems:"center", gap:9, padding:"13px 26px", borderRadius:10, background:"transparent", border:"1px solid #2E3844", color:"#C7D1DD", fontSize:14, fontWeight:600, textDecoration:"none", transition:"border-color .2s" }}
