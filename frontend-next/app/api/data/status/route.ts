@@ -46,7 +46,7 @@ export async function GET() {
       if (sinceErr) {
         console.error(`[data/status] oldest-date error for ${key} (${table}):`, sinceErr);
       } else if (oldest) {
-        since = (oldest as Record<string, unknown>)[dateCol] as string ?? null;
+        since = ((oldest as unknown) as Record<string, unknown>)[dateCol] as string ?? null;
       }
 
       return {
