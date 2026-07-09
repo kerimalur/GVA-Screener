@@ -23,4 +23,5 @@ export default function Panel({ title, subtitle, actions, children, className = 
       <div className="p-4">{children}</div>
     </section>
   );
+
 }

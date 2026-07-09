@@ -24,8 +24,6 @@ export default function Sidebar() {
           "Trader"
         );
         setUserAvatar(user.user_metadata?.avatar_url || "");
-
-        // Abo-Status prüfen
         supabase
           .from("user_subscriptions")
           .select("status")
@@ -63,7 +61,7 @@ export default function Sidebar() {
                   <div
                     key={item.href}
                     className="flex items-center gap-2.5 px-5 py-2 text-[13px] text-faint cursor-not-allowed select-none"
-                    title="Verfügbar mit aktivem Abo"
+                    title="Verfuegbar mit aktivem Abo"
                   >
                     <i className={`ph-bold ${item.icon} text-base opacity-40`} />
                     <span className="opacity-40">{item.label}</span>
@@ -92,7 +90,6 @@ export default function Sidebar() {
         ))}
       </nav>
       <div className="border-t border-border">
-        {/* User-Info */}
         <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
           {userAvatar ? (
             <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full shrink-0" />

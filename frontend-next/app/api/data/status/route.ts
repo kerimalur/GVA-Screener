@@ -5,11 +5,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 
 const JOBS = [
-  { key: "cron:prices",    label: "Preise (OANDA)",              freq: "taeglich",      table: "price_daily",        dateCol: "date" },
-  { key: "cron:fred",      label: "Makro-Daten (FRED)",          freq: "taeglich",      table: "fred_series",        dateCol: "date" },
-  { key: "cron:calendar",  label: "Wirtschaftskalender",         freq: "taeglich",      table: "calendar_events",    dateCol: "event_time" },
-  { key: "cron:sentiment", label: "Retail Sentiment (Myfxbook)", freq: "taeglich",      table: "sentiment_snapshots",dateCol: "captured_at" },
-  { key: "cron:cot",       label: "COT-Report (CFTC)",           freq: "woechentlich",  table: "cot_reports",        dateCol: "report_date" },
+  { key: "cron:prices",    label: "Preise (OANDA)",              freq: "taeglich",      table: "price_daily",         dateCol: "date" },
+  { key: "cron:fred",      label: "Makro-Daten (FRED)",          freq: "taeglich",      table: "fred_series",         dateCol: "date" },
+  { key: "cron:calendar",  label: "Wirtschaftskalender",         freq: "taeglich",      table: "calendar_events",     dateCol: "event_time" },
+  { key: "cron:sentiment", label: "Retail Sentiment (Myfxbook)", freq: "taeglich",      table: "sentiment_snapshots", dateCol: "captured_at" },
+  { key: "cron:cot",       label: "COT-Report (CFTC)",           freq: "woechentlich",  table: "cot_reports",         dateCol: "report_date" },
 ];
 
 export async function GET() {
@@ -44,32 +44,23 @@ export async function GET() {
         .maybeSingle();
 
       if (sinceErr) {
-        console.error(`[data/status] oldest-date error for ${key} (${table}):`, sinceErr);
+        console.error(`[data/status] since error for ${key}:`, sinceErr);
       } else if (oldest) {
-        since = ((oldest as unknown) as Record<string, unknown>)[dateCol] as string ?? null;
+        const raw = ((oldest as unknown) as Record<string, unknown>)[dateCol];
+        if (typeof raw === "string") since = raw.slice(0, 10);
       }
 
       return {
         key,
         label,
         freq,
-        status:  run?.status  ?? null,
-        lastRun: run?.ran_at  ?? null,
+        status: run?.status ?? null,
+        lastRun: run?.ran_at ?? null,
         since,
-        detail:  run?.detail  ?? null,
-        _runErr: runErr?.message ?? null,
+        detail: run?.detail ?? null,
       };
     }),
   );
 
-  // Naechster Cron-Lauf: taeglich 05:30 UTC
-  const now = new Date();
-  const nextRun = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + (now.getUTCHours() >= 5 && now.getUTCMinutes() >= 30 ? 1 : 0),
-    5, 30, 0,
-  ));
-
-  return NextResponse.json({ jobs: results, nextRun: nextRun.toISOString() });
+  return NextResponse.json(results);
 }

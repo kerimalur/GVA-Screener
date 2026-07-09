@@ -1,11 +1,10 @@
-
 export interface FredObservation {
   date: string; // 'YYYY-MM-DD'
   value: number;
 }
 
 /**
- * FRED-CSV (keyless, immer Vollhistorie). '.'-Werte werden übersprungen.
+ * FRED-CSV (keyless, immer Vollhistorie). '.'-Werte werden uebersprungen.
  * Liefert null bei unbekannter/eingestellter Serie (Aufrufer markiert is_stale).
  */
 export async function fetchSeries(seriesId: string, timeoutMs = 8000): Promise<FredObservation[] | null> {
@@ -18,7 +17,7 @@ export async function fetchSeries(seriesId: string, timeoutMs = 8000): Promise<F
       { cache: "no-store", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (fx-terminal)" } },
     );
   } catch {
-    return null; // timeout or network error -> as stale
+    return null; // timeout or network error -> treat as stale
   } finally {
     clearTimeout(timer);
   }
