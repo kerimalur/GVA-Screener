@@ -39,18 +39,21 @@ export async function POST(request: Request) {
         const userId = session.metadata?.user_id;
         const subscriptionId = session.subscription as string;
         const customerId = session.customer as string;
+        const tier = session.metadata?.tier === "basic" ? "basic" : "pro";
 
         if (!userId || !subscriptionId) break;
 
         // Subscription-Details holen
         const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        const interval = sub.items.data[0]?.price.recurring?.interval ?? "month";
 
         await db.from("subscriptions").upsert({
           user_id: userId,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
           status: sub.status,
-          plan: (sub.items.data[0]?.price.recurring?.interval ?? "month"),
+          plan: interval === "year" ? "yearly" : "monthly",
+          tier,
           current_period_end: new Date(
             (sub as unknown as { current_period_end: number }).current_period_end * 1000
           ).toISOString(),
@@ -62,6 +65,8 @@ export async function POST(request: Request) {
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = sub.customer as string;
+        const tier = sub.metadata?.tier === "basic" ? "basic" : "pro";
+        const interval = sub.items.data[0]?.price.recurring?.interval ?? "month";
 
         const { data: existing } = await db
           .from("subscriptions")
@@ -74,6 +79,8 @@ export async function POST(request: Request) {
         await db.from("subscriptions").update({
           stripe_subscription_id: sub.id,
           status: sub.status,
+          plan: interval === "year" ? "yearly" : "monthly",
+          tier,
           current_period_end: new Date(
             (sub as unknown as { current_period_end: number }).current_period_end * 1000
           ).toISOString(),

@@ -1,15 +1,20 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 function LoginContent() {
-  const [loading, setLoading] = useState<"google" | "github" | null>(null);
+  const [loading, setLoading] = useState<"google" | "github" | "password" | null>(null);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
+
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleOAuth = async (provider: "google" | "github") => {
     setLoading(provider);
@@ -25,6 +30,45 @@ function LoginContent() {
       setError(error.message);
       setLoading(null);
     }
+  };
+
+  const handlePasswordAuth = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    setLoading("password");
+    const supabase = createBrowserSupabase();
+
+    if (mode === "signup") {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (error) {
+        setError(error.message);
+        setLoading(null);
+        return;
+      }
+      // Wenn "Confirm email" in Supabase aktiv ist, gibt es hier noch keine Session.
+      if (!data.session) {
+        setInfo("Fast geschafft — wir haben dir eine Bestätigungs-E-Mail geschickt. Bitte den Link darin öffnen, um dich einzuloggen.");
+        setLoading(null);
+        return;
+      }
+      window.location.href = next;
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      setLoading(null);
+      return;
+    }
+    window.location.href = next;
   };
 
   return (
@@ -118,6 +162,65 @@ function LoginContent() {
               )}
             </button>
 
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-[#232c38]" />
+              <span className="text-[11px] text-[#3d4a5a] uppercase tracking-wider">oder mit E-Mail</span>
+              <div className="flex-1 h-px bg-[#232c38]" />
+            </div>
+
+            {/* E-Mail/Passwort-Formular */}
+            <form onSubmit={handlePasswordAuth} className="space-y-3">
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="E-Mail-Adresse"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#0b0f14] border border-[#232c38] text-sm text-white placeholder:text-[#5f6b7a] outline-none focus:border-[#58a6ff] transition-colors"
+              />
+              <input
+                type="password"
+                required
+                minLength={6}
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                placeholder="Passwort"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#0b0f14] border border-[#232c38] text-sm text-white placeholder:text-[#5f6b7a] outline-none focus:border-[#58a6ff] transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={loading !== null}
+                className="w-full py-3 px-4 rounded-xl bg-[#58a6ff] text-[#08111e] font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading === "password"
+                  ? "Einen Moment…"
+                  : mode === "signup"
+                  ? "Konto erstellen"
+                  : "Anmelden"}
+              </button>
+            </form>
+
+            <p className="text-xs text-[#5f6b7a] text-center mt-4">
+              {mode === "signup" ? "Schon ein Konto?" : "Noch kein Konto?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "signup" ? "signin" : "signup");
+                  setError("");
+                  setInfo("");
+                }}
+                className="text-[#58a6ff] hover:underline font-medium"
+              >
+                {mode === "signup" ? "Anmelden" : "Registrieren"}
+              </button>
+            </p>
+
+            {info && (
+              <p className="mt-4 text-xs text-[#3fb950] text-center">{info}</p>
+            )}
             {error && (
               <p className="mt-4 text-xs text-[#f85149] text-center">{error}</p>
             )}

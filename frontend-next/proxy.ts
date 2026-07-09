@@ -75,7 +75,7 @@ export async function proxy(request: NextRequest) {
   if (user && !isPublic && !isAdminUser) {
     const { data: sub } = await supabase
       .from("subscriptions")
-      .select("status, current_period_end")
+      .select("status, current_period_end, tier")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -91,6 +91,15 @@ export async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/upgrade";
       url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    // Journal-Bereich (inkl. Backtest/Strategie/Outlook/Kalender/Equity) ist Pro-exklusiv.
+    // Basic-Abonnenten werden mit Upsell-Hinweis auf /upgrade geschickt.
+    if (pathname.startsWith("/journal") && sub?.tier !== "pro") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/upgrade";
+      url.search = "?tier=pro";
       return NextResponse.redirect(url);
     }
   }

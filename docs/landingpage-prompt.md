@@ -47,7 +47,7 @@ Baue eine professionelle, konversionsoptimierte Landing Page für ein SaaS-Produ
   > „Alle fundamentalen FX-Daten. Ein Terminal."
 - **Subline:**
   > „COT-Positionierung, Zinsdifferenzen, Makro-Daten, Retail-Sentiment und Saisonalität — automatisch aggregiert und täglich aktualisiert. Für Swing-Trader, die wissen wollen, was das große Geld macht."
-- **CTAs:** Primär „Jetzt abonnieren – €29/Monat" (→ `/upgrade`), Sekundär „Anmelden" (→ `/login`)
+- **CTAs:** Primär „Jetzt abonnieren – CHF 34.95/Monat" (→ `/upgrade`), Sekundär „Anmelden" (→ `/login`)
 - **Visual:** Großer Screenshot des Dashboards als dunkler, leicht gedimmter Hero-Image-Hintergrund oder als Card daneben.
 
   > [SCREENSHOT: Haupt-Dashboard — zeigt Currency Strength, Risk Gauge, Pair Screener, CB-Spektrum nebeneinander]
@@ -145,7 +145,7 @@ Zentrierung, klarer Card-Style:
 ```
 FX Terminal
 ──────────────────────────────
-€ 29 / Monat
+CHF 34.95 / Monat
 Monatlich kündbar · keine Mindestlaufzeit
 ──────────────────────────────
 ✓  28 FX-Paare — COT, Screener, Stärke

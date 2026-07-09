@@ -11,12 +11,18 @@ create table if not exists subscriptions (
   status                text not null default 'inactive',
   -- status values: active | inactive | past_due | canceled | trialing
   plan                  text not null default 'monthly',
+  -- plan = Abrechnungsintervall (monthly | yearly)
+  tier                  text not null default 'pro',
+  -- tier = Preisstufe (basic | pro)
   current_period_end    timestamptz,
   cancel_at_period_end  boolean not null default false,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now(),
   unique(user_id)
 );
+
+-- Nachtraeglich fuer bestehende Installationen (idempotent):
+alter table subscriptions add column if not exists tier text not null default 'pro';
 
 create trigger trg_subscriptions_updated_at
   before update on subscriptions

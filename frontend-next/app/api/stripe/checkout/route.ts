@@ -8,6 +8,20 @@ import { stripe } from "@/lib/stripe/server";
  * Erstellt eine Stripe Checkout Session und gibt die URL zurück.
  * User muss eingeloggt sein.
  */
+// Preisstufen: pro Tier+Intervall eine eigene Stripe-Price-ID (in Stripe Dashboard anlegen,
+// dann als Vercel-Env-Var setzen). STRIPE_PRICE_ID bleibt als Fallback fuer "pro/monthly"
+// erhalten, damit bestehende Konfigurationen nicht brechen.
+const PRICE_ENV_MAP: Record<string, Record<string, string | undefined>> = {
+  basic: {
+    monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_BASIC_YEARLY,
+  },
+  pro: {
+    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_ID,
+    yearly: process.env.STRIPE_PRICE_PRO_YEARLY,
+  },
+};
+
 export async function POST(request: Request) {
   const supabase = await createAuthServerClient();
   const {
@@ -18,9 +32,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nicht eingeloggt" }, { status: 401 });
   }
 
-  if (!process.env.STRIPE_PRICE_ID) {
+  const body = await request.json().catch(() => ({}));
+  const tier: "basic" | "pro" = body?.tier === "basic" ? "basic" : "pro";
+  const billing: "monthly" | "yearly" = body?.billing === "yearly" ? "yearly" : "monthly";
+
+  // EU-Widerrufsrecht: Zugang wird sofort bereitgestellt, digitale Dienstleistung.
+  // Ohne diese ausdrückliche Zustimmung (Checkbox im Frontend) kein Checkout-Start —
+  // sonst würde EU-Kunden das 14-tägige Widerrufsrecht faktisch untergraben (AGB Abschnitt 6).
+  if (body?.widerrufConsent !== true) {
     return NextResponse.json(
-      { error: "STRIPE_PRICE_ID nicht konfiguriert" },
+      { error: "Bitte zuerst dem Hinweis zum Widerrufsrecht zustimmen." },
+      { status: 400 },
+    );
+  }
+
+  const priceId = PRICE_ENV_MAP[tier][billing];
+  if (!priceId) {
+    return NextResponse.json(
+      { error: `Kein Stripe-Preis fuer ${tier}/${billing} konfiguriert (Env-Var fehlt)` },
       { status: 500 },
     );
   }
@@ -67,11 +96,21 @@ export async function POST(request: Request) {
       });
     }
 
+    // Zeitstempel der Widerrufsrecht-Zustimmung als Nachweis in Stripe-Metadata ablegen
+    // (Audit-Trail, falls ein EU-Kunde die Bereitstellung später anfechtet).
+    const consentMeta = {
+      user_id: user.id,
+      tier,
+      withdrawal_consent: "true",
+      withdrawal_consent_at: new Date().toISOString(),
+    };
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-      metadata: { user_id: user.id },
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: consentMeta,
+      subscription_data: { metadata: consentMeta },
       success_url: `${origin}/upgrade?success=1`,
       cancel_url: `${origin}/upgrade?canceled=1`,
       allow_promotion_codes: true,

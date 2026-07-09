@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { PLANS } from "@/lib/constants/plans";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Dir = "LONG" | "SHORT" | "NEUTRAL";
@@ -47,25 +48,8 @@ const SOLUTIONS = [
   "Historischer Edge-Test per Klick",
 ];
 
-const BASIC_FEATURES = [
-  "28 FX-Paare — Screener & Stärke",
-  "COT-Analyse & Perzentile",
-  "Makro-Fundamentals (FRED, Zinsen)",
-  "Währungs-Kompass (4-Faktoren-Bias)",
-  "Retail-Sentiment (Myfxbook)",
-  "Saisonalität & Intermarket-Korrelationen",
-  "Risk-Regime & Weekly Outlook",
-  "Täglich automatisch aktualisiert",
-];
-
-const PRO_FEATURES = [
-  "Alle fundamentalen Module aus Basic",
-  "Integriertes Trading Journal (R-Multiple)",
-  "COT-Backtest & historischer Edge-Test",
-  "Strategie-Builder & Backtest-Lab",
-  "Outlook-Wizard & Trade-Kalender",
-  "Equity-Kurve & Performance-Auswertung",
-];
+const BASIC_FEATURES = PLANS.basic.features;
+const PRO_FEATURES = PLANS.pro.features;
 
 const FAQS: [string, string][] = [
   ["Brauche ich Trading-Vorwissen?", "Die App richtet sich an aktive FX-Trader mit Grundkenntnissen in Fundamentalanalyse. Begriffe wie COT-Report, Leitzins und R-Multiple sollten bekannt sein. In der App gibt es zu jedem Bereich eine kurze Erklärung."],
@@ -614,7 +598,7 @@ export default function LandingPage() {
             <div style={{ padding:"26px 26px 22px", borderBottom:"1px solid #1A222D" }}>
               <div style={{ fontSize:13, fontWeight:700, letterSpacing:"0.02em", color:"#C7D1DD", textTransform:"uppercase" as const, marginBottom:14 }}>Basic</div>
               <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
-                <span style={{ fontSize:36, fontWeight:800, color:"#F4F8FC", letterSpacing:"-0.02em" }}>CHF {yearly?"249":"24.95"}</span>
+                <span style={{ fontSize:36, fontWeight:800, color:"#F4F8FC", letterSpacing:"-0.02em" }}>CHF {yearly?PLANS.basic.priceYearly:PLANS.basic.priceMonthly}</span>
                 <span style={{ fontSize:14, color:"#8B98A8" }}>/ {yearly?"Jahr":"Monat"}</span>
               </div>
               <p style={{ fontSize:12.5, color:"#566273", margin:"8px 0 0" }}>Für den fundamentalen Marktüberblick.</p>
@@ -628,7 +612,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div style={{ padding:"0 26px 26px" }}>
-              <Link href="/upgrade?autostart=1" style={{ display:"block", padding:13, borderRadius:11, background:"transparent", border:"1px solid #2E3844", color:"#E7EDF5", fontSize:14, fontWeight:600, textAlign:"center" as const, textDecoration:"none" }}>Basic wählen</Link>
+              <Link href={`/upgrade?autostart=1&tier=basic&billing=${yearly ? "yearly" : "monthly"}`} style={{ display:"block", padding:13, borderRadius:11, background:"transparent", border:"1px solid #2E3844", color:"#E7EDF5", fontSize:14, fontWeight:600, textAlign:"center" as const, textDecoration:"none" }}>Basic wählen</Link>
             </div>
           </div>
           {/* Pro */}
@@ -637,7 +621,7 @@ export default function LandingPage() {
             <div style={{ padding:"26px 26px 22px", borderBottom:"1px solid rgba(88,166,255,.16)" }}>
               <div style={{ fontSize:13, fontWeight:700, letterSpacing:"0.02em", color:"#58A6FF", textTransform:"uppercase" as const, marginBottom:14 }}>Pro</div>
               <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
-                <span style={{ fontSize:36, fontWeight:800, color:"#F4F8FC", letterSpacing:"-0.02em" }}>CHF {yearly?"349":"34.95"}</span>
+                <span style={{ fontSize:36, fontWeight:800, color:"#F4F8FC", letterSpacing:"-0.02em" }}>CHF {yearly?PLANS.pro.priceYearly:PLANS.pro.priceMonthly}</span>
                 <span style={{ fontSize:14, color:"#8B98A8" }}>/ {yearly?"Jahr":"Monat"}</span>
               </div>
               <p style={{ fontSize:12.5, color:"#7E8B9C", margin:"8px 0 0" }}>Das komplette Terminal für aktive Swing-Trader.</p>
@@ -651,7 +635,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div style={{ padding:"0 26px 26px" }}>
-              <Link href="/upgrade?autostart=1" style={{ display:"block", padding:13, borderRadius:11, background:"#58A6FF", color:"#08111E", fontSize:14, fontWeight:700, textAlign:"center" as const, textDecoration:"none" }}>Pro freischalten</Link>
+              <Link href={`/upgrade?autostart=1&tier=pro&billing=${yearly ? "yearly" : "monthly"}`} style={{ display:"block", padding:13, borderRadius:11, background:"#58A6FF", color:"#08111E", fontSize:14, fontWeight:700, textAlign:"center" as const, textDecoration:"none" }}>Pro freischalten</Link>
               <p style={{ textAlign:"center" as const, fontFamily:mono, fontSize:10, color:"#566273", margin:"12px 0 0" }}>
                 <i className="ph-bold ph-lock-simple" /> Sichere Zahlung via Stripe · SSL
               </p>
@@ -721,8 +705,8 @@ export default function LandingPage() {
         <div style={{ maxWidth:1180, margin:"0 auto", padding:"90px 28px", textAlign:"center", position:"relative" }}>
           <h2 style={{ fontSize:40, fontWeight:800, letterSpacing:"-0.03em", color:"#F4F8FC", margin:"0 0 16px" }}>Bereit, fundierter zu handeln?</h2>
           <p style={{ fontSize:17, color:"#9BA8B8", maxWidth:500, margin:"0 auto 30px", lineHeight:1.6 }}>Alle fundamentalen FX-Daten in einem Terminal. Täglich aktualisiert. Jederzeit kündbar.</p>
-          <Link href="/upgrade?autostart=1" className="lp-pulse-btn" style={{ padding:"15px 30px", borderRadius:12, background:"#58A6FF", color:"#08111E", fontSize:15, fontWeight:700, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:10 }}>
-            Jetzt starten — ab CHF 34.95 <i className="ph-bold ph-arrow-right" />
+          <Link href="/upgrade?autostart=1&tier=basic&billing=monthly" className="lp-pulse-btn" style={{ padding:"15px 30px", borderRadius:12, background:"#58A6FF", color:"#08111E", fontSize:15, fontWeight:700, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:10 }}>
+            Jetzt starten — ab CHF 24.95 <i className="ph-bold ph-arrow-right" />
           </Link>
         </div>
       </section>

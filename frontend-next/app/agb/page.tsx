@@ -33,7 +33,7 @@ export default function AgbPage() {
         <section className="mb-10">
           <h2 className="text-lg font-semibold mb-3">4. Abonnement und Zahlung</h2>
           <p className="text-sm text-muted leading-relaxed">
-            Das Abonnement wird wöchentlich zum Preis von CHF 34.95 abgerechnet. Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Das Abonnement verlängert sich automatisch um jeweils eine Woche, sofern es nicht vor Ablauf der laufenden Periode gekündigt wird. Eine Mindestlaufzeit besteht nicht.
+            FX Terminal bietet zwei Abonnement-Stufen an: <strong className="text-text">Basic</strong> (CHF 24.95 pro Monat bzw. CHF 249 pro Jahr) und <strong className="text-text">Pro</strong> (CHF 34.95 pro Monat bzw. CHF 349 pro Jahr, inkl. Trading Journal, Backtest-Lab und Strategie-Builder). Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Das Abonnement verlängert sich automatisch um die gewählte Laufzeit (ein Monat bzw. ein Jahr), sofern es nicht vor Ablauf der laufenden Periode gekündigt wird. Eine Mindestlaufzeit besteht nicht.
           </p>
         </section>
 
@@ -46,8 +46,11 @@ export default function AgbPage() {
 
         <section className="mb-10">
           <h2 className="text-lg font-semibold mb-3">6. Widerrufsrecht</h2>
+          <p className="text-sm text-muted leading-relaxed mb-3">
+            <strong className="text-text">Nutzer mit Wohnsitz in der Schweiz:</strong> Für digitale Dienstleistungen, die auf ausdrücklichen Wunsch des Nutzers vor Ablauf der Widerrufsfrist vollständig erbracht wurden, besteht kein Widerrufsrecht gemäss schweizerischem Recht. Der Nutzer stimmt der sofortigen Bereitstellung des Zugangs mit Abschluss des Abonnements ausdrücklich zu.
+          </p>
           <p className="text-sm text-muted leading-relaxed">
-            Für digitale Dienstleistungen, die auf ausdrücklichen Wunsch des Nutzers vor Ablauf der Widerrufsfrist vollständig erbracht wurden, besteht kein Widerrufsrecht gemäss schweizerischem Recht. Der Nutzer stimmt der sofortigen Bereitstellung des Zugangs mit Abschluss des Abonnements ausdrücklich zu.
+            <strong className="text-text">Nutzer mit Wohnsitz in der EU (z.B. Deutschland, Österreich):</strong> Verbrauchern steht grundsätzlich ein 14-tägiges Widerrufsrecht ab Vertragsschluss zu. Da FX Terminal ein digitaler Dienst ist, der sofort nach Zahlung bereitgestellt wird, erlischt dieses Widerrufsrecht vorzeitig, sobald der Nutzer beim Checkout ausdrücklich zustimmt, dass (a) die Ausführung vor Ablauf der Widerrufsfrist beginnt und (b) er hierdurch sein Widerrufsrecht verliert. Ohne diese ausdrückliche Zustimmung besteht das 14-tägige Widerrufsrecht unverändert.
           </p>
         </section>
 

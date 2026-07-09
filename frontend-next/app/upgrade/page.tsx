@@ -4,18 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/client";
-
-const FEATURES = [
-  "28 FX-Paare — COT, Währungsstärke, Screener",
-  "Makro-Fundamentals (FRED, CFTC, OANDA)",
-  "Zentralbank-Stance & Zinsdifferenzen",
-  "Retail-Sentiment (Myfxbook)",
-  "Saisonalität & Intermarket-Korrelationen",
-  "COT-Backtest & Conditional-Outcome",
-  "Trading Journal mit Equity-Kurve",
-  "Weekly Outlook & Kalender-Events",
-  "Täglich automatisch aktualisiert",
-];
+import { PLANS, type Tier, type Billing } from "@/lib/constants/plans";
 
 // useSearchParams() muss in einer eigenen Komponente sein, die in Suspense gewrappt wird
 function UpgradeContent() {
@@ -24,19 +13,31 @@ function UpgradeContent() {
   const success = params.get("success") === "1";
   const canceled = params.get("canceled") === "1";
 
+  const tierParam = params.get("tier");
+  const [tier, setTier] = useState<Tier>(tierParam === "basic" ? "basic" : "pro");
+  const billingParam = params.get("billing");
+  const [billing, setBilling] = useState<Billing>(billingParam === "yearly" ? "yearly" : "monthly");
+  const plan = PLANS[tier];
+
   const autostart = params.get("autostart") === "1";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activating, setActivating] = useState(false);
+  const [withdrawalConsent, setWithdrawalConsent] = useState(false);
 
-  // Auto-Checkout wenn von Landing Page weitergeleitet (nach Login)
-  // Aber zuerst prüfen ob bereits aktives Abo → dann direkt zum Dashboard
+  // Wenn von Landing Page/Login weitergeleitet: nur prüfen, ob bereits aktives Abo
+  // besteht (→ direkt zum Dashboard) oder ob noch kein Login vorliegt (→ zu /login).
+  // KEIN automatischer Checkout mehr — die Widerrufsrecht-Zustimmung unten muss der
+  // Nutzer immer selbst aktiv anhaken, das darf nicht automatisiert werden.
   useEffect(() => {
     if (!autostart || success || canceled) return;
     const check = async () => {
       const supabase = createBrowserSupabase();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { handleSubscribe(); return; }
+      if (!user) {
+        router.push("/login?next=" + encodeURIComponent(`/upgrade?tier=${tier}&billing=${billing}`));
+        return;
+      }
       const { data: sub } = await supabase
         .from("subscriptions")
         .select("status")
@@ -45,9 +46,8 @@ function UpgradeContent() {
       const isActive = sub?.status === "active" || sub?.status === "trialing";
       if (isActive) {
         router.push("/dashboard");
-      } else {
-        handleSubscribe();
       }
+      // sonst: normal auf der Seite bleiben, Nutzer muss Zustimmung + Klick selbst geben
     };
     check();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,6 +87,10 @@ function UpgradeContent() {
   }, [success, router]);
 
   const handleSubscribe = async () => {
+    if (!withdrawalConsent) {
+      setError("Bitte bestätige zuerst den Hinweis zum Widerrufsrecht unten.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -94,11 +98,15 @@ function UpgradeContent() {
       const supabase = createBrowserSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/login?next=" + encodeURIComponent("/upgrade?autostart=1"));
+        router.push("/login?next=" + encodeURIComponent(`/upgrade?tier=${tier}&billing=${billing}`));
         return;
       }
 
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, billing, widerrufConsent: withdrawalConsent }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Unbekannter Fehler");
       window.location.href = data.url;
@@ -153,20 +161,56 @@ function UpgradeContent() {
           </p>
         </div>
 
+        <div className="flex justify-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setTier("basic")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${tier === "basic" ? "bg-accent text-white border-accent" : "border-border text-muted"}`}
+          >
+            Basic
+          </button>
+          <button
+            type="button"
+            onClick={() => setTier("pro")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${tier === "pro" ? "bg-accent text-white border-accent" : "border-border text-muted"}`}
+          >
+            Pro
+          </button>
+        </div>
+        <div className="flex justify-center gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setBilling("monthly")}
+            className={`px-3 py-1 rounded-md text-xs font-medium ${billing === "monthly" ? "bg-surface2 text-text" : "text-muted"}`}
+          >
+            Monatlich
+          </button>
+          <button
+            type="button"
+            onClick={() => setBilling("yearly")}
+            className={`px-3 py-1 rounded-md text-xs font-medium ${billing === "yearly" ? "bg-surface2 text-text" : "text-muted"}`}
+          >
+            Jährlich (−17%)
+          </button>
+        </div>
+
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           <div className="p-6 border-b border-border">
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold">CHF 34.95</span>
-              <span className="text-muted text-sm">/ Monat</span>
+              <span className="text-3xl font-bold">
+                CHF {billing === "yearly" ? plan.priceYearly : plan.priceMonthly}
+              </span>
+              <span className="text-muted text-sm">/ {billing === "yearly" ? "Jahr" : "Monat"}</span>
             </div>
+            <p className="text-xs text-muted mt-1">{plan.tagline}</p>
             <p className="text-xs text-muted mt-1">
-              Monatlich kündbar · keine Mindestlaufzeit
+              Jederzeit kündbar · keine Mindestlaufzeit
             </p>
           </div>
 
           <div className="p-6 border-b border-border">
             <ul className="space-y-2.5">
-              {FEATURES.map((f) => (
+              {plan.features.map((f) => (
                 <li key={f} className="flex items-start gap-2.5 text-sm">
                   <span className="text-up mt-0.5 flex-none">✓</span>
                   <span>{f}</span>
@@ -181,13 +225,33 @@ function UpgradeContent() {
                 Zahlung abgebrochen — du kannst es jederzeit erneut versuchen.
               </p>
             )}
+
+            <label className="flex items-start gap-2.5 text-xs text-muted leading-relaxed cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={withdrawalConsent}
+                onChange={(e) => {
+                  setWithdrawalConsent(e.target.checked);
+                  if (e.target.checked) setError("");
+                }}
+                className="mt-0.5 w-3.5 h-3.5 flex-none accent-[var(--accent)]"
+              />
+              <span>
+                Mir ist bewusst, dass der Zugang sofort nach der Zahlung bereitgestellt wird.
+                Für EU-Kunden gilt: mit dieser Bestätigung stimme ich der sofortigen Ausführung
+                vor Ablauf der 14-tägigen Widerrufsfrist ausdrücklich zu und verliere dadurch
+                mein Widerrufsrecht (siehe{" "}
+                <Link href="/agb" target="_blank" className="underline hover:text-text">AGB, Abschnitt 6</Link>).
+              </span>
+            </label>
+
             {error && (
               <p className="text-xs text-down text-center">{error}</p>
             )}
             <button
               onClick={handleSubscribe}
-              disabled={loading}
-              className="w-full py-3 rounded-lg bg-accent text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+              disabled={loading || !withdrawalConsent}
+              className="w-full py-3 rounded-lg bg-accent text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Weiterleitung zu Stripe…" : "Jetzt abonnieren"}
             </button>
