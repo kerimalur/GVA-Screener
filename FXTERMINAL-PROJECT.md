@@ -119,6 +119,46 @@ sonst 400-Fehler. Schreibt bei Erfolg `withdrawal_consent` + `withdrawal_consent
 (Zeitstempel) in die Stripe-Session- und Subscription-Metadata — dient als Nachweis, falls
 ein EU-Kunde die sofortige Bereitstellung später anficht.
 
+## 2026-07-09 — Stripe: 4 Preise live angelegt
+
+Zwei Stripe-Konten im Spiel: „TerminalFX Sandbox" (Test, `acct_1TqcpPRFKs8thVm4`) und
+„TerminalFX" (**Live**, `acct_1TqcpARQiPsunEeX`). Beide haben jetzt Produkte „FX Terminal
+Basic" + „FX Terminal Pro" mit je 2 Preisen (Monat/Jahr).
+
+**Live-Price-IDs (`acct_1TqcpARQiPsunEeX`) — in Vercel als Env-Vars setzen:**
+- `STRIPE_PRICE_BASIC_MONTHLY=price_1TrPUkRQiPsunEeXEycxOgMy` (CHF 24.95/Monat)
+- `STRIPE_PRICE_BASIC_YEARLY=price_1TrPUlRQiPsunEeXPdPFqScM` (CHF 249/Jahr)
+- `STRIPE_PRICE_PRO_MONTHLY=price_1TrPUmRQiPsunEeXjdxTeWJs` (CHF 34.95/Monat)
+- `STRIPE_PRICE_PRO_YEARLY=price_1TrPUoRQiPsunEeXhYxERh2D` (CHF 349/Jahr)
+
+Test-Price-IDs (`acct_1TqcpPRFKs8thVm4`, nur zum lokalen Durchtesten mit `sk_test_...`):
+- Basic Monatlich: `price_1TrPMzRFKs8thVm4iXXtQOqX`
+- Basic Jährlich: `price_1TrPN1RFKs8thVm4twmj57QS`
+- Pro Monatlich: `price_1TrPN2RFKs8thVm42QB2N6N4`
+- Pro Jährlich: `price_1TrPN3RFKs8thVm42T7FWSXu`
+
+Altes Einzelprodukt „FX Terminal" (`prod_UqLP91qubdk2OL`, Live) existiert noch im Live-Konto —
+wird vom Code nicht mehr referenziert, kann optional archiviert werden.
+
+## 2026-07-09 — TODO für morgen: ADMIN_USER_IDS bereinigen (Bug-Verdacht)
+
+Kerim meldet: mit dem Test-Account `rondososa20418@gmail.com`
+(user_id `17160ea7-83c9-4609-8776-36f90a22150e`, Status in DB: **inactive**, kein aktives
+Abo) kommt man trotzdem direkt ins Terminal UND sieht sogar den Scanner (eigentlich
+admin-only). Code (`proxy.ts`) und DB-Status wurden geprüft und sehen korrekt aus —
+einzige plausible Erklärung: diese User-ID steht bereits in der Vercel-Env-Var
+`ADMIN_USER_IDS` (vermutlich Altlast aus früheren Tests des Admin-Rollensystems).
+
+**Zu prüfen/fixen:**
+1. Vercel → Projekt `gva-screener` → Settings → Environment Variables → `ADMIN_USER_IDS` öffnen.
+2. Prüfen, ob `17160ea7-83c9-4609-8776-36f90a22150e` (und ggf. weitere Test-IDs) dort drinstehen.
+3. Nur die eigene(n) echte(n) Admin-ID(s) behalten, Rest entfernen.
+4. Redeploy anstoßen, danach mit dem Test-Account erneut verifizieren, dass Scanner +
+   Journal jetzt korrekt gesperrt sind (sollte auf `/upgrade` bzw. `/dashboard` umleiten).
+5. Danach sicherheitshalber auch bei den anderen Test-Accounts (`pam.alur@gmail.com`,
+   `elinebiene@icloud.com`, `kerimtrades.ssg@gmail.com`) gegenprüfen, ob sie versehentlich
+   ebenfalls in `ADMIN_USER_IDS` stehen.
+
 ## Manuelle Schritte — noch offen (kann Claude nicht selbst ausführen)
 
 1. ~~Supabase reaktivieren~~ — erledigt, siehe oben. Stattdessen: alte Projekt-Referenz

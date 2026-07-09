@@ -17,23 +17,27 @@ import { calculateTradeStatistics, calculateDrawdown, calculateStreaks } from "@
 type TimeFilter = "all" | "month" | "quarter" | "year";
 
 function StreakDots({ trades, maxDots = 25 }: { trades: Trade[]; maxDots?: number }) {
-  const results = [...trades]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-maxDots)
-    .map((t) => t.result);
+  const results = [...trades].sort((a, b) => a.date.localeCompare(b.date)).slice(-maxDots).map((t) => t.result);
   return (
-    <div className="flex items-center gap-1" title={`Letzte ${results.length} Trades`}>
+    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
       {results.map((r, i) => (
-        <span
-          key={i}
-          className={`w-2 h-2 rounded-full ${
-            r === "win" ? "bg-up" : r === "loss" ? "bg-down" : "bg-neutral"
-          }`}
-        />
+        <span key={i} style={{
+          width: "7px", height: "7px", borderRadius: "50%",
+          background: r === "win" ? "var(--color-up)" : r === "loss" ? "var(--color-down)" : "var(--color-faint)",
+        }} />
       ))}
     </div>
   );
 }
+
+const KPI_ITEMS = (stats: ReturnType<typeof calculateTradeStatistics>, dd: ReturnType<typeof calculateDrawdown>) => [
+  { label: "Total R", value: `${stats.totalR >= 0 ? "+" : ""}${stats.totalR.toFixed(2)}`, color: stats.totalR >= 0 ? "var(--color-up)" : "var(--color-down)" },
+  { label: "Win Rate", value: `${stats.winRate.toFixed(1)}%`, color: "" },
+  { label: "Profit Factor", value: stats.profitFactor === Infinity ? "\u221e" : stats.profitFactor.toFixed(2), color: "" },
+  { label: "Max Drawdown", value: `\u2212${dd.maxDrawdown.toFixed(2)} R`, color: "var(--color-down)" },
+  { label: "Expectancy", value: `${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`, color: stats.expectancy >= 0 ? "var(--color-up)" : "var(--color-down)" },
+  { label: "Sharpe Ratio", value: stats.sharpeRatio.toFixed(2), color: stats.sharpeRatio >= 1 ? "var(--color-up)" : "" },
+];
 
 export default function EquityView() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -44,200 +48,108 @@ export default function EquityView() {
   const [showDrawdown, setShowDrawdown] = useState(true);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount
     setLoading(true);
     Promise.all([loadTrades(), loadAccountConfigs()])
-      .then(([t, c]) => {
-        setTrades(t);
-        setConfigs(c);
-      })
+      .then(([t, c]) => { setTrades(t); setConfigs(c); })
       .catch(() => toast.error("Fehler beim Laden"))
       .finally(() => setLoading(false));
   }, []);
 
-  const filteredTrades = useMemo(
-    () =>
-      trades.filter((trade) => {
-        if (trade.type !== accountFilter) return false;
-        if (trade.sessionType !== "live") return false;
-        if (timeFilter !== "all") {
-          const tradeDate = new Date(trade.date);
-          const cutoff = new Date();
-          if (timeFilter === "month") cutoff.setMonth(cutoff.getMonth() - 1);
-          if (timeFilter === "quarter") cutoff.setMonth(cutoff.getMonth() - 3);
-          if (timeFilter === "year") cutoff.setFullYear(cutoff.getFullYear() - 1);
-          if (tradeDate < cutoff) return false;
-        }
-        return true;
-      }),
-    [trades, accountFilter, timeFilter],
-  );
+  const filteredTrades = useMemo(() => trades.filter((trade) => {
+    if (trade.type !== accountFilter || trade.sessionType !== "live") return false;
+    if (timeFilter !== "all") {
+      const cutoff = new Date();
+      if (timeFilter === "month") cutoff.setMonth(cutoff.getMonth() - 1);
+      if (timeFilter === "quarter") cutoff.setMonth(cutoff.getMonth() - 3);
+      if (timeFilter === "year") cutoff.setFullYear(cutoff.getFullYear() - 1);
+      if (new Date(trade.date) < cutoff) return false;
+    }
+    return true;
+  }), [trades, accountFilter, timeFilter]);
 
   const stats = useMemo(() => calculateTradeStatistics(filteredTrades), [filteredTrades]);
   const dd = useMemo(() => calculateDrawdown(filteredTrades), [filteredTrades]);
   const streaks = useMemo(() => calculateStreaks(filteredTrades), [filteredTrades]);
-
   const bestTrade = filteredTrades.reduce((m, t) => Math.max(m, t.rMultiple || 0), 0);
   const worstTrade = filteredTrades.reduce((m, t) => Math.min(m, t.rMultiple || 0), 0);
-  const startBalance =
-    (accountFilter === "ek"
-      ? configs?.ek?.initialStartBalance
-      : configs?.funded?.initialStartBalance) ?? (accountFilter === "ek" ? 10000 : 100000);
-  const currency =
-    (accountFilter === "ek" ? configs?.ek?.currency : configs?.funded?.currency) ?? "USD";
+  const startBalance = (accountFilter === "ek" ? configs?.ek?.initialStartBalance : configs?.funded?.initialStartBalance) ?? (accountFilter === "ek" ? 10000 : 100000);
+  const currency = (accountFilter === "ek" ? configs?.ek?.currency : configs?.funded?.currency) ?? "USD";
 
-  if (loading) {
-    return (
-      <Panel>
-        <SkeletonRows rows={8} />
-      </Panel>
-    );
-  }
+  if (loading) return <Panel><SkeletonRows rows={8} /></Panel>;
 
   return (
-    <div className="space-y-4 anim-fade-in">
-      {/* Kopfzeile: Filter */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Segmented
-          options={[
-            { value: "funded" as const, label: "Funded" },
-            { value: "ek" as const, label: "EK" },
-          ]}
-          value={accountFilter}
-          onChange={setAccountFilter}
-        />
-        <Segmented
-          options={[
-            { value: "all" as const, label: "Alle" },
-            { value: "month" as const, label: "1M" },
-            { value: "quarter" as const, label: "3M" },
-            { value: "year" as const, label: "1J" },
-          ]}
-          value={timeFilter}
-          onChange={setTimeFilter}
-        />
-        <label className="flex items-center gap-1.5 text-[12px] text-muted cursor-pointer ml-1">
-          <input
-            type="checkbox"
-            checked={showDrawdown}
-            onChange={(e) => setShowDrawdown(e.target.checked)}
-            className="w-3.5 h-3.5 accent-[var(--color-accent)]"
-          />
-          Drawdown
-        </label>
-        <div className="ml-auto">
+    <div style={{ display: "flex", flexDirection: "column", gap: "22px" }} className="anim-fade-in">
+
+      {/* Filters */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "14px" }}>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Segmented options={[{ value: "funded" as const, label: "Funded" }, { value: "ek" as const, label: "EK" }]} value={accountFilter} onChange={setAccountFilter} />
+          <Segmented options={[{ value: "all" as const, label: "Alle" }, { value: "month" as const, label: "1M" }, { value: "quarter" as const, label: "3M" }, { value: "year" as const, label: "1J" }]} value={timeFilter} onChange={setTimeFilter} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600, color: "var(--color-muted)", cursor: "pointer" }}>
+            <span style={{
+              width: "16px", height: "16px", borderRadius: "5px",
+              background: showDrawdown ? "var(--color-accent)" : "var(--color-surface2)",
+              border: `1px solid ${showDrawdown ? "var(--color-accent)" : "var(--color-border2)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }} onClick={() => setShowDrawdown(!showDrawdown)}>
+              {showDrawdown && <span style={{ color: "#0a0b0e", fontSize: "10px", fontWeight: 700 }}>✓</span>}
+            </span>
+            Drawdown anzeigen
+          </label>
           <StreakDots trades={filteredTrades} />
         </div>
       </div>
 
-      {/* Kennzahlen-Karten */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-        {[
-          {
-            label: "Total R",
-            value: `${stats.totalR >= 0 ? "+" : ""}${stats.totalR.toFixed(2)} R`,
-            sub: `Ø ${stats.avgR >= 0 ? "+" : ""}${stats.avgR.toFixed(2)}R`,
-            tone: stats.totalR >= 0 ? "up" : "down",
-          },
-          {
-            label: "Win Rate",
-            value: `${stats.winRate.toFixed(1)}%`,
-            sub: `${stats.wins}W / ${stats.losses}L`,
-            tone: null,
-          },
-          {
-            label: "Profit Factor",
-            value: stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2),
-            sub: null,
-            tone: null,
-          },
-          {
-            label: "Max Drawdown",
-            value: `−${dd.maxDrawdown.toFixed(2)} R`,
-            sub: `aktuell −${dd.currentDrawdown.toFixed(2)} R`,
-            tone: "down",
-          },
-          {
-            label: "Expectancy",
-            value: `${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`,
-            sub: "pro Trade (R)",
-            tone: stats.expectancy >= 0 ? "up" : "down",
-          },
-          {
-            label: "Sharpe Ratio",
-            value: stats.sharpeRatio.toFixed(2),
-            sub: "per-trade",
-            tone: stats.sharpeRatio >= 1 ? "up" : stats.sharpeRatio < 0 ? "down" : null,
-          },
-        ].map(({ label, value, sub, tone }) => (
-          <div key={label} className="bg-surface2 rounded-md px-4 py-3 border border-border">
-            <p className="text-[10px] text-muted uppercase tracking-widest mb-1">{label}</p>
-            <p
-              className={`text-lg font-semibold font-mono ${
-                tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text"
-              }`}
-            >
-              {value}
-            </p>
-            {sub && <p className="text-[10px] text-faint font-mono mt-0.5">{sub}</p>}
+      {/* 6 KPI Cards — 5-column like design (6 items, last wraps or stays) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "14px" }}>
+        {KPI_ITEMS(stats, dd).map(({ label, value, color }) => (
+          <div key={label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "18px 20px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "8px" }}>{label}</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "22px", fontWeight: 600, color: color || "var(--color-text)" }}>{value}</div>
           </div>
         ))}
       </div>
 
-      {/* Haupt-Chart */}
-      <Panel
-        title="Equity-Kurve"
-        subtitle={
-          <span className="font-mono">
-            Start-Balance{" "}
-            <span className="text-text font-semibold">
-              {startBalance.toLocaleString("de-DE")} {currency}
-            </span>
-          </span>
-        }
-      >
-        {filteredTrades.length === 0 ? (
-          <EmptyState
-            icon="ph-chart-line"
-            title="Keine Trades im Zeitraum"
-            description="Passe Konto- oder Zeitfilter an oder journale deinen ersten Trade."
-          />
-        ) : (
-          <EquityChart
-            trades={filteredTrades}
-            startBalance={startBalance}
-            showDrawdown={showDrawdown}
-            height={420}
-          />
-        )}
-      </Panel>
-
-      {/* Sekundär-Charts */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Panel title="R-Multiple-Verteilung" className="md:col-span-2">
-          <RMultipleChart trades={filteredTrades} height={200} />
-        </Panel>
-        <Panel title="Ergebnis">
-          <WinRateChart trades={filteredTrades} height={180} />
-          <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-[12px]">
-            <div className="flex justify-between">
-              <span className="text-muted">Best Trade</span>
-              <span className="font-mono text-up">+{bestTrade.toFixed(1)}R</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Worst Trade</span>
-              <span className="font-mono text-down">{worstTrade.toFixed(1)}R</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Win-Serie (max)</span>
-              <span className="font-mono text-up">{streaks.maxWinStreak}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Loss-Serie (max)</span>
-              <span className="font-mono text-down">{streaks.maxLossStreak}</span>
-            </div>
+      {/* Equity Chart */}
+      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "28px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "20px" }}>
+          <div style={{ fontSize: "14.5px", fontWeight: 700 }}>Equity-Kurve</div>
+          <div style={{ fontSize: "12px", color: "var(--color-faint)", fontFamily: "var(--font-mono)" }}>
+            Start-Balance {startBalance.toLocaleString("de-DE")} {currency}
           </div>
-        </Panel>
+        </div>
+        {filteredTrades.length === 0 ? (
+          <EmptyState icon="ph-chart-line" title="Keine Trades im Zeitraum" description="Passe Filter an oder journale deinen ersten Trade." />
+        ) : (
+          <EquityChart trades={filteredTrades} startBalance={startBalance} showDrawdown={showDrawdown} height={300} />
+        )}
+      </div>
+
+      {/* Secondary Charts */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "18px" }}>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "26px" }}>
+          <div style={{ fontSize: "14.5px", fontWeight: 700, marginBottom: "22px" }}>R-Multiple-Verteilung</div>
+          <RMultipleChart trades={filteredTrades} height={180} />
+        </div>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "26px" }}>
+          <div style={{ fontSize: "14.5px", fontWeight: 700, marginBottom: "22px" }}>Ergebnis</div>
+          <WinRateChart trades={filteredTrades} height={150} />
+          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+            {[
+              { label: "Best Trade", value: `+${bestTrade.toFixed(1)}R`, color: "var(--color-up)" },
+              { label: "Worst Trade", value: `${worstTrade.toFixed(1)}R`, color: "var(--color-down)" },
+              { label: "Win-Serie (max)", value: String(streaks.maxWinStreak), color: "var(--color-up)" },
+              { label: "Loss-Serie (max)", value: String(streaks.maxLossStreak), color: "var(--color-down)" },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-muted)" }}>{label}</span>
+                <span style={{ fontFamily: "var(--font-mono)", color }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

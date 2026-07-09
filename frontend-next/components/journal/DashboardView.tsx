@@ -23,13 +23,9 @@ export default function DashboardView() {
   const [accountType, setAccountType] = useState<AccountType>("funded");
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount
     setLoading(true);
     Promise.all([loadTrades(), loadAccountConfigs()])
-      .then(([t, c]) => {
-        setTrades(t);
-        setConfigs(c);
-      })
+      .then(([t, c]) => { setTrades(t); setConfigs(c); })
       .catch(() => toast.error("Fehler beim Laden"))
       .finally(() => setLoading(false));
   }, []);
@@ -39,42 +35,34 @@ export default function DashboardView() {
     () => trades.filter((t) => t.type === accountType && t.sessionType === "live"),
     [trades, accountType],
   );
-
   const stats = useMemo(() => calculateTradeStatistics(accountTrades), [accountTrades]);
   const dd = useMemo(() => calculateDrawdown(accountTrades), [accountTrades]);
   const streaks = useMemo(() => calculateStreaks(accountTrades), [accountTrades]);
-
   const totalProfit = useMemo(
     () => accountTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0),
     [accountTrades],
   );
-
   const recentTrades = useMemo(
-    () =>
-      [...accountTrades]
-        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 8),
+    () => [...accountTrades]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 8),
     [accountTrades],
   );
-
   const goalPct =
     config?.enableGoals && config.profitTarget && config.profitTarget > 0
       ? Math.min((config.currentBalance / config.profitTarget) * 100, 100)
       : null;
-
-  if (loading) {
-    return (
-      <Panel>
-        <SkeletonRows rows={8} />
-      </Panel>
-    );
-  }
-
   const currency = config?.currency || "USD";
 
+  if (loading) {
+    return <Panel><SkeletonRows rows={8} /></Panel>;
+  }
+
   return (
-    <div className="space-y-4 anim-fade-in">
-      <div className="flex items-center gap-3">
+    <div style={{ display: "flex", flexDirection: "column", gap: "22px" }} className="anim-fade-in">
+
+      {/* Tab + Streak */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Segmented
           options={[
             { value: "funded" as const, label: "Funded", icon: "ph-buildings" },
@@ -84,10 +72,7 @@ export default function DashboardView() {
           onChange={setAccountType}
         />
         {streaks.currentStreak > 0 && streaks.streakType && (
-          <Badge
-            tone={streaks.streakType === "win" ? "up" : "down"}
-            icon={streaks.streakType === "win" ? "ph-fire" : "ph-snowflake"}
-          >
+          <Badge tone={streaks.streakType === "win" ? "up" : "down"} icon={streaks.streakType === "win" ? "ph-fire" : "ph-snowflake"}>
             {streaks.currentStreak}× {streaks.streakType === "win" ? "Win" : "Loss"} in Folge
           </Badge>
         )}
@@ -98,139 +83,96 @@ export default function DashboardView() {
           <EmptyState
             icon="ph-gauge"
             title="Kein Konto eingerichtet"
-            description="Lege im Journal zuerst ein Konto an — dann erscheinen hier deine Kennzahlen."
-            action={
-              <Link href="/journal" className="text-accent text-[13px] hover:underline">
-                Zum Journal →
-              </Link>
-            }
+            description="Lege im Journal zuerst ein Konto an."
+            action={<Link href="/journal" style={{ color: "var(--color-accent)", fontSize: "13px" }}>Zum Journal →</Link>}
           />
         </Panel>
       ) : (
         <>
-          {/* KPI-Zeile */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {/* 3 Hero-Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "18px" }}>
             <StatCard
+              size="lg"
               label="Kontostand"
-              icon="ph-bank"
-              value={`${config.currentBalance.toLocaleString("de-DE", { minimumFractionDigits: 2 })}`}
-              deltaLabel={currency}
+              value={config.currentBalance.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+              deltaLabel={`${currency} · ${accountType === "funded" ? "Funded" : "Eigenkapital"}`}
             />
             <StatCard
-              label="Gewinn/Verlust"
-              icon="ph-coins"
+              size="lg"
+              label="Gewinn / Verlust"
               value={
-                <span className={totalProfit > 0 ? "text-up" : totalProfit < 0 ? "text-down" : ""}>
-                  {totalProfit > 0 ? "+" : ""}
-                  {totalProfit.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
+                <span style={{ color: totalProfit > 0 ? "var(--color-up)" : totalProfit < 0 ? "var(--color-down)" : "" }}>
+                  {totalProfit > 0 ? "+" : ""}{totalProfit.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
                 </span>
               }
-              deltaLabel={currency}
+              deltaLabel={`${currency} seit Start`}
             />
             <StatCard
+              size="lg"
               label="Total R"
-              icon="ph-sigma"
               value={
-                <span className={stats.totalR >= 0 ? "text-up" : "text-down"}>
-                  {stats.totalR >= 0 ? "+" : ""}
-                  {stats.totalR.toFixed(2)}
+                <span style={{ color: stats.totalR >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
+                  {stats.totalR >= 0 ? "+" : ""}{stats.totalR.toFixed(2)}
                 </span>
               }
               deltaLabel={`Ø ${stats.avgR.toFixed(2)}R · ${stats.totalTrades} Trades`}
             />
-            <StatCard
-              label="Win Rate"
-              icon="ph-target"
-              value={`${stats.winRate.toFixed(1)}%`}
-              deltaLabel={`${stats.wins}W / ${stats.losses}L / ${stats.breakevens}BE`}
-            />
-            <StatCard
-              label="Profit Factor"
-              icon="ph-scales"
-              value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
-              deltaLabel={`Expectancy ${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`}
-            />
-            <StatCard
-              label="Max Drawdown"
-              icon="ph-arrow-elbow-down-right"
-              value={<span className="text-down">−{dd.maxDrawdown.toFixed(2)} R</span>}
-              deltaLabel={`aktuell −${dd.currentDrawdown.toFixed(2)} R`}
-            />
           </div>
 
-          {/* Chart + Ziel/Recent */}
-          <div className="grid lg:grid-cols-3 gap-4">
-            <Panel title="Equity" className="lg:col-span-2">
-              {accountTrades.length === 0 ? (
-                <EmptyState
-                  icon="ph-chart-line"
-                  title="Noch keine Trades"
-                  description="Sobald du Trades journalst, erscheint hier deine Equity-Kurve."
-                />
-              ) : (
-                <EquityChart
-                  trades={accountTrades}
-                  startBalance={config.initialStartBalance}
-                  showDrawdown={false}
-                  height={280}
-                />
-              )}
-            </Panel>
+          {/* Secondary KPIs */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginTop: "-4px" }}>
+            <StatCard label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} deltaLabel={`${stats.wins}W / ${stats.losses}L / ${stats.breakevens}BE`} />
+            <StatCard label="Profit Factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)} deltaLabel={`Expectancy ${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`} />
+            <StatCard label="Max Drawdown" value={<span style={{ color: "var(--color-down)" }}>−{dd.maxDrawdown.toFixed(2)} R</span>} deltaLabel={`aktuell −${dd.currentDrawdown.toFixed(2)} R`} />
+          </div>
 
-            <div className="space-y-4">
+          {/* Equity + Recent */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 288px", gap: "18px" }}>
+            <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "26px" }}>
+              <div style={{ fontSize: "14.5px", fontWeight: 700, marginBottom: "18px" }}>Equity-Verlauf</div>
+              {accountTrades.length === 0 ? (
+                <EmptyState icon="ph-chart-line" title="Noch keine Trades" description="Sobald du Trades journalst, erscheint hier deine Equity-Kurve." />
+              ) : (
+                <EquityChart trades={accountTrades} startBalance={config.initialStartBalance} showDrawdown={false} height={260} />
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               {goalPct != null && (
-                <Panel title="Kontoziel">
-                  <div className="flex items-center gap-4">
-                    <ProgressRing value={goalPct} size={72} />
-                    <div className="text-[12px] font-mono space-y-1">
-                      <div>
-                        <span className="text-muted">Aktuell </span>
-                        {config.currentBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
-                      </div>
-                      <div>
-                        <span className="text-muted">Ziel </span>
-                        {config.profitTarget!.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
-                      </div>
+                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "14px" }}>Kontoziel</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <ProgressRing value={goalPct} size={64} />
+                    <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", lineHeight: 1.7 }}>
+                      <div><span style={{ color: "var(--color-faint)" }}>Aktuell </span>{config.currentBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+                      <div><span style={{ color: "var(--color-faint)" }}>Ziel </span>{config.profitTarget!.toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
                     </div>
                   </div>
-                </Panel>
+                </div>
               )}
 
-              <Panel
-                title="Letzte Trades"
-                actions={
-                  <Link href="/journal" className="text-[11px] text-accent hover:underline">
-                    Alle →
-                  </Link>
-                }
-              >
+              <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px", flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase" }}>Letzte Trades</div>
+                  <Link href="/journal" style={{ fontSize: "11px", color: "var(--color-accent)", textDecoration: "none" }}>Alle →</Link>
+                </div>
                 {recentTrades.length === 0 ? (
-                  <p className="text-[12px] text-muted">Noch keine Trades.</p>
+                  <p style={{ fontSize: "12px", color: "var(--color-faint)" }}>Noch keine Trades.</p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     {recentTrades.map((t) => (
-                      <div
-                        key={t.id}
-                        className="flex items-center justify-between text-[12px] font-mono"
-                      >
-                        <span className="text-muted">{t.date.slice(5)}</span>
-                        <span className="font-semibold">{t.pair}</span>
-                        <span className={t.direction === "long" ? "text-up" : "text-down"}>
-                          {t.direction === "long" ? "▲" : "▼"}
-                        </span>
-                        <span
-                          className={`font-semibold ${
-                            t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
-                          }`}
-                        >
-                          {t.rMultiple > 0 ? "+" : ""}
-                          {t.rMultiple.toFixed(1)}R
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
+                        <span style={{ color: "var(--color-faint)" }}>{t.date.slice(5)}</span>
+                        <span style={{ fontWeight: 600 }}>{t.pair}</span>
+                        <span style={{ color: t.direction === "long" ? "var(--color-up)" : "var(--color-down)" }}>{t.direction === "long" ? "▲" : "▼"}</span>
+                        <span style={{ fontWeight: 600, color: t.rMultiple > 0 ? "var(--color-up)" : t.rMultiple < 0 ? "var(--color-down)" : "var(--color-faint)" }}>
+                          {t.rMultiple > 0 ? "+" : ""}{t.rMultiple.toFixed(1)}R
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
-              </Panel>
+              </div>
             </div>
           </div>
         </>

@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Panel from "@/components/layout/Panel";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Segmented from "@/components/ui/Segmented";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
-import { Select, Label } from "@/components/ui/Field";
+import { Select } from "@/components/ui/Field";
 import { toast } from "@/components/ui/Toaster";
 import TradeFormModal, { type TradePrefill } from "./TradeFormModal";
 import TradeDetailModal from "./TradeDetailModal";
@@ -28,7 +27,6 @@ import { updateOutlook } from "@/lib/journal/outlooks";
 const ACCOUNT_TYPE_KEY = "journal_account_type";
 
 interface JournalViewProps {
-  /** Vorbefüllung (zusätzlich wird sessionStorage `tradePrefill` gelesen) */
   prefill?: TradePrefill | null;
 }
 
@@ -46,30 +44,25 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
   const [viewingTrade, setViewingTrade] = useState<Trade | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [showManage, setShowManage] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [filters, setFilters] = useState<TradeFilters>({});
+  const [filterResult, setFilterResult] = useState<string>("all");
+  const [filterPair, setFilterPair] = useState<string>("all");
 
-  // Konto-Typ aus letzter Sitzung wiederherstellen (einmalig nach Mount)
   useEffect(() => {
     const saved = localStorage.getItem(ACCOUNT_TYPE_KEY);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- externe Quelle (localStorage), einmalig
     if (saved === "ek" || saved === "funded") setAccountType(saved);
   }, []);
 
-  // Prefill aus Outlook/Signals-Inbox (sessionStorage, wie im alten Journal)
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("tradePrefill");
       if (raw) {
         sessionStorage.removeItem("tradePrefill");
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- externe Quelle (sessionStorage), einmalig
         setPrefill(JSON.parse(raw));
         setShowForm(true);
       }
-    } catch {
-      // ungültiges Prefill ignorieren
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const config = configs?.[accountType] ?? null;
@@ -93,17 +86,13 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
     }
   }, [accountType]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount/Typwechsel
-    reload();
-  }, [reload]);
+  useEffect(() => { reload(); }, [reload]);
 
   const switchType = (t: AccountType) => {
     setAccountType(t);
     localStorage.setItem(ACCOUNT_TYPE_KEY, t);
   };
 
-  // Balance-Historie chronologisch neu durchrechnen (Verhalten wie altes Journal, #11)
   const recomputeAccount = useCallback(async () => {
     const cfgs = await loadAccountConfigs();
     const cfg = cfgs[accountType];
@@ -111,24 +100,15 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
     const all = await tradeService.loadTrades(accountType);
     const txs = (await loadTransactions()).filter((t) => t.type === accountType);
     const netTx = txs.reduce(
-      (s, t) => s + (t.transactionType === "deposit" ? t.amount : -t.amount),
-      0,
+      (s, t) => s + (t.transactionType === "deposit" ? t.amount : -t.amount), 0,
     );
     const baseline = (cfg.initialStartBalance || 0) + netTx;
     const { trades: recomputed, finalBalance } = recomputeBalances(all, baseline);
     for (const t of recomputed) {
       const orig = all.find((o) => o.id === t.id);
       if (!orig) continue;
-      if (
-        orig.accountBalanceBefore !== t.accountBalanceBefore ||
-        orig.accountBalanceAfter !== t.accountBalanceAfter ||
-        orig.runningBalance !== t.runningBalance
-      ) {
-        try {
-          await tradeService.saveTrade(t);
-        } catch (e) {
-          console.error("Balance-Update fehlgeschlagen:", e);
-        }
+      if (orig.accountBalanceBefore !== t.accountBalanceBefore || orig.accountBalanceAfter !== t.accountBalanceAfter || orig.runningBalance !== t.runningBalance) {
+        try { await tradeService.saveTrade(t); } catch (e) { console.error("Balance-Update:", e); }
       }
     }
     if (Math.round((cfg.currentBalance || 0) * 100) !== Math.round(finalBalance * 100)) {
@@ -136,25 +116,13 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
     }
   }, [accountType]);
 
-  const handleSaveTrade = async (
-    tradeData: Omit<Trade, "id"> & { id?: string },
-    screenshot: string | null,
-  ) => {
+  const handleSaveTrade = async (tradeData: Omit<Trade, "id"> & { id?: string }, screenshot: string | null) => {
     try {
       const saved = await tradeService.saveTrade({ ...tradeData, type: accountType });
       if (screenshot && saved.id) await saveScreenshot(saved.id, screenshot);
       else if (!screenshot && tradeData.id) await deleteScreenshot(tradeData.id);
-      // Aus Outlook journaliert → Outlook als ausgeführt markieren
       if (prefill?.outlookId && !tradeData.id) {
-        try {
-          await updateOutlook(prefill.outlookId, {
-            status: "executed",
-            executedTradeId: saved.id,
-            journaledTo: [accountType],
-          });
-        } catch {
-          // Outlook-Verknüpfung ist Komfort, kein Blocker
-        }
+        try { await updateOutlook(prefill.outlookId, { status: "executed", executedTradeId: saved.id, journaledTo: [accountType] }); } catch { /* ignore */ }
         setPrefill(null);
       }
       await recomputeAccount();
@@ -177,91 +145,69 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       toast.success("Trade gelöscht");
       setViewingTrade(null);
       await reload();
-    } catch {
-      toast.error("Fehler beim Löschen");
-    }
+    } catch { toast.error("Fehler beim Löschen"); }
   };
 
   const filteredTrades = useMemo(
-    () =>
-      trades.filter((trade) => {
-        if (filters.result && filters.result !== "all" && trade.result !== filters.result)
-          return false;
-        if (filters.pair && filters.pair !== "all" && trade.pair !== filters.pair) return false;
-        for (const key of Object.keys(SETUP_DEFINITIONS)) {
-          if (filters[key as keyof TradeFilters] && !trade[key as keyof Trade]) return false;
-        }
-        return true;
-      }),
-    [trades, filters],
+    () => trades.filter((trade) => {
+      if (filterResult !== "all" && trade.result !== filterResult) return false;
+      if (filterPair !== "all" && trade.pair !== filterPair) return false;
+      for (const key of Object.keys(SETUP_DEFINITIONS)) {
+        if (filters[key as keyof TradeFilters] && !trade[key as keyof Trade]) return false;
+      }
+      return true;
+    }),
+    [trades, filters, filterResult, filterPair],
   );
 
-  const goalPct =
-    config?.enableGoals && config.profitTarget && config.profitTarget > 0
-      ? Math.min((config.currentBalance / config.profitTarget) * 100, 100)
-      : null;
+  const stats = useMemo(() => {
+    const wins = filteredTrades.filter(t => t.result === "win").length;
+    const losses = filteredTrades.filter(t => t.result === "loss").length;
+    const totalR = filteredTrades.reduce((s, t) => s + t.rMultiple, 0);
+    const totalEur = filteredTrades.reduce((s, t) => s + (t.profitAmount ?? 0), 0);
+    const winRate = filteredTrades.length > 0 ? (wins / filteredTrades.length) * 100 : 0;
+    return { total: filteredTrades.length, wins, losses, totalR, totalEur, winRate };
+  }, [filteredTrades]);
 
-  // ============================================================
-  // Kein Konto → Setup
-  // ============================================================
+  const goalPct = config?.enableGoals && config.profitTarget && config.profitTarget > 0
+    ? Math.min((config.currentBalance / config.profitTarget) * 100, 100) : null;
+
   const noAccount = !loading && configs && config === null;
 
+  const kpiCards = [
+    { label: "Trades", value: stats.total.toString(), mono: false, color: "var(--color-text)" },
+    { label: "Win Rate", value: `${stats.winRate.toFixed(0)}%`, mono: true, color: stats.winRate >= 50 ? "var(--color-up)" : "var(--color-down)" },
+    { label: "Total R", value: `${stats.totalR >= 0 ? "+" : ""}${stats.totalR.toFixed(1)}`, mono: true, color: stats.totalR >= 0 ? "var(--color-up)" : "var(--color-down)" },
+    { label: "P&L", value: `${stats.totalEur >= 0 ? "+" : ""}${stats.totalEur.toLocaleString("de-DE", { maximumFractionDigits: 0 })}`, mono: true, color: stats.totalEur >= 0 ? "var(--color-up)" : "var(--color-down)" },
+  ];
+
   return (
-    <div className="space-y-4 anim-fade-in">
-      {/* Kopfzeile */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmented
-          options={[
-            { value: "funded" as const, label: "Funded", icon: "ph-buildings" },
-            { value: "ek" as const, label: "Eigenkapital", icon: "ph-wallet" },
-          ]}
-          value={accountType}
-          onChange={switchType}
-        />
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }} className="anim-fade-in">
 
-        {config && (
-          <div className="flex items-center gap-4 pl-3 border-l border-border">
-            <div className="text-[13px]">
-              <span className="text-muted">Balance </span>
-              <span className="font-mono font-semibold text-accent">
-                {config.currentBalance.toLocaleString("de-DE", { minimumFractionDigits: 2 })}{" "}
-                {config.currency}
-              </span>
-            </div>
-            {goalPct != null && (
-              <div className="flex flex-col gap-0.5 w-36">
-                <div className="flex justify-between text-[10px] text-muted font-mono">
-                  <span>Ziel</span>
-                  <span>{Math.round(goalPct)}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-surface2 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-up transition-all duration-500"
-                    style={{ width: `${goalPct}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            {accountsOfType.length > 1 && (
-              <Select
-                className="!w-auto text-[12px]"
-                value={config.id || ""}
-                onChange={async (e) => {
-                  await setDefaultAccount(e.target.value, accountType);
-                  await reload();
-                }}
-              >
-                {accountsOfType.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name || a.broker || "Account"}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 ml-auto">
+      {/* Top controls */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <Segmented
+            options={[
+              { value: "funded" as const, label: "Funded" },
+              { value: "ek" as const, label: "Eigenkapital" },
+            ]}
+            value={accountType}
+            onChange={switchType}
+          />
+          {accountsOfType.length > 1 && config && (
+            <Select
+              style={{ width: "auto", fontSize: "12px" }}
+              value={config.id || ""}
+              onChange={async (e) => { await setDefaultAccount(e.target.value, accountType); await reload(); }}
+            >
+              {accountsOfType.map((a) => (
+                <option key={a.id} value={a.id}>{a.name || a.broker || "Account"}</option>
+              ))}
+            </Select>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Segmented
             options={[
               { value: "table" as const, label: "", icon: "ph-list" },
@@ -270,316 +216,203 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
             value={viewMode}
             onChange={setViewMode}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon="ph-funnel"
-            onClick={() => setShowFilters((v) => !v)}
-          >
-            Filter
-          </Button>
-          <Button variant="ghost" size="sm" icon="ph-gear" onClick={() => setShowManage(true)}>
-            Konten
-          </Button>
-          <Button size="sm" icon="ph-plus" onClick={() => setShowForm(true)} disabled={!config}>
-            Neuer Trade
-          </Button>
+          <Button variant="ghost" size="sm" icon="ph-gear" onClick={() => setShowManage(true)}>Konten</Button>
+          <Button size="sm" icon="ph-plus" onClick={() => setShowForm(true)} disabled={!config}>Neuer Trade</Button>
         </div>
       </div>
 
-      {/* Filter */}
-      {showFilters && (
-        <Panel className="anim-slide-up">
-          <div className="grid md:grid-cols-4 gap-4">
-            <div>
-              <Label>Ergebnis</Label>
-              <Select
-                value={filters.result || "all"}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, result: e.target.value as TradeFilters["result"] }))
-                }
-              >
-                <option value="all">Alle</option>
-                <option value="win">Wins</option>
-                <option value="loss">Losses</option>
-                <option value="breakeven">Breakeven</option>
-              </Select>
-            </div>
-            <div>
-              <Label>Währungspaar</Label>
-              <Select
-                value={filters.pair || "all"}
-                onChange={(e) => setFilters((f) => ({ ...f, pair: e.target.value }))}
-              >
-                <option value="all">Alle Paare</option>
-                {PAIR_LIST.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="md:col-span-2">
-              <Label>Setups</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(SETUP_DEFINITIONS).map(([key, setup]) => {
-                  const active = !!filters[key as keyof TradeFilters];
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setFilters((f) => ({ ...f, [key]: !active }))}
-                      className="px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors"
-                      style={
-                        active
-                          ? {
-                              backgroundColor: `${setup.color}20`,
-                              borderColor: setup.color,
-                              color: setup.color,
-                            }
-                          : { borderColor: "var(--color-border2)", color: "var(--color-muted)" }
-                      }
-                      title={setup.description}
-                    >
-                      {setup.short}
-                    </button>
-                  );
-                })}
-                <Button variant="subtle" size="sm" onClick={() => setFilters({})}>
-                  Zurücksetzen
-                </Button>
-              </div>
+      {/* Balance + Goal */}
+      {config && (
+        <div style={{ display: "flex", alignItems: "center", gap: "20px", padding: "16px 20px", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "14px" }}>
+          <div>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-faint)", letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: "3px" }}>Balance</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "22px", fontWeight: 700, color: "var(--color-accent)", letterSpacing: "-0.5px" }}>
+              {config.currentBalance.toLocaleString("de-DE", { minimumFractionDigits: 2 })} {config.currency}
             </div>
           </div>
-        </Panel>
-      )}
-
-      {/* Inhalt */}
-      {loading ? (
-        <Panel>
-          <SkeletonRows rows={6} />
-        </Panel>
-      ) : noAccount ? (
-        <Panel>
-          <EmptyState
-            icon="ph-bank"
-            title={`Kein ${accountType === "ek" ? "Eigenkapital-Konto" : "Funded Account"} vorhanden`}
-            description="Richte zuerst dein Konto ein, um Trades zu journalen."
-            action={
-              <Button icon="ph-plus-circle" onClick={() => setShowSetup(true)}>
-                Konto einrichten
-              </Button>
-            }
-          />
-        </Panel>
-      ) : filteredTrades.length === 0 ? (
-        <Panel>
-          <EmptyState
-            icon="ph-notebook"
-            title="Keine Trades gefunden"
-            description={
-              trades.length === 0
-                ? `Starte mit deinem ersten ${accountType === "ek" ? "EK" : "Funded"}-Trade.`
-                : "Keine Trades entsprechen den Filterkriterien."
-            }
-            action={
-              trades.length === 0 ? (
-                <Button icon="ph-plus" onClick={() => setShowForm(true)}>
-                  Neuer Trade
-                </Button>
-              ) : (
-                <Button variant="ghost" onClick={() => setFilters({})}>
-                  Filter zurücksetzen
-                </Button>
-              )
-            }
-          />
-        </Panel>
-      ) : viewMode === "table" ? (
-        <Panel
-          title={`${filteredTrades.length} ${filteredTrades.length === 1 ? "Trade" : "Trades"}`}
-          className="overflow-hidden"
-        >
-          <div className="overflow-x-auto -m-4">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="text-left text-[10px] uppercase tracking-widest text-faint border-b border-border">
-                  <th className="px-4 py-2 font-semibold">Datum</th>
-                  <th className="px-4 py-2 font-semibold">Paar</th>
-                  <th className="px-4 py-2 font-semibold">Richtung</th>
-                  <th className="px-4 py-2 font-semibold">Ergebnis</th>
-                  <th className="px-4 py-2 font-semibold text-right">R</th>
-                  <th className="px-4 py-2 font-semibold text-right">P&L</th>
-                  <th className="px-4 py-2 font-semibold text-right">Balance</th>
-                  <th className="px-4 py-2 font-semibold">Setups</th>
-                  <th className="px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTrades.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-b border-border/60 hover:bg-surface2/50 cursor-pointer transition-colors"
-                    onClick={() => setViewingTrade(t)}
-                  >
-                    <td className="px-4 py-2.5 font-mono text-muted">{t.date}</td>
-                    <td className="px-4 py-2.5 font-semibold">{t.pair}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={t.direction === "long" ? "text-up" : "text-down"}>
-                        {t.direction.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge
-                        tone={t.result === "win" ? "up" : t.result === "loss" ? "down" : "neutral"}
-                      >
-                        {t.result === "win" ? "Win" : t.result === "loss" ? "Loss" : "BE"}
-                      </Badge>
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right font-mono font-semibold ${
-                        t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
-                      }`}
-                    >
-                      {t.rMultiple > 0 ? "+" : ""}
-                      {t.rMultiple.toFixed(2)}
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right font-mono ${
-                        (t.profitAmount ?? 0) > 0
-                          ? "text-up"
-                          : (t.profitAmount ?? 0) < 0
-                            ? "text-down"
-                            : "text-muted"
-                      }`}
-                    >
-                      {(t.profitAmount ?? 0) > 0 ? "+" : ""}
-                      {(t.profitAmount ?? 0).toLocaleString("de-DE", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-muted">
-                      {t.runningBalance != null
-                        ? t.runningBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 })
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex gap-1">
-                        {Object.values(SETUP_DEFINITIONS)
-                          .filter((s) => t[s.key as keyof Trade])
-                          .map((s) => (
-                            <span
-                              key={s.key}
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold"
-                              style={{ backgroundColor: `${s.color}20`, color: s.color }}
-                              title={s.label}
-                            >
-                              {s.short}
-                            </span>
-                          ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingTrade(t);
-                          setShowForm(true);
-                        }}
-                        className="p-1 rounded text-faint hover:text-accent transition-colors"
-                        title="Bearbeiten"
-                      >
-                        <i className="ph-bold ph-pencil-simple" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredTrades.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setViewingTrade(t)}
-              className="text-left bg-surface border border-border rounded-md p-4 hover:border-border2 transition-colors anim-slide-up"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-[14px]">{t.pair}</span>
-                <Badge tone={t.result === "win" ? "up" : t.result === "loss" ? "down" : "neutral"}>
-                  {t.result === "win" ? "Win" : t.result === "loss" ? "Loss" : "BE"}
-                </Badge>
+          {goalPct != null && (
+            <div style={{ flex: 1, maxWidth: "240px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600, color: "var(--color-muted)", marginBottom: "6px" }}>
+                <span>Kontoziel</span>
+                <span style={{ fontFamily: "monospace" }}>{Math.round(goalPct)}%</span>
               </div>
-              <div className="flex items-center justify-between text-[12px] font-mono">
-                <span className="text-muted">{t.date}</span>
-                <span className={t.direction === "long" ? "text-up" : "text-down"}>
-                  {t.direction.toUpperCase()}
-                </span>
-                <span
-                  className={`font-semibold ${
-                    t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
-                  }`}
-                >
-                  {t.rMultiple > 0 ? "+" : ""}
-                  {t.rMultiple.toFixed(2)} R
-                </span>
+              <div style={{ height: "6px", borderRadius: "3px", background: "var(--color-surface2)", overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: "3px", background: "var(--color-up)", width: `${goalPct}%`, transition: "width 500ms" }} />
               </div>
-              {(t.confluences?.length ?? 0) > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {t.confluences!.slice(0, 4).map((c) => (
-                    <span key={c} className="px-1.5 py-0.5 rounded bg-surface2 text-[10px] text-muted">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </button>
-          ))}
+              <div style={{ fontSize: "10px", color: "var(--color-faint)", marginTop: "4px", fontFamily: "monospace" }}>
+                {config.currentBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 })} / {config.profitTarget?.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* KPI row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        {kpiCards.map((kpi) => (
+          <div key={kpi.label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "16px 20px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-faint)", letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: "6px" }}>{kpi.label}</div>
+            <div style={{ fontSize: "20px", fontWeight: 700, color: kpi.color, fontFamily: kpi.mono ? "'JetBrains Mono',monospace" : "inherit", letterSpacing: "-0.3px" }}>{kpi.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main: Filter panel + Table */}
+      <div style={{ display: "grid", gridTemplateColumns: "212px 1fr", gap: "18px", alignItems: "start" }}>
+
+        {/* Filter Panel */}
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "18px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "1px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "14px" }}>Filter</div>
+
+          {/* Ergebnis */}
+          <div style={{ marginBottom: "18px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-muted)", marginBottom: "6px" }}>Ergebnis</div>
+            {(["all","win","loss","breakeven"] as const).map((r) => {
+              const labels = { all: "Alle", win: "Win", loss: "Loss", breakeven: "Breakeven" };
+              const isActive = filterResult === r;
+              return (
+                <button key={r} onClick={() => setFilterResult(r)} style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 8px", borderRadius: "7px", fontSize: "12.5px", fontWeight: isActive ? 600 : 500, color: isActive ? "var(--color-text)" : "var(--color-muted)", background: isActive ? "var(--color-surface2)" : "transparent", border: "none", cursor: "pointer", marginBottom: "2px" }}>
+                  {labels[r]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Paar */}
+          <div style={{ marginBottom: "18px", borderTop: "1px solid var(--color-border)", paddingTop: "14px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-muted)", marginBottom: "6px" }}>Paar</div>
+            <Select value={filterPair} onChange={(e) => setFilterPair(e.target.value)} style={{ width: "100%", fontSize: "12px" }}>
+              <option value="all">Alle Paare</option>
+              {PAIR_LIST.map((p) => <option key={p} value={p}>{p}</option>)}
+            </Select>
+          </div>
+
+          {/* Setup-Tags */}
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "14px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-muted)", marginBottom: "8px" }}>Setup</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              {Object.entries(SETUP_DEFINITIONS).map(([key, setup]) => {
+                const active = !!filters[key as keyof TradeFilters];
+                return (
+                  <button key={key} onClick={() => setFilters((f) => ({ ...f, [key]: !active }))} title={setup.description}
+                    style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: 700, border: `1px solid ${active ? setup.color : "var(--color-border2)"}`, background: active ? `${setup.color}20` : "transparent", color: active ? setup.color : "var(--color-faint)", cursor: "pointer" }}>
+                    {setup.short}
+                  </button>
+                );
+              })}
+            </div>
+            {(filterResult !== "all" || filterPair !== "all" || Object.values(filters).some(Boolean)) && (
+              <button onClick={() => { setFilters({}); setFilterResult("all"); setFilterPair("all"); }} style={{ marginTop: "10px", fontSize: "11px", color: "var(--color-accent)", background: "transparent", border: "none", cursor: "pointer", fontWeight: 600 }}>
+                Filter zurücksetzen
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Trade Table */}
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", overflow: "hidden" }}>
+          {loading ? (
+            <div style={{ padding: "20px" }}><SkeletonRows rows={6} /></div>
+          ) : noAccount ? (
+            <div style={{ padding: "40px 20px" }}>
+              <EmptyState icon="ph-bank" title={`Kein ${accountType === "ek" ? "Eigenkapital-Konto" : "Funded Account"}`} description="Richte zuerst dein Konto ein." action={<Button icon="ph-plus-circle" onClick={() => setShowSetup(true)}>Konto einrichten</Button>} />
+            </div>
+          ) : filteredTrades.length === 0 ? (
+            <div style={{ padding: "40px 20px" }}>
+              <EmptyState icon="ph-notebook" title="Keine Trades gefunden" description={trades.length === 0 ? `Starte mit deinem ersten ${accountType === "ek" ? "EK" : "Funded"}-Trade.` : "Keine Trades entsprechen den Filterkriterien."} action={trades.length === 0 ? <Button icon="ph-plus" onClick={() => setShowForm(true)}>Neuer Trade</Button> : <Button variant="ghost" onClick={() => { setFilters({}); setFilterResult("all"); setFilterPair("all"); }}>Filter zurücksetzen</Button>} />
+            </div>
+          ) : viewMode === "table" ? (
+            <>
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "13px", fontWeight: 700 }}>{filteredTrades.length} {filteredTrades.length === 1 ? "Trade" : "Trades"}</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--color-faint)", borderBottom: "1px solid var(--color-border)" }}>
+                      {["Datum","Paar","Richtung","Ergebnis","R","P&L","Balance","Setups",""].map((h, i) => (
+                        <th key={i} style={{ padding: "10px 16px", fontWeight: 600, textAlign: i >= 4 && i <= 6 ? "right" : "left" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTrades.map((t) => (
+                      <tr key={t.id} onClick={() => setViewingTrade(t)} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", transition: "background 80ms" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--color-surface2)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                        <td style={{ padding: "10px 16px", fontFamily: "'JetBrains Mono',monospace", color: "var(--color-muted)" }}>{t.date}</td>
+                        <td style={{ padding: "10px 16px", fontWeight: 600 }}>{t.pair}</td>
+                        <td style={{ padding: "10px 16px", color: t.direction === "long" ? "var(--color-up)" : "var(--color-down)", fontWeight: 600, fontSize: "11px" }}>{t.direction.toUpperCase()}</td>
+                        <td style={{ padding: "10px 16px" }}>
+                          <Badge tone={t.result === "win" ? "up" : t.result === "loss" ? "down" : "neutral"}>
+                            {t.result === "win" ? "Win" : t.result === "loss" ? "Loss" : "BE"}
+                          </Badge>
+                        </td>
+                        <td style={{ padding: "10px 16px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: t.rMultiple > 0 ? "var(--color-up)" : t.rMultiple < 0 ? "var(--color-down)" : "var(--color-muted)" }}>
+                          {t.rMultiple > 0 ? "+" : ""}{t.rMultiple.toFixed(2)}
+                        </td>
+                        <td style={{ padding: "10px 16px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", color: (t.profitAmount ?? 0) > 0 ? "var(--color-up)" : (t.profitAmount ?? 0) < 0 ? "var(--color-down)" : "var(--color-muted)" }}>
+                          {(t.profitAmount ?? 0) > 0 ? "+" : ""}{(t.profitAmount ?? 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: "10px 16px", textAlign: "right", fontFamily: "'JetBrains Mono',monospace", color: "var(--color-muted)" }}>
+                          {t.runningBalance != null ? t.runningBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 }) : "—"}
+                        </td>
+                        <td style={{ padding: "10px 16px" }}>
+                          <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
+                            {Object.values(SETUP_DEFINITIONS).filter((s) => t[s.key as keyof Trade]).map((s) => (
+                              <span key={s.key} style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "9px", fontWeight: 700, background: `${s.color}20`, color: s.color }} title={s.label}>{s.short}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingTrade(t); setShowForm(true); }} style={{ padding: "4px 6px", borderRadius: "6px", color: "var(--color-faint)", background: "transparent", border: "none", cursor: "pointer", fontSize: "13px" }} title="Bearbeiten">
+                            <i className="ph-bold ph-pencil-simple" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+              {filteredTrades.map((t) => (
+                <button key={t.id} onClick={() => setViewingTrade(t)} style={{ textAlign: "left", background: "var(--color-surface2)", border: "1px solid var(--color-border)", borderRadius: "14px", padding: "16px", cursor: "pointer", transition: "border-color 100ms" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span style={{ fontWeight: 700, fontSize: "14px" }}>{t.pair}</span>
+                    <Badge tone={t.result === "win" ? "up" : t.result === "loss" ? "down" : "neutral"}>
+                      {t.result === "win" ? "Win" : t.result === "loss" ? "Loss" : "BE"}
+                    </Badge>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontFamily: "'JetBrains Mono',monospace" }}>
+                    <span style={{ color: "var(--color-muted)" }}>{t.date}</span>
+                    <span style={{ color: t.direction === "long" ? "var(--color-up)" : "var(--color-down)" }}>{t.direction.toUpperCase()}</span>
+                    <span style={{ fontWeight: 700, color: t.rMultiple > 0 ? "var(--color-up)" : t.rMultiple < 0 ? "var(--color-down)" : "var(--color-muted)" }}>
+                      {t.rMultiple > 0 ? "+" : ""}{t.rMultiple.toFixed(2)} R
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Modals */}
       {showForm && config && (
-        <TradeFormModal
-          trade={editingTrade}
-          accountType={accountType}
-          accountConfig={config}
-          prefill={editingTrade ? null : prefill}
-          onSave={handleSaveTrade}
-          onClose={() => {
-            setShowForm(false);
-            setEditingTrade(undefined);
-          }}
-        />
+        <TradeFormModal trade={editingTrade} accountType={accountType} accountConfig={config} prefill={editingTrade ? null : prefill} onSave={handleSaveTrade} onClose={() => { setShowForm(false); setEditingTrade(undefined); }} />
       )}
       {viewingTrade && (
-        <TradeDetailModal
-          trade={viewingTrade}
-          onClose={() => setViewingTrade(null)}
-          onEdit={(t) => {
-            setViewingTrade(null);
-            setEditingTrade(t);
-            setShowForm(true);
-          }}
-          onDelete={handleDeleteTrade}
-        />
+        <TradeDetailModal trade={viewingTrade} onClose={() => setViewingTrade(null)} onEdit={(t) => { setViewingTrade(null); setEditingTrade(t); setShowForm(true); }} onDelete={handleDeleteTrade} />
       )}
       {showSetup && (
-        <AccountSetupModal
-          accountType={accountType}
-          onCreated={reload}
-          onClose={() => setShowSetup(false)}
-        />
+        <AccountSetupModal accountType={accountType} onCreated={reload} onClose={() => setShowSetup(false)} />
       )}
       {showManage && (
-        <AccountManageModal
-          accounts={accountsOfType}
-          accountType={accountType}
-          onChanged={reload}
-          onAddAccount={() => setShowSetup(true)}
-          onClose={() => setShowManage(false)}
-        />
+        <AccountManageModal accounts={accountsOfType} accountType={accountType} onChanged={reload} onAddAccount={() => setShowSetup(true)} onClose={() => setShowManage(false)} />
       )}
     </div>
   );
