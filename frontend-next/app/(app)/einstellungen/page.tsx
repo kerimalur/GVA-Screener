@@ -11,6 +11,7 @@ interface DataJob {
   freq: string;
   status: "ok" | "error" | "skipped" | "deferred" | null;
   lastRun: string | null;
+  since: string | null;
   detail: Record<string, unknown> | null;
 }
 
@@ -41,6 +42,9 @@ const fmtRelative = (iso: string) => {
   const days = Math.floor(hrs / 24);
   return `vor ${days} Tag${days > 1 ? "en" : ""}`;
 };
+
+const fmtSince = (iso: string) =>
+  new Date(iso).toLocaleDateString("de-CH", { day: "2-digit", month: "short", year: "numeric" });
 
 export default function EinstellungenPage() {
   const [email, setEmail]                         = useState("");
@@ -225,7 +229,7 @@ export default function EinstellungenPage() {
           <div style={sectionLabel}>Daten</div>
           {nextRun && !dataLoading && (
             <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>
-              Naechste Aktualisierung: {new Date(nextRun).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr
+              Naechster Lauf: {new Date(nextRun).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr
             </span>
           )}
         </div>
@@ -238,10 +242,15 @@ export default function EinstellungenPage() {
             {jobs.map((job, i) => {
               const st = job.status ? JOB_STATUS[job.status] : null;
               return (
-                <div key={job.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: i < jobs.length - 1 ? "1px solid #161D27" : "none" }}>
+                <div key={job.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: i < jobs.length - 1 ? "1px solid #161D27" : "none" }}>
                   <div>
                     <div style={{ fontSize: 13.5, color: "#C7D1DD", fontWeight: 500 }}>{job.label}</div>
                     <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{job.freq}</div>
+                    {job.since && (
+                      <div style={{ fontFamily: mono, fontSize: 10, color: "#3A4A5C", marginTop: 2 }}>
+                        seit {fmtSince(job.since)}
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: "right" as const, flexShrink: 0 }}>
                     {job.lastRun ? (

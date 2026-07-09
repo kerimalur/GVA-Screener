@@ -5,11 +5,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 
 const JOBS = [
-  { key: "cron:prices",   label: "Preise (OANDA)",              freq: "täglich" },
-  { key: "cron:fred",     label: "Makro-Daten (FRED)",          freq: "täglich" },
-  { key: "cron:calendar", label: "Wirtschaftskalender",         freq: "täglich" },
-  { key: "cron:sentiment",label: "Retail Sentiment (Myfxbook)", freq: "täglich" },
-  { key: "cron:cot",      label: "COT-Report (CFTC)",           freq: "wöchentlich" },
+  { key: "cron:prices",    label: "Preise (OANDA)",              freq: "taeglich",      table: "price_daily",        dateCol: "date" },
+  { key: "cron:fred",      label: "Makro-Daten (FRED)",          freq: "taeglich",      table: "fred_series",        dateCol: "date" },
+  { key: "cron:calendar",  label: "Wirtschaftskalender",         freq: "taeglich",      table: "calendar_events",    dateCol: "event_time" },
+  { key: "cron:sentiment", label: "Retail Sentiment (Myfxbook)", freq: "taeglich",      table: "sentiment_snapshots",dateCol: "captured_at" },
+  { key: "cron:cot",       label: "COT-Report (CFTC)",           freq: "woechentlich",  table: "cot_reports",        dateCol: "report_date" },
 ];
 
 export async function GET() {
@@ -20,27 +20,49 @@ export async function GET() {
   const db = createServiceClient();
 
   const results = await Promise.all(
-    JOBS.map(async ({ key, label, freq }) => {
-      const { data } = await db
+    JOBS.map(async ({ key, label, freq, table, dateCol }) => {
+      // Last cron run
+      const { data: run, error: runErr } = await db
         .from("cron_runs")
-        .select("status, created_at, detail")
+        .select("status, ran_at, detail")
         .eq("job", key)
-        .order("created_at", { ascending: false })
+        .order("ran_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      if (runErr) {
+        console.error(`[data/status] cron_runs error for ${key}:`, runErr);
+      }
+
+      // Earliest available data date
+      let since: string | null = null;
+      const { data: oldest, error: sinceErr } = await db
+        .from(table)
+        .select(dateCol)
+        .order(dateCol, { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (sinceErr) {
+        console.error(`[data/status] oldest-date error for ${key} (${table}):`, sinceErr);
+      } else if (oldest) {
+        since = (oldest as Record<string, unknown>)[dateCol] as string ?? null;
+      }
 
       return {
         key,
         label,
         freq,
-        status:     data?.status ?? null,
-        lastRun:    data?.created_at ?? null,
-        detail:     data?.detail ?? null,
+        status:  run?.status  ?? null,
+        lastRun: run?.ran_at  ?? null,
+        since,
+        detail:  run?.detail  ?? null,
+        _runErr: runErr?.message ?? null,
       };
     }),
   );
 
-  // Nächster Cron-Lauf: täglich 05:30 UTC
+  // Naechster Cron-Lauf: taeglich 05:30 UTC
   const now = new Date();
   const nextRun = new Date(Date.UTC(
     now.getUTCFullYear(),
