@@ -53,14 +53,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Admin-only routes (/admin/*)
+  // Admin-only routes (/admin/* and /scanner/*)
   const adminIds = (process.env.ADMIN_USER_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const isAdminUser = user ? adminIds.includes(user.id) : false;
 
-  if (user && pathname.startsWith("/admin") && !isAdminUser) {
+  const isAdminRoute =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/scanner");
+
+  if (user && isAdminRoute && !isAdminUser) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
