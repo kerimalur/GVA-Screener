@@ -4,8 +4,8 @@ import { INSTRUMENTS } from "@/lib/constants/instruments";
 import { chunkUpsert } from "./util";
 
 /**
- * Alle Instrumente parallel fetchen (statt sequenziell) damit der
- * Vercel Hobby 60s-Timeout nicht greift.
+ * Alle Instrumente parallel fetchen.
+ * Erster Lauf: max 500 Kerzen (~2 Jahre). Folgelaeufe: nur Delta seit letztem Datum.
  */
 export async function updatePrices(
   db: SupabaseClient,
@@ -25,21 +25,21 @@ export async function updatePrices(
         .order("date", { ascending: false })
         .limit(1)
         .maybeSingle();
-      return { instrument: inst.instrument, lastDate: data?.date ?? null };
+      return data?.date ?? null;
     }),
   );
 
   // OANDA-Candles parallel fetchen
   const results = await Promise.allSettled(
     instruments.map(async (inst, i) => {
-      const lastDate = lastDates[i].lastDate;
+      const lastDate = lastDates[i];
       const candles = await fetchCandles(
         inst.instrument,
-        lastDate ? { from: lastDate } : { count: 5000 },
+        lastDate ? { from: lastDate } : { count: 500 },
       );
       const rows = candles.map((c) => ({ instrument: inst.instrument, ...c }));
       const written = await chunkUpsert(db, "price_daily", rows, "instrument,date");
-      return { instrument: inst.instrument, written };
+      return written;
     }),
   );
 
@@ -49,7 +49,7 @@ export async function updatePrices(
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.status === "fulfilled") {
-      totalRows += r.value.written;
+      totalRows += r.value;
     } else {
       errors.push(
         `${instruments[i].instrument}: ${r.reason instanceof Error ? r.reason.message : r.reason}`,

@@ -1,0 +1,50 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { runJob, type JobResult } from "@/lib/jobs/util";
+import { updateFred } from "@/lib/jobs/updateFred";
+import { updateCalendar } from "@/lib/jobs/updateCalendar";
+import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
+import { updateCot } from "@/lib/jobs/updateCot";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+async function cotDue(db: ReturnType<typeof createServiceClient>): Promise<boolean> {
+  const day = new Date().getUTCDay();
+  if (day === 6 || day === 0 || day === 1) return true;
+  const { data } = await db
+    .from("cot_reports")
+    .select("report_date")
+    .order("report_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.report_date) return true;
+  return (Date.now() - new Date(data.report_date).getTime()) / 86_400_000 > 8;
+}
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const db = createServiceClient();
+  const started = Date.now();
+
+  const jobDefs: Array<[string, () => Promise<Record<string, unknown>>]> = [
+    ["cron:fred",      () => updateFred(db)],
+    ["cron:calendar",  () => updateCalendar(db)],
+    ["cron:sentiment", () => snapshotSentiment(db)],
+  ];
+  if (await cotDue(db)) jobDefs.push(["cron:cot", () => updateCot(db)]);
+
+  const results: JobResult[] = await Promise.all(
+    jobDefs.map(([name, fn]) => runJob(db, name, fn)),
+  );
+
+  return NextResponse.json({
+    ok: results.every((r) => r.status !== "error"),
+    elapsedSec: Math.round((Date.now() - started) / 1000),
+    results,
+  });
+}

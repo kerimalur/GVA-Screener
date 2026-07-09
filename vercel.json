@@ -1,0 +1,13 @@
+{
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/fundamentals",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
