@@ -727,6 +727,30 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── FEEDBACK ── */}
+      <section style={{ borderTop:"1px solid #161D27", background:"#0B0F15" }}>
+        <div style={{ maxWidth:720, margin:"0 auto", padding:"72px 28px", textAlign:"center" }}>
+          <div style={{ display:"inline-flex", alignItems:"center", gap:7, fontFamily:mono, fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase" as const, color:"#3FB950", background:"rgba(63,185,80,.1)", border:"1px solid rgba(63,185,80,.25)", borderRadius:6, padding:"4px 12px", marginBottom:20 }}>
+            <span style={{ width:6, height:6, borderRadius:"50%", background:"#3FB950", display:"inline-block" }} />
+            Beta
+          </div>
+          <h2 style={{ fontSize:28, fontWeight:800, letterSpacing:"-0.02em", color:"#F4F8FC", margin:"0 0 14px" }}>
+            Dein Feedback formt das Produkt
+          </h2>
+          <p style={{ fontSize:15.5, color:"#7E8B9C", maxWidth:480, margin:"0 auto 30px", lineHeight:1.65 }}>
+            FX Terminal ist in der Beta. Was fehlt dir? Was funktioniert bereits gut? Schreib uns direkt — jede Meinung fliesst in die Entwicklung ein.
+          </p>
+          <a
+            href="mailto:feedback@fx-terminal.ch?subject=FX Terminal Feedback"
+            style={{ display:"inline-flex", alignItems:"center", gap:9, padding:"13px 26px", borderRadius:10, background:"transparent", border:"1px solid #2E3844", color:"#C7D1DD", fontSize:14, fontWeight:600, textDecoration:"none", transition:"border-color .2s" }}
+          >
+            <i className="ph-bold ph-paper-plane-tilt" style={{ fontSize:16 }} />
+            Feedback senden
+          </a>
+          <p style={{ fontSize:11.5, color:"#3F4A58", marginTop:14 }}>Kein Spam. Keine Weitergabe. Nur echtes Feedback.</p>
+        </div>
+      </section>
+
       {/* ── FOOTER ── */}
       <footer style={{ borderTop:"1px solid #161D27", background:"#0A0D12" }}>
         <div style={{ maxWidth:1180, margin:"0 auto", padding:"34px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:20, flexWrap:"wrap" }}>
