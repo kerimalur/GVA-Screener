@@ -4,9 +4,10 @@ import { FRED_CATALOG } from "@/lib/constants/fredSeries";
 import { chunkUpsert } from "./util";
 
 /**
- * Alle Katalog-Serien aktualisieren. FRED-CSV liefert immer Vollhistorie —
- * geschrieben wird nur ab (letztes Datum − 45 Tage) für Revisionen;
- * beim ersten Lauf die volle Historie. Tote Serien -> is_stale.
+ * Alle Katalog-Serien parallel fetchen (Promise.allSettled).
+ * FRED-CSV liefert immer Vollhistorie; geschrieben wird nur ab
+ * (letztes Datum - 45 Tage) fuer Revisionen.
+ * Tote Serien -> is_stale.
  */
 export async function updateFred(
   db: SupabaseClient,
@@ -14,34 +15,37 @@ export async function updateFred(
 ): Promise<Record<string, unknown>> {
   const catalog = FRED_CATALOG.filter((s) => !opts.only || opts.only.includes(s.id));
 
-  let totalRows = 0;
-  let staleCount = 0;
-  const errors: string[] = [];
+  // Letztes bekanntes Datum je Serie (parallel)
+  const lastDates = await Promise.all(
+    catalog.map(async (s) => {
+      const { data } = await db
+        .from("fred_series_meta")
+        .select("last_date")
+        .eq("series_id", s.id)
+        .maybeSingle();
+      return data?.last_date ?? null;
+    }),
+  );
 
-  for (const series of catalog) {
-    try {
-      const observations = await fetchSeries(series.id);
+  // Alle Serien parallel fetchen + schreiben
+  const results = await Promise.allSettled(
+    catalog.map(async (series, i) => {
       const now = new Date().toISOString();
+      const observations = await fetchSeries(series.id);
 
       if (!observations) {
-        staleCount += 1;
         await db.from("fred_series_meta").upsert(
           { series_id: series.id, last_fetched: now, is_stale: true },
           { onConflict: "series_id" },
         );
-        continue;
+        return { stale: true };
       }
 
-      const { data: meta } = await db
-        .from("fred_series_meta")
-        .select("last_date")
-        .eq("series_id", series.id)
-        .maybeSingle();
-
+      const lastDate = lastDates[i];
       let toWrite = observations;
-      if (meta?.last_date) {
-        const cutoff = new Date(meta.last_date);
-        cutoff.setDate(cutoff.getDate() - 45); // Revisionsfenster
+      if (lastDate) {
+        const cutoff = new Date(lastDate);
+        cutoff.setDate(cutoff.getDate() - 45);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         toWrite = observations.filter((o) => o.date >= cutoffStr);
       }
@@ -51,7 +55,7 @@ export async function updateFred(
         date: o.date,
         value: o.value,
       }));
-      totalRows += await chunkUpsert(db, "fred_series", rows, "series_id,date");
+      const written = await chunkUpsert(db, "fred_series", rows, "series_id,date");
 
       await db.from("fred_series_meta").upsert(
         {
@@ -62,8 +66,21 @@ export async function updateFred(
         },
         { onConflict: "series_id" },
       );
-    } catch (e) {
-      errors.push(`${series.id}: ${e instanceof Error ? e.message : e}`);
+      return { written };
+    }),
+  );
+
+  let totalRows = 0;
+  let staleCount = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      if (r.value.stale) staleCount += 1;
+      else totalRows += (r.value.written ?? 0);
+    } else {
+      errors.push(`${catalog[i].id}: ${r.reason instanceof Error ? r.reason.message : r.reason}`);
     }
   }
 
