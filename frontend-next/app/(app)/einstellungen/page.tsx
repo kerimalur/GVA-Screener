@@ -25,10 +25,10 @@ const SUB_STATUS: Record<NonNullable<SubStatus>, { label: string; color: string 
 };
 
 const JOB_STATUS: Record<string, { label: string; color: string }> = {
-  ok:       { label: "OK",         color: "#3FB950" },
-  error:    { label: "Fehler",     color: "#F85149" },
+  ok:       { label: "OK",           color: "#3FB950" },
+  error:    { label: "Fehler",       color: "#F85149" },
   skipped:  { label: "Übersprungen", color: "#D8A430" },
-  deferred: { label: "Verzögert",  color: "#D8A430" },
+  deferred: { label: "Verzögert",    color: "#D8A430" },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -38,39 +38,49 @@ const fmtDate = (iso: string) =>
 const fmtRelative = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 60)   return `vor ${mins} Min.`;
+  if (mins < 60)  return `vor ${mins} Min.`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)    return `vor ${hrs} Std.`;
+  if (hrs < 24)   return `vor ${hrs} Std.`;
   const days = Math.floor(hrs / 24);
   return `vor ${days} Tag${days > 1 ? "en" : ""}`;
 };
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function EinstellungenPage() {
-  const [email, setEmail]                   = useState("");
-  const [subStatus, setSubStatus]           = useState<SubStatus>(null);
-  const [periodEnd, setPeriodEnd]           = useState<string | null>(null);
-  const [subLoading, setSubLoading]         = useState(true);
-  const [portalLoading, setPortalLoading]   = useState(false);
-  const [portalError, setPortalError]       = useState("");
-  const [jobs, setJobs]                     = useState<DataJob[]>([]);
-  const [nextRun, setNextRun]               = useState<string | null>(null);
-  const [dataLoading, setDataLoading]       = useState(true);
+  const [email, setEmail]                     = useState("");
+  const [isAdmin, setIsAdmin]                 = useState(false);
+  const [subStatus, setSubStatus]             = useState<SubStatus>(null);
+  const [periodEnd, setPeriodEnd]             = useState<string | null>(null);
+  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
+  const [subLoading, setSubLoading]           = useState(true);
+  const [portalLoading, setPortalLoading]     = useState(false);
+  const [portalError, setPortalError]         = useState("");
+  const [jobs, setJobs]                       = useState<DataJob[]>([]);
+  const [nextRun, setNextRun]                 = useState<string | null>(null);
+  const [dataLoading, setDataLoading]         = useState(true);
 
-  // Load subscription
+  // Load user + subscription
   useEffect(() => {
+    // Admin-Check via sicherer API-Route (prüft ADMIN_USER_IDS Env-Var serverseitig)
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((me) => {
+        setEmail(me.email ?? "");
+        setIsAdmin(me.isAdmin === true);
+      });
+
     const supabase = createBrowserSupabase();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
-      setEmail(user.email ?? "");
       supabase
         .from("subscriptions")
-        .select("status, current_period_end")
+        .select("status, current_period_end, stripe_customer_id")
         .eq("user_id", user.id)
         .maybeSingle()
         .then(({ data }) => {
           setSubStatus((data?.status as SubStatus) ?? "inactive");
           setPeriodEnd(data?.current_period_end ?? null);
+          setHasStripeCustomer(!!data?.stripe_customer_id);
           setSubLoading(false);
         });
     });
@@ -103,7 +113,7 @@ export default function EinstellungenPage() {
   };
 
   // ── Styles ─────────────────────────────────────────────────────────────
-  const mono  = "'Geist Mono', monospace";
+  const mono = "'Geist Mono', monospace";
   const card: React.CSSProperties = {
     background: "#0E131A",
     border: "1px solid #1A222D",
@@ -120,14 +130,14 @@ export default function EinstellungenPage() {
     marginBottom: 16,
   };
 
-  const subInfo  = subStatus ? SUB_STATUS[subStatus] : null;
+  const subInfo = subStatus ? SUB_STATUS[subStatus] : null;
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
 
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
-        <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.2em", color: "#58A6FF", textTransform: "uppercase", marginBottom: 8 }}>
+        <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.2em", color: "#58A6FF", textTransform: "uppercase" as const, marginBottom: 8 }}>
           Einstellungen
         </div>
         <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: "#F4F8FC", margin: 0 }}>
@@ -143,7 +153,14 @@ export default function EinstellungenPage() {
             <span style={{ color: "#58A6FF", fontWeight: 700, fontSize: 14 }}>{email.charAt(0).toUpperCase()}</span>
           </div>
           <div>
-            <div style={{ fontSize: 14, color: "#E7EDF5", fontWeight: 500 }}>{email || "—"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 14, color: "#E7EDF5", fontWeight: 500 }}>{email || "—"}</div>
+              {isAdmin && (
+                <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", padding: "2px 7px", borderRadius: 5, background: "rgba(216,164,48,.15)", color: "#D8A430", border: "1px solid rgba(216,164,48,.3)", textTransform: "uppercase" as const }}>
+                  Admin
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 11.5, color: "#566273", marginTop: 2 }}>Google / GitHub Login</div>
           </div>
         </div>
@@ -162,11 +179,12 @@ export default function EinstellungenPage() {
                 <div style={{ fontSize: 12.5, color: "#7E8B9C", marginTop: 3 }}>CHF 34.95 / Monat</div>
               </div>
               {subInfo && (
-                <span style={{ fontFamily: mono, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 10px", borderRadius: 6, background: `${subInfo.color}18`, color: subInfo.color, border: `1px solid ${subInfo.color}40` }}>
+                <span style={{ fontFamily: mono, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, padding: "4px 10px", borderRadius: 6, background: `${subInfo.color}18`, color: subInfo.color, border: `1px solid ${subInfo.color}40` }}>
                   {subInfo.label}
                 </span>
               )}
             </div>
+
             {periodEnd && (
               <div style={{ fontSize: 12.5, color: "#7E8B9C", marginBottom: 18 }}>
                 {subStatus === "canceled"
@@ -174,19 +192,44 @@ export default function EinstellungenPage() {
                   : `Nächste Abrechnung: ${fmtDate(periodEnd)}`}
               </div>
             )}
+
             <div style={{ borderTop: "1px solid #1A222D", paddingTop: 18 }}>
-              <button
-                onClick={openPortal}
-                disabled={portalLoading || subStatus === "inactive"}
-                style={{ padding: "10px 18px", borderRadius: 9, background: "transparent", border: "1px solid #2E3844", color: "#C7D1DD", fontSize: 13.5, fontWeight: 600, cursor: portalLoading || subStatus === "inactive" ? "not-allowed" : "pointer", opacity: portalLoading || subStatus === "inactive" ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
-              >
-                <i className="ph-bold ph-credit-card" style={{ fontSize: 15 }} />
-                {portalLoading ? "Weiterleitung…" : "Abo verwalten / kündigen"}
-              </button>
-              <div style={{ fontSize: 11.5, color: "#566273", marginTop: 10 }}>
-                Öffnet das Stripe Kundenportal — Zahlungsmethode ändern, Rechnungen herunterladen, Abo kündigen.
-              </div>
-              {portalError && <div style={{ fontSize: 12, color: "#F85149", marginTop: 8 }}>{portalError}</div>}
+              {hasStripeCustomer ? (
+                <>
+                  <button
+                    onClick={openPortal}
+                    disabled={portalLoading}
+                    style={{ padding: "10px 18px", borderRadius: 9, background: "transparent", border: "1px solid #2E3844", color: "#C7D1DD", fontSize: 13.5, fontWeight: 600, cursor: portalLoading ? "not-allowed" : "pointer", opacity: portalLoading ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
+                  >
+                    <i className="ph-bold ph-credit-card" style={{ fontSize: 15 }} />
+                    {portalLoading ? "Weiterleitung…" : "Abo verwalten / kündigen"}
+                  </button>
+                  <div style={{ fontSize: 11.5, color: "#566273", marginTop: 10 }}>
+                    Öffnet das Stripe Kundenportal — Zahlungsmethode ändern, Rechnungen, Abo kündigen.
+                  </div>
+                  {portalError && <div style={{ fontSize: 12, color: "#F85149", marginTop: 8 }}>{portalError}</div>}
+                </>
+              ) : isAdmin ? (
+                <div style={{ display: "flex", flexDirection: "column" as const, gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#D8A430" }}>
+                    <i className="ph-bold ph-info" style={{ fontSize: 14 }} />
+                    Admin-Konto — kein Stripe-Kunde verknüpft.
+                  </div>
+                  <a
+                    href="https://dashboard.stripe.com/customers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ padding: "10px 18px", borderRadius: 9, background: "transparent", border: "1px solid #2E3844", color: "#C7D1DD", fontSize: 13.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+                  >
+                    <i className="ph-bold ph-arrow-square-out" style={{ fontSize: 15 }} />
+                    Stripe Dashboard öffnen
+                  </a>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: "#566273" }}>
+                  Kein aktives Abonnement.
+                </div>
+              )}
             </div>
           </>
         )}
@@ -208,7 +251,7 @@ export default function EinstellungenPage() {
         ) : jobs.length === 0 ? (
           <div style={{ fontSize: 13, color: "#566273" }}>Noch keine Daten geladen.</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 0 }}>
             {jobs.map((job, i) => {
               const st = job.status ? JOB_STATUS[job.status] : null;
               return (
@@ -217,11 +260,11 @@ export default function EinstellungenPage() {
                     <div style={{ fontSize: 13.5, color: "#C7D1DD", fontWeight: 500 }}>{job.label}</div>
                     <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{job.freq}</div>
                   </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ textAlign: "right" as const, flexShrink: 0 }}>
                     {job.lastRun ? (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: st?.color ?? "#566273", display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: st?.color ?? "#566273", display: "inline-block" }} />
                           <span style={{ fontFamily: mono, fontSize: 10.5, color: st?.color ?? "#566273" }}>{st?.label ?? "—"}</span>
                         </div>
                         <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{fmtRelative(job.lastRun)}</div>
@@ -247,11 +290,4 @@ export default function EinstellungenPage() {
         <div style={sectionLabel}>Rechtliches</div>
         <div style={{ display: "flex", gap: 20, fontSize: 13 }}>
           {([["AGB", "/agb"], ["Datenschutz", "/datenschutz"], ["Impressum", "/impressum"]] as [string, string][]).map(([label, href]) => (
-            <a key={href} href={href} style={{ color: "#7E8B9C", textDecoration: "none" }}>{label}</a>
-          ))}
-        </div>
-      </div>
-
-    </div>
-  );
-}
+            <a key={href} href={href} style={{ color: "#7E8B9C", textDecoration: "none" }}>{

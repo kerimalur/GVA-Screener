@@ -57,40 +57,32 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ── Subscription-Check ────────────────────────────────────────────────────
-  // Eingeloggte User auf nicht-öffentlichen Routen: aktive Subscription prüfen.
-  if (user && !isPublic) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status, current_period_end")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const now = new Date();
-    const isActive =
-      sub?.status === "active" ||
-      sub?.status === "trialing" ||
-      // kurze Kulanz bei fehlgeschlagener Zahlung: bis Period-End weiter zugänglich
-      (sub?.status === "past_due" &&
-        sub.current_period_end != null &&
-        new Date(sub.current_period_end) > now);
-
-    if (!isActive) {
+  // ── Admin-Only-Routen ────────────────────────────────────────────────────
+  // /admin/* nur für User-IDs in ADMIN_USER_IDS (kommagetrennt).
+  if (user && pathname.startsWith("/admin")) {
+    const adminIds = (process.env.ADMIN_USER_IDS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!adminIds.includes(user.id)) {
       const url = request.nextUrl.clone();
-      url.pathname = "/upgrade";
+      url.pathname = "/dashboard";
       url.search = "";
       return NextResponse.redirect(url);
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  return response;
-}
+  // ── Subscription-Check ────────────────────────────────────────────────────
+  // Eingeloggte User auf nicht-öffentlichen Routen: aktive Subscription prüfen.
+  // Admin-User überspringen — kein Stripe-Abo nötig.
+  const adminIdsForSub = (process.env.ADMIN_USER_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const isAdminUser = user ? adminIdsForSub.includes(user.id) : false;
 
-export const config = {
-  // /api/* ausgenommen: Cron/Backfill/Data-Routen schützen sich selbst
-  // (CRON_SECRET) und müssen ohne Browser-Session erreichbar bleiben.
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
-  ],
-};
+  if (user && !isPublic && !isAdminUser) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status, cu
