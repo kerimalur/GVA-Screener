@@ -122,9 +122,14 @@ export async function proxy(request: NextRequest) {
       .maybeSingle();
 
     const now = new Date();
+    const periodValid =
+      sub?.current_period_end != null
+        ? new Date(sub.current_period_end) > now
+        : true; // Kein Datum → Webhook noch nicht geschrieben, Benefit of Doubt
+
     const isActive =
-      sub?.status === "active" ||
-      sub?.status === "trialing" ||
+      (sub?.status === "active" && periodValid) ||
+      (sub?.status === "trialing" && periodValid) ||
       (sub?.status === "past_due" &&
         sub.current_period_end != null &&
         new Date(sub.current_period_end) > now);
@@ -150,6 +155,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api|_next/static|_next/image|favicon\.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
