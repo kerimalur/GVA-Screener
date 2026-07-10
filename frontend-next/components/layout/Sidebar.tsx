@@ -91,6 +91,7 @@ export default function Sidebar() {
         {NAV_GROUPS.map((group, gi) => (
           <div
             key={group.title}
+            data-tour-group={group.title}
             style={{
               borderTop: gi > 0 ? "1px solid var(--color-border)" : "none",
               padding: gi > 0 ? "16px 0 18px 0" : "0 0 18px 0",
@@ -112,6 +113,7 @@ export default function Sidebar() {
                   return (
                     <div
                       key={item.href}
+                      data-tour={item.href}
                       title="Nur für Admins verfügbar"
                       style={{
                         padding: "8px 10px", borderRadius: "8px",
@@ -131,6 +133,7 @@ export default function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-tour={item.href}
                     style={{
                       padding: active ? "8px 10px 8px 12px" : "8px 10px",
                       borderRadius: "8px",

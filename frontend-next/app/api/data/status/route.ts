@@ -62,5 +62,26 @@ export async function GET() {
     }),
   );
 
-  return NextResponse.json(results);
+  return NextResponse.json({ jobs: results, nextRun: nextCronRun() });
+}
+
+/** Nächster täglicher Cron-Lauf: 06:30 Europe/Zurich (als ISO-Zeitstempel). */
+function nextCronRun(): string {
+  const now = new Date();
+  // Aktuelle Uhrzeit in Zürich bestimmen (DST-sicher via Intl)
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Zurich",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+
+  const minutesNow = h * 60 + m;
+  const minutesTarget = 6 * 60 + 30;
+  let diff = minutesTarget - minutesNow;
+  if (diff <= 0) diff += 24 * 60; // heute schon vorbei → morgen
+
+  return new Date(now.getTime() + diff * 60_000).toISOString();
 }

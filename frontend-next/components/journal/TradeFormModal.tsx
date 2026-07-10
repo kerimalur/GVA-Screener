@@ -6,7 +6,8 @@ import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { Field, Input, Select, Textarea, Label } from "@/components/ui/Field";
 import type { Trade, AccountConfig, AccountType } from "@/lib/journal/types";
-import { PAIR_LIST, getConfluences } from "@/lib/journal/types";
+import { PAIR_LIST, getConfluences, saveConfluences } from "@/lib/journal/types";
+import { loadPref, savePref } from "@/lib/journal/prefs";
 import {
   calculateRiskAmount,
   calculateProfitAmount,
@@ -76,10 +77,40 @@ export default function TradeFormModal({
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
+  const [confluenceList, setConfluenceList] = useState<string[]>(() => getConfluences());
+  const [addingConfluence, setAddingConfluence] = useState(false);
+  const [newConfluence, setNewConfluence] = useState("");
 
   useEffect(() => {
     loadStrategies().then(setStrategies).catch(() => {});
+    // Eigene Confluences aus Supabase syncen (gleiche Quelle wie Journal-Einstellungen)
+    loadPref<string[]>("confluences", [])
+      .then((v) => {
+        if (Array.isArray(v) && v.length) {
+          setConfluenceList(v);
+          saveConfluences(v);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const addCustomConfluence = () => {
+    const name = newConfluence.trim();
+    if (!name) return;
+    const existing = confluenceList.find((c) => c.toLowerCase() === name.toLowerCase());
+    const label = existing ?? name;
+    if (!existing) {
+      const next = [...confluenceList, name];
+      setConfluenceList(next);
+      saveConfluences(next);
+      savePref("confluences", next).catch(() => {});
+    }
+    // Neue Confluence direkt für diesen Trade auswählen
+    const current = formData.confluences || [];
+    if (!current.includes(label)) handleChange("confluences", [...current, label]);
+    setNewConfluence("");
+    setAddingConfluence(false);
+  };
 
   // Screenshot beim Bearbeiten laden
   useEffect(() => {
@@ -205,7 +236,6 @@ export default function TradeFormModal({
     }
   };
 
-  const confluences = getConfluences();
   const currency = accountConfig?.currency || "USD";
 
   return (
@@ -404,9 +434,9 @@ export default function TradeFormModal({
 
         {/* Confluences */}
         <div>
-          <Label>Confluences</Label>
+          <Label hint="eigene per + hinzufügen">Confluences</Label>
           <div className="flex flex-wrap gap-1.5">
-            {confluences.map((c) => {
+            {confluenceList.map((c) => {
               const selected = (formData.confluences || []).includes(c);
               return (
                 <button
@@ -429,6 +459,54 @@ export default function TradeFormModal({
                 </button>
               );
             })}
+            {addingConfluence ? (
+              <span className="inline-flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={newConfluence}
+                  onChange={(e) => setNewConfluence(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomConfluence();
+                    }
+                    if (e.key === "Escape") {
+                      setNewConfluence("");
+                      setAddingConfluence(false);
+                    }
+                  }}
+                  placeholder="Eigene Confluence…"
+                  className="px-2.5 py-1 rounded-md text-[11px] w-36 bg-bg text-text border border-accent/50 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomConfluence}
+                  disabled={!newConfluence.trim()}
+                  className="px-2 py-1 rounded-md text-[11px] font-medium border border-accent/50 text-accent hover:bg-accent/10 disabled:opacity-40"
+                >
+                  <i className="ph-bold ph-check" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewConfluence("");
+                    setAddingConfluence(false);
+                  }}
+                  className="px-2 py-1 rounded-md text-[11px] font-medium border border-border2 text-muted hover:text-text"
+                >
+                  <i className="ph-bold ph-x" />
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingConfluence(true)}
+                title="Eigene Confluence hinzufügen"
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium border border-dashed border-border2 text-muted hover:text-accent hover:border-accent/50 transition-colors"
+              >
+                <i className="ph-bold ph-plus" /> Eigene
+              </button>
+            )}
           </div>
         </div>
 

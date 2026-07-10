@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
+import { savePref } from "@/lib/journal/prefs";
+import { ONBOARDING_PREF_KEY } from "@/components/onboarding/OnboardingTour";
 
 type SubStatus = "active" | "trialing" | "past_due" | "canceled" | "inactive" | null;
 
@@ -58,6 +60,7 @@ export default function EinstellungenPage() {
   const [jobs, setJobs]                           = useState<DataJob[]>([]);
   const [nextRun, setNextRun]                     = useState<string | null>(null);
   const [dataLoading, setDataLoading]             = useState(true);
+  const [tourLoading, setTourLoading]             = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -109,6 +112,18 @@ export default function EinstellungenPage() {
     }
   };
 
+  const restartTour = async () => {
+    setTourLoading(true);
+    try {
+      // completed:false → OnboardingTour startet beim nächsten Seitenaufbau,
+      // unabhängig vom Account-Alter (bewusster Neustart).
+      await savePref(ONBOARDING_PREF_KEY, { completed: false, version: 1 });
+      window.location.href = "/dashboard";
+    } catch {
+      setTourLoading(false);
+    }
+  };
+
   const mono = "'Geist Mono', monospace";
   const card: React.CSSProperties = {
     background: "#0E131A",
@@ -157,6 +172,16 @@ export default function EinstellungenPage() {
             </div>
             <div style={{ fontSize: 11.5, color: "#566273", marginTop: 2 }}>Google / GitHub Login</div>
           </div>
+        </div>
+        <div style={{ borderTop: "1px solid #1A222D", marginTop: 18, paddingTop: 14 }}>
+          <button
+            onClick={restartTour}
+            disabled={tourLoading}
+            style={{ background: "transparent", border: "none", padding: 0, color: "#7E8B9C", fontSize: 12.5, cursor: tourLoading ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit" }}
+          >
+            <i className="ph-bold ph-play-circle" style={{ fontSize: 14 }} />
+            {tourLoading ? "Starte Tour..." : "Onboarding-Tour erneut ansehen"}
+          </button>
         </div>
       </div>
 

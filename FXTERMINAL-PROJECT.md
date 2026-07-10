@@ -5,6 +5,30 @@
 
 ## Stand: 2026-07-10
 
+## 2026-07-10 — Onboarding-Tour + Fixes (umgesetzt)
+
+- **Onboarding-Tour (neu):** `components/onboarding/OnboardingTour.tsx`, eingebunden in
+  `app/(app)/layout.tsx`. Interaktive 16-Schritte-Tour (Spotlight auf Sidebar-Navigation):
+  Dashboard, Weekly, COT, Makro, Sentiment, Intermarket, Saisonalität, Kalender, Vergleich,
+  Markt-Scanner (als privater Beta-/Testbereich gekennzeichnet), Journal (Konto einrichten),
+  Outlooks (Erstellen via Weekly-Vorbefüllung), Datengrundlage (OANDA/CFTC/FRED/Myfxbook,
+  täglich 06:30 CH-Zeit), Einstellungen.
+  - Startet automatisch NUR beim ersten Login neuer Accounts (nach Stripe-Kauf/Aktivierung).
+    Erkennung: `user_preferences`-Key `onboarding_tour` + Account-Alter (< 14 Tage = neu).
+    Bestandsaccounts werden beim ersten Check still als "completed" markiert.
+  - Manuell neu startbar: Einstellungen → "Onboarding-Tour erneut ansehen".
+  - Sidebar: `data-tour`/`data-tour-group`-Attribute für die Tour-Anker ergänzt.
+- **Bugfix Einstellungen → Daten ("Noch keine Daten geladen"):** `/api/data/status` lieferte
+  ein nacktes Array, die Seite erwartete `{ jobs, nextRun }` → Route liefert jetzt
+  `{ jobs, nextRun }` inkl. berechnetem nächsten Cron-Lauf (06:30 Europe/Zurich, DST-sicher).
+- **Journal — eigene Confluences im Trade-Formular:** `TradeFormModal.tsx` hat jetzt einen
+  "+ Eigene"-Chip: neue Confluence anlegen → wird sofort ausgewählt und dauerhaft gespeichert
+  (localStorage + `user_preferences.confluences`, gleiche Quelle wie Journal-Einstellungen;
+  beim Öffnen des Modals wird aus Supabase gesynct).
+- **Hinweis Session-Umgebung:** Datei-Sync in die Cowork-Sandbox war für editierte Dateien
+  fehlerhaft (abgeschnitten) — Typecheck lief deshalb über ein Schattenprojekt in /tmp,
+  `tsc --noEmit` fehlerfrei. Die echten Projektdateien sind korrekt.
+
 ## Kontakt & Identität
 
 - **Support-E-Mail:** FXTerminalCH@proton.me (ProtonMail — erledigt, kein Zoho)
