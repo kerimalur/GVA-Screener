@@ -7,8 +7,10 @@
 
 ## Kontakt & Identität
 
-- **Support-E-Mail:** FXTerminalCH@proton.me (ProtonMail, ab 2026-07-10 offiziell)
-- **Impressum-Adresse:** Kerim Alur, Hasenmattstrasse 7, 4513 Langendorf, Schweiz (vollständige Adresse — in CH gesetzlich vorgeschrieben)
+- **Support-E-Mail:** FXTerminalCH@proton.me (ProtonMail — erledigt, kein Zoho)
+- **Impressum-Adresse:** Kerim Alur, Hasenmattstrasse 7, 4513 Langendorf, Schweiz (in CH gesetzlich vorgeschrieben; Wechsel auf Virtual Office erst nach Launch)
+- **Domain:** fx-terminal.ch — bewusst zurückgestellt bis App stabil läuft, dann Infomaniak + Vercel
+- **Virtuelle Geschäftsadresse:** Swissoffice — zurückgestellt bis erste Einnahmen laufen
 - **Supabase-Account:** kerimtrades.ssg@gmail.com (Projekt: bpggwelpuvbkeudrqoiv)
 
 ## Stand: 2026-07-09
