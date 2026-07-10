@@ -102,10 +102,10 @@ export default function CalendarView() {
   const weekdays = showWeekends ? WEEKDAYS_ALL : WEEKDAYS_WORK;
   const fmtEur = (v: number) => `${v>=0?"+":""}${v.toLocaleString("de-DE",{maximumFractionDigits:0})} ${currency}`;
 
-  if (loading) return <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"18px",padding:"28px"}}><SkeletonRows rows={7} /></div>;
+  if (loading) return <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px"}}><SkeletonRows rows={7} /></div>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:"22px"}} className="anim-fade-in">
+    <div style={{display:"flex",flexDirection:"column",gap:"14px"}} className="anim-fade-in">
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"14px"}}>
@@ -125,13 +125,13 @@ export default function CalendarView() {
       <div style={{display:"grid",gridTemplateColumns:selectedDate?"1fr 288px":"1fr",gap:"18px",alignItems:"start"}}>
 
         {/* Calendar Card */}
-        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"18px",padding:"28px"}}>
+        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px"}}>
 
           {/* Navigation */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"20px",marginBottom:"24px",position:"relative"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"20px",marginBottom:"16px",position:"relative"}}>
             <button onClick={()=>navigate(-1)} style={{width:"34px",height:"34px",borderRadius:"10px",border:"1px solid var(--color-border2)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--color-muted)",background:"transparent",cursor:"pointer",position:"absolute",left:0,fontSize:"16px"}}>‹</button>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:"18px",fontWeight:800}}>
+              <div style={{fontSize:"15px",fontWeight:800}}>
                 {viewMode==="month" ? `${MONTHS_LONG[currentDate.getMonth()]} ${currentDate.getFullYear()}` : currentDate.getFullYear()}
               </div>
               <button onClick={()=>{setCurrentDate(new Date());setSelectedDate(null);}} style={{fontSize:"12px",fontWeight:600,color:"var(--color-accent)",background:"transparent",border:"none",cursor:"pointer",marginTop:"2px"}}>Heute</button>
@@ -142,13 +142,13 @@ export default function CalendarView() {
           {viewMode==="month" ? (
             <>
               {/* Weekday headers */}
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"6px",marginBottom:"6px"}}>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"4px",marginBottom:"4px"}}>
                 {weekdays.map((d)=>(
                   <div key={d} style={{textAlign:"center",fontSize:"11px",fontWeight:700,letterSpacing:"0.8px",color:"var(--color-faint)"}}>{d}</div>
                 ))}
               </div>
               {/* Day cells */}
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"6px"}}>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"4px"}}>
                 {calendarDays.map((day)=>{
                   const hasTrades = day.trades.length > 0;
                   const isWin = hasTrades && day.totalR >= 0;
@@ -168,12 +168,12 @@ export default function CalendarView() {
                       key={day.dateStr}
                       onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
                       style={{
-                        aspectRatio:"1",
-                        borderRadius:"10px",
+                        height:"64px",
+                        borderRadius:"8px",
                         background: bg,
                         border,
                         boxShadow,
-                        padding:"8px",
+                        padding:"6px",
                         display:"flex",
                         flexDirection:"column",
                         justifyContent:"space-between",
@@ -182,9 +182,9 @@ export default function CalendarView() {
                         transition:"background 120ms",
                       }}
                     >
-                      <span style={{fontSize:"11px",fontWeight:isSelected||day.isToday?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
+                      <span style={{fontSize:"10px",fontWeight:isSelected||day.isToday?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
                       {hasTrades && (
-                        <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"11px",fontWeight:700,color:isWin?"var(--color-up)":"var(--color-down)",textAlign:"left"}}>
+                        <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:700,color:isWin?"var(--color-up)":"var(--color-down)",textAlign:"left"}}>
                           {day.totalR>=0?"+":""}{day.totalR.toFixed(1)}R
                         </span>
                       )}
@@ -194,7 +194,7 @@ export default function CalendarView() {
               </div>
 
               {/* Weekend toggle */}
-              <div style={{marginTop:"20px",paddingTop:"16px",borderTop:"1px solid var(--color-border)",display:"flex",alignItems:"center",gap:"8px"}}>
+              <div style={{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid var(--color-border)",display:"flex",alignItems:"center",gap:"8px"}}>
                 <label style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"12.5px",fontWeight:600,color:"var(--color-muted)",cursor:"pointer"}}>
                   <span style={{width:"16px",height:"16px",borderRadius:"5px",background:showWeekends?"var(--color-accent)":"var(--color-surface2)",border:`1px solid ${showWeekends?"var(--color-accent)":"var(--color-border2)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>setShowWeekends(!showWeekends)}>
                     {showWeekends&&<span style={{color:"#0a0b0e",fontSize:"10px",fontWeight:700}}>✓</span>}
