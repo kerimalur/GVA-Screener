@@ -3,6 +3,14 @@
 > Laufende Notiz für Entscheidungen zwischen Kerim und Claude. Ergänzt STATUS.md/MIGRATION.md,
 > ersetzt sie nicht. Bei neuer Session zusätzlich lesen, wenn es um Launch-Fragen geht.
 
+## Stand: 2026-07-10
+
+## Kontakt & Identität
+
+- **Support-E-Mail:** FXTerminalCH@proton.me (ProtonMail, ab 2026-07-10 offiziell)
+- **Impressum-Adresse:** Kerim Alur, Hasenmattstrasse 7, 4513 Langendorf, Schweiz (vollständige Adresse — in CH gesetzlich vorgeschrieben)
+- **Supabase-Account:** kerimtrades.ssg@gmail.com (Projekt: bpggwelpuvbkeudrqoiv)
+
 ## Stand: 2026-07-09
 
 ## Entschieden
@@ -18,7 +26,7 @@
 
 - **Zwei-Stufen-Pricing vs. ein Plan:** `frontend-next/app/LandingPage.tsx` (Zeilen ~611–660) zeigt aktuell **Basic (CHF 24.95/Monat) + Pro (CHF 34.95/Monat)** nebeneinander, plus einen Monat/Jahr-Umschalter (Jahr: CHF 249 / CHF 349). Checkout (`/api/stripe/checkout`) und Datenbank (`subscriptions.plan`) unterstützen aber nur **eine** Stripe-Price-ID — kein Tier-Auswahl-Mechanismus. Muss vor Launch entschieden werden: Landing Page auf einen Plan vereinfachen, oder Checkout um Tier-Auswahl + zweite Stripe-Price-ID erweitern?
 - **Supabase-Projekt reaktivieren:** `yahvhzywsynnsqznysfr` ist pausiert (INACTIVE). Ohne Reaktivierung funktioniert nichts (Login, Journal, Subscriptions).
-- **Impressum-Adresse:** aktuell Kerims Privatadresse (Hasenmattstrasse 7, 4513 Langendorf). Alternative wäre eigene Firma/Business-Adresse — noch nicht entschieden, keine Deadline gesetzt.
+- **Impressum-Adresse:** ~~Privatadresse (Hasenmattstrasse 7)~~ → entfernt (2026-07-10). Nur PLZ+Ort: 4513 Langendorf, Schweiz. E-Mail: FXTerminalCH@proton.me.
 - **Stripe-Konfiguration:** `STRIPE_PRICE_ID` muss in Stripe selbst exakt auf CHF 34.95/Monat stehen (nicht durch Claude prüfbar ohne Stripe-MCP-Zugriff — Stripe-Connector ist noch nicht autorisiert).
 
 ## Verworfen / bewusst nicht mehr aktuell
