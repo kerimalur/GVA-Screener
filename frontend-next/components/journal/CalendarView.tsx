@@ -168,7 +168,7 @@ export default function CalendarView() {
                       key={day.dateStr}
                       onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
                       style={{
-                        height:"64px",
+                        height:"78px",
                         borderRadius:"8px",
                         background: bg,
                         border,
