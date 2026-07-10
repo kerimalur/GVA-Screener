@@ -1,8 +1,81 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import Link from "next/link";
 import { PLANS } from "@/lib/constants/plans";
+
+// ── Feedback Form ──────────────────────────────────────────────────────────
+function FeedbackForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+      setStatus(res.ok ? "success" : "error");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  if (status === "success") {
+    return (
+      <div style={{ background:"#0E131A", border:"1px solid rgba(63,185,80,.3)", borderRadius:14, padding:"32px 28px", textAlign:"center" as const, marginBottom:8 }}>
+        <div style={{ fontSize:28, marginBottom:12 }}>✅</div>
+        <div style={{ fontSize:16, fontWeight:700, color:"#3FB950", marginBottom:8 }}>Danke für dein Feedback!</div>
+        <div style={{ fontSize:13.5, color:"#7E8B9C" }}>Wir lesen jede Nachricht und melden uns wenn nötig.</div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ background:"#0E131A", border:"1px solid #1A222D", borderRadius:14, padding:"28px", textAlign:"left" as const, marginBottom:8 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+        <input
+          type="text"
+          placeholder="Name (optional)"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          style={{ padding:"10px 14px", borderRadius:8, background:"#0B0F15", border:"1px solid #2A333F", color:"#C7D1DD", fontSize:13.5, outline:"none", fontFamily:"inherit" }}
+        />
+        <input
+          type="email"
+          placeholder="E-Mail (optional)"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={{ padding:"10px 14px", borderRadius:8, background:"#0B0F15", border:"1px solid #2A333F", color:"#C7D1DD", fontSize:13.5, outline:"none", fontFamily:"inherit" }}
+        />
+      </div>
+      <textarea
+        required
+        placeholder="Was denkst du? Was fehlt dir? Was läuft gut?"
+        value={message}
+        onChange={e => setMessage(e.target.value)}
+        rows={4}
+        style={{ width:"100%", padding:"10px 14px", borderRadius:8, background:"#0B0F15", border:"1px solid #2A333F", color:"#C7D1DD", fontSize:13.5, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" as const, marginBottom:12 }}
+      />
+      {status === "error" && (
+        <p style={{ fontSize:12, color:"#EF6461", marginBottom:10 }}>Fehler beim Senden — bitte nochmal versuchen.</p>
+      )}
+      <button
+        type="submit"
+        disabled={status === "loading"}
+        style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"11px 24px", borderRadius:9, background:"#58A6FF", border:"none", color:"#08111E", fontSize:14, fontWeight:700, cursor:"pointer", opacity: status === "loading" ? 0.7 : 1 }}
+      >
+        <i className="ph-bold ph-paper-plane-tilt" style={{ fontSize:15 }} />
+        {status === "loading" ? "Wird gesendet…" : "Feedback senden"}
+      </button>
+    </form>
+  );
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Dir = "LONG" | "SHORT" | "NEUTRAL";
@@ -724,43 +797,13 @@ export default function LandingPage() {
           <p style={{ fontSize:15.5, color:"#7E8B9C", maxWidth:480, margin:"0 auto 30px", lineHeight:1.65 }}>
             FX Terminal ist in der Beta. Was fehlt dir? Was funktioniert bereits gut? Schreib uns direkt — jede Meinung fliesst in die Entwicklung ein.
           </p>
-          {/* Testimonials */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14, marginBottom:36, textAlign:"left" as const }}>
-            {([
-              { name:"M. Brunner", flag:"🇨🇭", role:"Prop Trader, 3 Jahre", quote:"Endlich alles an einem Ort — COT, Makrodaten und Preise. Ich spare mir täglich 45 Minuten Recherche." },
-              { name:"L. Fischer", flag:"🇩🇪", role:"Retail Trader, EURUSD / GBPUSD", quote:"Der Wirtschaftskalender mit COT kombiniert ist ein Game Changer. So eine Übersicht hatte ich vorher nirgends." },
-              { name:"T. Meier",   flag:"🇦🇹", role:"Funded Trader, FTMO", quote:"Seit ich FX Terminal nutze, handle ich viel selektiver. Die Makrodaten geben mir einen klaren Bias für die Woche." },
-            ] as { name:string; flag:string; role:string; quote:string }[]).map(({ name, flag, role, quote }) => (
-              <div key={name} style={{ background:"#0E131A", border:"1px solid #1A222D", borderRadius:12, padding:"20px 22px" }}>
-                <div style={{ display:"flex", gap:5, marginBottom:14 }}>
-                  {[1,2,3,4,5].map(s => <span key={s} style={{ color:"#D8A430", fontSize:13 }}>★</span>)}
-                </div>
-                <p style={{ fontSize:13.5, color:"#C7D1DD", lineHeight:1.65, margin:"0 0 16px" }}>&ldquo;{quote}&rdquo;</p>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <div style={{ width:32, height:32, borderRadius:"50%", background:"rgba(88,166,255,.12)", border:"1px solid rgba(88,166,255,.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>{flag}</div>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:600, color:"#E7EDF5" }}>{name}</div>
-                    <div style={{ fontSize:11, color:"#566273" }}>{role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <a
-            href="mailto:feedback@fx-terminal.ch?subject=FX Terminal Feedback"
-            style={{ display:"inline-flex", alignItems:"center", gap:9, padding:"13px 26px", borderRadius:10, background:"transparent", border:"1px solid #2E3844", color:"#C7D1DD", fontSize:14, fontWeight:600, textDecoration:"none", transition:"border-color .2s" }}
-          >
-            <i className="ph-bold ph-paper-plane-tilt" style={{ fontSize:16 }} />
-            Feedback senden
-          </a>
-          <p style={{ fontSize:11.5, color:"#3F4A58", marginTop:14 }}>Kein Spam. Keine Weitergabe. Nur echtes Feedback.</p>
+          <FeedbackForm />
         </div>
       </section>
 
-      {/* ── FOOTER ── */}
+            {/* ── FOOTER ── */}
       <footer style={{ borderTop:"1px solid #161D27", background:"#0A0D12" }}>
-        <div style={{ maxWidth:1180, margin:"0 auto", padding:"34px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:20, flexWrap:"wrap" }}>
+        <div style={{ maxWidth:1180, margin:"0 auto", padding:"34px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:20, flexWrap:"wrap" as const }}>
           <div style={{ display:"flex", alignItems:"center", gap:9 }}>
             <i className="ph-bold ph-pulse" style={{ color:"#58A6FF", fontSize:16 }} />
             <span style={{ fontSize:13, color:"#8B98A8" }}>© 2026 FX Terminal</span>
