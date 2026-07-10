@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -25,9 +26,44 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // ── Auth: getUser mit Fehlerbehandlung ────────────────────────────────────
+  // Bei abgelaufenen / ungültigen Refresh-Tokens sauber zu /login redirecten
+  // statt mit einem 500-Fehler zu crashen.
+  let user: User | null = null;
+
+  try {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+      const isAuthError =
+        error.message?.includes("refresh_token_not_found") ||
+        error.message?.includes("invalid_grant") ||
+        error.message?.includes("Invalid Refresh Token") ||
+        (error as { code?: string }).code === "refresh_token_not_found";
+
+      if (isAuthError) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        url.search = "";
+        const redirect = NextResponse.redirect(url);
+        // Auth-Cookies löschen damit der User sauber neu einloggen kann
+        request.cookies.getAll().forEach((cookie) => {
+          if (cookie.name.startsWith("sb-") || cookie.name.includes("supabase")) {
+            redirect.cookies.delete(cookie.name);
+          }
+        });
+        return redirect;
+      }
+    }
+
+    user = data.user;
+  } catch {
+    // Unerwarteter Fehler → sauber zu Login
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   const { pathname } = request.nextUrl;
   const isPublic =
@@ -53,13 +89,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Admin-only routes (/admin/* and /scanner/*)
+  // ── Admin-Check: ADMIN_USER_IDS Env-Var ODER app_metadata.role = "admin" ─
+  // Beide Systeme werden akzeptiert — wer in Supabase als Admin markiert ist
+  // oder in der Env-Var steht, erhält vollen Zugriff ohne Abo-Prüfung.
   const adminIds = (process.env.ADMIN_USER_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const isAdminUser = user ? adminIds.includes(user.id) : false;
 
+  const isAdminUser = user
+    ? adminIds.includes(user.id) || user.app_metadata?.role === "admin"
+    : false;
+
+  // Scanner-Bereich: nur für Admins
   const isAdminRoute =
     pathname.startsWith("/admin") ||
     pathname.startsWith("/scanner");
@@ -71,7 +113,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Subscription check for logged-in non-admin users on protected routes
+  // ── Abo-Check für normale User ────────────────────────────────────────────
   if (user && !isPublic && !isAdminUser) {
     const { data: sub } = await supabase
       .from("subscriptions")
@@ -94,8 +136,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Journal-Bereich (inkl. Backtest/Strategie/Outlook/Kalender/Equity) ist Pro-exklusiv.
-    // Basic-Abonnenten werden mit Upsell-Hinweis auf /upgrade geschickt.
+    // Journal-Bereich ist Pro-exklusiv
     if (pathname.startsWith("/journal") && sub?.tier !== "pro") {
       const url = request.nextUrl.clone();
       url.pathname = "/upgrade";
@@ -109,6 +150,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon\.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
