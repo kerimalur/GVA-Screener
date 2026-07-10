@@ -142,13 +142,13 @@ export default function CalendarView() {
           {viewMode==="month" ? (
             <>
               {/* Weekday headers */}
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"10px",marginBottom:"10px"}}>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"6px",marginBottom:"6px"}}>
                 {weekdays.map((d)=>(
                   <div key={d} style={{textAlign:"center",fontSize:"11px",fontWeight:700,letterSpacing:"0.8px",color:"var(--color-faint)"}}>{d}</div>
                 ))}
               </div>
               {/* Day cells */}
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"10px"}}>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"6px"}}>
                 {calendarDays.map((day)=>{
                   const hasTrades = day.trades.length > 0;
                   const isWin = hasTrades && day.totalR >= 0;
@@ -168,12 +168,12 @@ export default function CalendarView() {
                       key={day.dateStr}
                       onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
                       style={{
-                        aspectRatio:"1.15",
-                        borderRadius:"12px",
+                        aspectRatio:"1",
+                        borderRadius:"10px",
                         background: bg,
                         border,
                         boxShadow,
-                        padding:"10px",
+                        padding:"8px",
                         display:"flex",
                         flexDirection:"column",
                         justifyContent:"space-between",
@@ -182,9 +182,9 @@ export default function CalendarView() {
                         transition:"background 120ms",
                       }}
                     >
-                      <span style={{fontSize:"12px",fontWeight:isSelected||day.isToday?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
+                      <span style={{fontSize:"11px",fontWeight:isSelected||day.isToday?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
                       {hasTrades && (
-                        <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",fontWeight:700,color:isWin?"var(--color-up)":"var(--color-down)",textAlign:"left"}}>
+                        <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"11px",fontWeight:700,color:isWin?"var(--color-up)":"var(--color-down)",textAlign:"left"}}>
                           {day.totalR>=0?"+":""}{day.totalR.toFixed(1)}R
                         </span>
                       )}
