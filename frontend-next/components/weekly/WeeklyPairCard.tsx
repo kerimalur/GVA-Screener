@@ -7,6 +7,17 @@ function fmtSigned(v: number | null | undefined, digits = 1, suffix = ""): strin
   return `${v > 0 ? "+" : ""}${v.toFixed(digits)}${suffix}`;
 }
 
+/** ISO-Kalenderwoche eines ISO-Datums (YYYY-MM-DD). */
+function isoWeek(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const firstDay = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
+}
+
 function flowCls(v: number | null | undefined): string {
   if (v === null || v === undefined) return "text-faint";
   return v > 0 ? "text-up" : v < 0 ? "text-down" : "text-muted";
@@ -66,6 +77,14 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
             title="Drift-Event (CPI/NFP/Zinsentscheid) in den letzten 7 Tagen"
           >
             ⚡ IN PLAY: {card.inPlay.join("+")}
+          </span>
+        )}
+        {card.signalWeeks !== null && card.signalSince && (
+          <span
+            className="text-[9px] font-mono text-faint border border-border/60 rounded px-1.5 py-0.5"
+            title={`Signal besteht seit KW ${isoWeek(card.signalSince)} (${new Date(card.signalSince).toLocaleDateString("de-DE")})`}
+          >
+            seit {card.signalWeeks}W · KW{isoWeek(card.signalSince)}
           </span>
         )}
         <span className="ml-auto text-[10px] font-mono text-faint" title="Signalstärke (Faktoren + Flow-Rotation)">

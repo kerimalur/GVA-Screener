@@ -58,6 +58,10 @@ export interface WeeklyPairCard {
   score: number;
   /** Vorformulierter Fundamental-Text (Wizard-Autofill) */
   fundamentalText: string;
+  /** Wochen in Folge, die dieses Signal (gleiche Richtung) schon besteht (aus Snapshots) */
+  signalWeeks: number | null;
+  /** Montag (ISO), seit dem das aktuelle Signal ununterbrochen besteht */
+  signalSince: string | null;
 }
 
 export interface WeeklyBtcCard {
@@ -103,7 +107,7 @@ function fmtSigned(v: number | null | undefined, digits = 1): string {
 
 /** Fundamental-Text einer Pair-Karte (Karte + Outlook-Wizard-Autofill). */
 function buildFundamentalText(
-  card: Omit<WeeklyPairCard, "fundamentalText" | "score">,
+  card: Omit<WeeklyPairCard, "fundamentalText" | "score" | "signalWeeks" | "signalSince">,
   usingTff: boolean,
 ): string {
   const lines: string[] = [];
@@ -153,7 +157,10 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
   const past9 = new Date(now.getTime() - 9 * 86_400_000).toISOString();
   const fredSince = new Date(now.getTime() - 400 * 86_400_000).toISOString().slice(0, 10);
 
-  const [dashboard, seasonality, eventsRes, meetingsRes, sentRes, fredSeries, btcTff, btcLegacy] =
+  // Signal-Historie der letzten ~30 Wochen für die "seit n Wochen"-Anzeige
+  const snapshotSince = new Date(now.getTime() - 30 * 7 * 86_400_000).toISOString().slice(0, 10);
+
+  const [dashboard, seasonality, eventsRes, meetingsRes, sentRes, fredSeries, btcTff, btcLegacy, snapRes] =
     await Promise.all([
       loadDashboardData(db),
       getSeasonalityStats(db),
@@ -178,7 +185,33 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
       getFredBatch(db, ["DFII10", "T10YIE"], fredSince),
       getTffSeriesBatch(db, [BTC_CFTC_CODE]),
       getCotSeriesBatch(db, [BTC_CFTC_CODE]),
+      db
+        .from("weekly_outlook_snapshots")
+        .select("instrument, week_start, direction")
+        .gte("week_start", snapshotSince)
+        .order("week_start", { ascending: false }),
     ]);
+
+  // Signal-Streak je Instrument: von der neuesten Woche rückwärts zählen,
+  // solange die Richtung gleich bleibt (und nicht null ist).
+  const snapsByInstrument = new Map<string, Array<{ week: string; direction: string | null }>>();
+  for (const r of snapRes.data ?? []) {
+    const arr = snapsByInstrument.get(r.instrument) ?? [];
+    arr.push({ week: r.week_start, direction: r.direction });
+    snapsByInstrument.set(r.instrument, arr);
+  }
+  function signalStreak(instrument: string, direction: "LONG" | "SHORT" | null) {
+    if (!direction) return { weeks: null as number | null, since: null as string | null };
+    const rows = snapsByInstrument.get(instrument) ?? []; // bereits absteigend nach Woche
+    let weeks = 0;
+    let since: string | null = null;
+    for (const row of rows) {
+      if (row.direction !== direction) break;
+      weeks++;
+      since = row.week;
+    }
+    return { weeks: weeks > 0 ? weeks : null, since };
+  }
 
   const nowIso = now.toISOString();
   const allEvents = (eventsRes.data ?? []).map(toWeeklyEvent);
@@ -225,7 +258,7 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
     const longPct = sentLatest.get(pairKey) ?? null;
     const oldPct = sentOldest.get(pairKey) ?? null;
 
-    const partial: Omit<WeeklyPairCard, "fundamentalText" | "score"> = {
+    const partial: Omit<WeeklyPairCard, "fundamentalText" | "score" | "signalWeeks" | "signalSince"> = {
       instrument: inst.instrument,
       displayName: inst.displayName,
       base,
@@ -253,10 +286,14 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
     const score =
       verdict.alignedCount * 10 + Math.min(Math.abs(flowGap), 10) + (partial.inPlay.length > 0 ? 3 : 0);
 
+    const streak = signalStreak(inst.instrument, verdict.direction);
+
     return {
       ...partial,
       score,
       fundamentalText: buildFundamentalText(partial, usingTff),
+      signalWeeks: streak.weeks,
+      signalSince: streak.since,
     };
   })
     .filter((c): c is WeeklyPairCard => c !== null)

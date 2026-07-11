@@ -3,7 +3,7 @@ import StrengthPanel from "@/components/dashboard/StrengthPanel";
 import ScreenerPanel from "@/components/dashboard/ScreenerPanel";
 import CbSpectrumPanel from "@/components/dashboard/CbSpectrumPanel";
 import RiskGaugePanel from "@/components/dashboard/RiskGaugePanel";
-import CurrencyBiasPanel from "@/components/dashboard/CurrencyBiasPanel";
+import CurrencyCockpit from "@/components/dashboard/CurrencyCockpit";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadDashboardData } from "@/lib/data/dashboard";
@@ -51,6 +51,13 @@ export default async function Page() {
         </Panel>
       )}
 
+      <Panel
+        title="Währungs-Cockpit"
+        subtitle="8 Währungen im Überblick — Bias (4 Faktoren) · COT · Zinsen · Retail · Saisonalität · High-Impact-News. Zeile aufklappen für Details."
+      >
+        <CurrencyCockpit rows={data.cockpit} extremeHi={hi} extremeLo={lo} />
+      </Panel>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <Panel
           title="Currency Strength Index"
@@ -87,13 +94,6 @@ export default async function Page() {
           <CbSpectrumPanel stances={data.stances} />
         </Panel>
       </div>
-
-      <Panel
-        title="Währungs-Kompass"
-        subtitle="Long/Short-Bias je Währung aus 4 Faktoren (COT-Flow, Leitzins-Trend, CB-Stance, Stärke) — Details per Klick"
-      >
-        <CurrencyBiasPanel biases={data.currencyBias} extremeHi={hi} extremeLo={lo} />
-      </Panel>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   type ScreenerInputs,
 } from "@/lib/calc/screenerReasoning";
 import { evaluateAllCurrencies, type CurrencyBias } from "@/lib/calc/currencyBias";
+import { buildCockpit, type CurrencyCockpitRow, type CockpitNews } from "@/lib/calc/currencyCockpit";
 import { G8_CURRENCIES, FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import { CONTRACT_BY_CCY } from "@/lib/constants/cftcContracts";
 import { seriesFor } from "@/lib/constants/fredSeries";
@@ -29,8 +30,14 @@ export interface DashboardData {
   cotFlows: Array<{ ccy: string } & CotFlowSummary>;
   /** Long/Short-Bias je Währung (4-Faktoren-Modell) für den Währungs-Kompass */
   currencyBias: CurrencyBias[];
+  /** Angereicherte Cockpit-Zeilen je Währung (Bias + Retail + Saison + News) */
+  cockpit: CurrencyCockpitRow[];
   sentimentAge: string | null;
 }
+
+/** High-Impact-Events (CPI/NFP/Zinsentscheid) für die News-Flags im Cockpit. */
+const DRIFT_EVENT_RE =
+  /(CPI|Consumer Price|Inflation Rate|Nonfarm|Non-Farm|Payroll|Rate Decision|Interest Rate|FOMC|Monetary Policy|Cash Rate|Bank Rate)/i;
 
 /** Mehrere FRED-Serien in einem Query (gruppiert). */
 export async function getFredBatch(
@@ -76,8 +83,11 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     (x): x is string => Boolean(x),
   );
 
+  const now = new Date();
+  const next7 = new Date(now.getTime() + 7 * 86_400_000).toISOString();
+
   // Alle unabhängigen Blöcke parallel — statt sequenzieller Roundtrips
-  const [priceRows, rateSeries, vixSeries, cotByCode, tffByCode, seasonalityByInstrument, sentRes, stanceRes] =
+  const [priceRows, rateSeries, vixSeries, cotByCode, tffByCode, seasonalityByInstrument, sentRes, stanceRes, eventsRes] =
     await Promise.all([
       pagedSelect<{ instrument: string; date: string; close: number }>(
         db,
@@ -95,8 +105,15 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
         .from("sentiment_snapshots")
         .select("pair, captured_at, long_pct")
         .order("captured_at", { ascending: false })
-        .limit(60),
+        .limit(120),
       db.from("cb_stance").select("*"),
+      db
+        .from("calendar_events")
+        .select("title, currency, event_time")
+        .eq("impact", "High")
+        .gte("event_time", now.toISOString())
+        .lte("event_time", next7)
+        .order("event_time"),
     ]);
 
   const closesByInstrument = new Map<string, number[]>();
@@ -201,12 +218,29 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     strength,
   });
 
+  // News-Flags je Währung (High-Impact, nächste 7 Tage)
+  const newsByCcy = new Map<string, CockpitNews[]>();
+  for (const e of eventsRes.data ?? []) {
+    if (!e.currency) continue;
+    const arr = newsByCcy.get(e.currency) ?? [];
+    arr.push({ title: e.title, date: e.event_time, drift: DRIFT_EVENT_RE.test(e.title) });
+    newsByCcy.set(e.currency, arr);
+  }
+
+  const cockpit = buildCockpit(currencyBias, {
+    sentimentByPair,
+    seasonalityByInstrument,
+    newsByCcy,
+    currentMonth: now.getMonth() + 1,
+  });
+
   return {
     strength,
     risk,
     stances,
     verdicts,
     currencyBias,
+    cockpit,
     cotPercentiles: [...cotPercentileByCcy.entries()].map(([ccy, percentile]) => ({
       ccy,
       percentile,
