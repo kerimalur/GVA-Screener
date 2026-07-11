@@ -8,6 +8,8 @@ export interface NavItem {
 export interface NavGroup {
   title: string;
   items: NavItem[];
+  /** eingeklappt per Default; Zustand wird in localStorage gemerkt */
+  collapsible?: boolean;
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -16,13 +18,19 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
+      { href: "/vergleich", label: "Vergleich", icon: "ph-chart-scatter" },
+    ],
+  },
+  {
+    title: "Details",
+    collapsible: true,
+    items: [
       { href: "/cot", label: "COT-Analyse", icon: "ph-chart-line-up" },
       { href: "/makro", label: "Makro & Zinsen", icon: "ph-bank" },
       { href: "/sentiment", label: "Retail Sentiment", icon: "ph-users-three" },
       { href: "/intermarket", label: "Intermarket", icon: "ph-arrows-left-right" },
       { href: "/saisonalitaet", label: "Saisonalitaet", icon: "ph-calendar-dots" },
       { href: "/kalender", label: "Kalender", icon: "ph-calendar-check" },
-      { href: "/vergleich", label: "Vergleich", icon: "ph-chart-scatter" },
     ],
   },
   {

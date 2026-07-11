@@ -7,6 +7,8 @@ import { NAV_GROUPS } from "./nav";
 import SignalsBadge from "./SignalsBadge";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
+const OPEN_GROUPS_KEY = "nav_open_groups";
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -15,6 +17,29 @@ export default function Sidebar() {
   const [userEmail, setUserEmail] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  // Gemerkten Auf/Zu-Zustand laden (nur für collapsible-Gruppen relevant)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(OPEN_GROUPS_KEY);
+      if (raw) setOpenGroups(JSON.parse(raw));
+    } catch {
+      // defekter Eintrag → Default (zu)
+    }
+  }, []);
+
+  const toggleGroup = (title: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [title]: !prev[title] };
+      try {
+        localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify(next));
+      } catch {
+        // localStorage nicht verfügbar → Zustand nur für die Session
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const supabase = createBrowserSupabase();
@@ -88,7 +113,14 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", padding: "0 14px" }}>
-        {NAV_GROUPS.map((group, gi) => (
+        {NAV_GROUPS.map((group, gi) => {
+          const hasActiveItem = group.items.some(
+            (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+          );
+          // Aktive Route in zugeklappter Gruppe → trotzdem aufklappen
+          const isOpen = !group.collapsible || openGroups[group.title] === true || hasActiveItem;
+
+          return (
           <div
             key={group.title}
             data-tour-group={group.title}
@@ -97,14 +129,39 @@ export default function Sidebar() {
               padding: gi > 0 ? "16px 0 18px 0" : "0 0 18px 0",
             }}
           >
-            <div style={{
-              fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
-              color: "var(--color-faint)", padding: "0 10px 8px 10px",
-              textTransform: "uppercase",
-            }}>
-              {group.title}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+            {group.collapsible ? (
+              <button
+                onClick={() => toggleGroup(group.title)}
+                style={{
+                  width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
+                  color: "var(--color-faint)", padding: "0 10px 8px 10px",
+                  textTransform: "uppercase",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span>{group.title}</span>
+                <i
+                  className="ph-bold ph-caret-down"
+                  style={{
+                    fontSize: "11px",
+                    transform: isOpen ? "rotate(180deg)" : "none",
+                    transition: "transform 150ms",
+                  }}
+                />
+              </button>
+            ) : (
+              <div style={{
+                fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
+                color: "var(--color-faint)", padding: "0 10px 8px 10px",
+                textTransform: "uppercase",
+              }}>
+                {group.title}
+              </div>
+            )}
+            <div style={{ display: isOpen ? "flex" : "none", flexDirection: "column", gap: "1px" }}>
               {group.items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 const locked = item.requiresAdmin && !isAdmin;
@@ -167,7 +224,8 @@ export default function Sidebar() {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* User + Logout */}
