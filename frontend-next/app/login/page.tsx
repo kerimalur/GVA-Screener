@@ -2,7 +2,6 @@
 
 import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 function LoginContent() {
@@ -76,16 +75,6 @@ function LoginContent() {
       className="min-h-screen flex flex-col bg-[#0b0f14] text-[#c9d3df]"
       style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
     >
-      {/* Zurück-Link */}
-      <div className="px-6 pt-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-[#5f6b7a] hover:text-[#c9d3df] transition-colors"
-        >
-          ← Zurück zur Startseite
-        </Link>
-      </div>
-
       {/* Zentrierter Login-Block */}
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
@@ -226,14 +215,6 @@ function LoginContent() {
             )}
           </div>
 
-          {/* Footer */}
-          <p className="text-[11px] text-[#3d4a5a] text-center mt-6 leading-relaxed">
-            Mit der Anmeldung stimmst du unseren{" "}
-            <Link href="/agb" className="underline hover:text-[#8b96a5] transition-colors">AGB</Link>
-            {" "}und der{" "}
-            <Link href="/datenschutz" className="underline hover:text-[#8b96a5] transition-colors">Datenschutzerklärung</Link>
-            {" "}zu.
-          </p>
         </div>
       </div>
     </div>

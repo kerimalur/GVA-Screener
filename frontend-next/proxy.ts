@@ -69,11 +69,7 @@ export async function proxy(request: NextRequest) {
   const isPublic =
     pathname === "/" ||
     pathname.startsWith("/login") ||
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/upgrade") ||
-    pathname.startsWith("/agb") ||
-    pathname.startsWith("/datenschutz") ||
-    pathname.startsWith("/impressum");
+    pathname.startsWith("/auth");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -111,43 +107,6 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
-  }
-
-  // ── Abo-Check für normale User ────────────────────────────────────────────
-  if (user && !isPublic && !isAdminUser) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status, current_period_end, tier")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const now = new Date();
-    const periodValid =
-      sub?.current_period_end != null
-        ? new Date(sub.current_period_end) > now
-        : true; // Kein Datum → Webhook noch nicht geschrieben, Benefit of Doubt
-
-    const isActive =
-      (sub?.status === "active" && periodValid) ||
-      (sub?.status === "trialing" && periodValid) ||
-      (sub?.status === "past_due" &&
-        sub.current_period_end != null &&
-        new Date(sub.current_period_end) > now);
-
-    if (!isActive) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/upgrade";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
-
-    // Journal-Bereich ist Pro-exklusiv
-    if (pathname.startsWith("/journal") && sub?.tier !== "pro") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/upgrade";
-      url.search = "?tier=pro";
-      return NextResponse.redirect(url);
-    }
   }
 
   return response;
