@@ -78,12 +78,19 @@ Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
 - Verifiziert: Build sauber, Deploy READY, Routen 307→Login. Rendering hinter Auth
   noch nicht visuell gesichtet (kein Login lokal) — bei nächstem Login prüfen.
 
-## Nächste Schritte
-1. **Aufgabe 2 — Erklär-Bericht** (`docs/analyse-leitfaden.html`): Was bedeuten
-   COT-Perzentil/Flow, Makro, Retail, Intermarket — und was fließt in Signale ein
-   (Weekly: 5 Faktoren; Currency-Bias: 4; Intermarket/Kalender: nur Anzeige).
-3. **Backtest-/ML-Modul:** Snapshots × price_daily → Trefferquote nach 1–4 Wochen,
-   je Währung/Faktor/aligned_count. Erst bauen, wenn 1+2 stehen.
+## Aufgabe 2 — ERLEDIGT (2026-07-11, Commit f2ee336)
+- **/leitfaden** (Nav: System) — statische Erklär-Seite. Pro Datenquelle (COT,
+  Makro/Zinsen, Retail, Saisonalität, Intermarket, Kalender) konkrete Lese-Regeln
+  mit den echten Code-Schwellenwerten + "So liest du das" / "So handelst du danach".
+  Oben Übersicht: Signale = Pair-Screener (5 Faktoren) + Währungs-Bias (4);
+  nur Anzeige = Intermarket, Kalender, Makro-Detail, Cockpit-Zusätze.
+
+## Nächster Schritt — Backtest-/ML-Modul
+Snapshots (`weekly_outlook_snapshots`) × `price_daily` → Trefferquote nach 1–4
+Wochen, getrennt nach Währung/Faktor/`aligned_count` (2 vs 3 vs 4). Auf /ml-Seite
+ausbauen. Backfill-Cap in scripts/backfill-outlooks.mts + admin-route ggf. auf
+~780 Wochen anheben (Daten bis 2006/2007; sauber ab ~2011 nach 260W-Warmup).
+Retail-Faktor historisch nicht verfügbar → nur 4 Faktoren.
 
 ## Arbeitsweise
 - Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
