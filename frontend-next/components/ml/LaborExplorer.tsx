@@ -15,6 +15,36 @@ import { G8_CURRENCIES } from "@/lib/constants/instruments";
 const D_OFF = 2; // Offset der Faktor-Dirs in der Zeile
 const R_OFF = 7; // Offset der Returns
 
+type MatchMode = "unanimous" | "majority";
+
+/**
+ * Richtung einer Faktor-Auswahl für eine Zeile.
+ * unanimous: alle gewählten Faktoren müssen exakt gleich zeigen (streng, kleines n).
+ * majority: Mehrheit der gewählten Faktoren muss übereinstimmen — mind. die Hälfte
+ * (aufgerundet) aller gewählten Faktoren, nicht nur der gefeuerten. Lockert die
+ * UND-Verknüpfung kontrolliert, gleiches Prinzip wie im Tool-Verdict selbst
+ * (≥2 gleichgerichtete Faktoren + Mehrheit).
+ */
+function matchDirection(row: Array<number | null>, idx: number[], mode: MatchMode): number {
+  if (mode === "unanimous") {
+    const first = row[D_OFF + idx[0]] as number;
+    if (first === 0) return 0;
+    for (const i of idx) if (row[D_OFF + i] !== first) return 0;
+    return first;
+  }
+  let longs = 0;
+  let shorts = 0;
+  for (const i of idx) {
+    const d = row[D_OFF + i] as number;
+    if (d === 1) longs++;
+    else if (d === -1) shorts++;
+  }
+  const need = Math.ceil(idx.length / 2);
+  if (longs > shorts && longs >= need) return 1;
+  if (shorts > longs && shorts >= need) return -1;
+  return 0;
+}
+
 interface Stat {
   n: number;
   wr: number | null; // Trefferquote %
@@ -62,6 +92,7 @@ export default function LaborExplorer() {
   const [periodYears, setPeriodYears] = useState(8);
   const [selected, setSelected] = useState<Set<number>>(new Set([0, 3])); // Zins + Saison
   const [minN, setMinN] = useState(30);
+  const [matchMode, setMatchMode] = useState<MatchMode>("unanimous");
 
   useEffect(() => {
     fetch("/api/ml/matrix")
@@ -79,7 +110,7 @@ export default function LaborExplorer() {
 
   const hIdx = R_OFF + matrix?.horizons.indexOf(horizon)!;
 
-  // — Auswahl-Kombination (einstimmig gleichgerichtet) —
+  // — Auswahl-Kombination —
   const comboStat = useMemo(() => {
     if (!matrix || selected.size === 0) return makeStat(0, 0, 0);
     const idx = [...selected];
@@ -87,20 +118,17 @@ export default function LaborExplorer() {
       hits = 0,
       sum = 0;
     for (const r of rows) {
-      const first = r[D_OFF + idx[0]] as number;
-      if (first === 0) continue;
-      let ok = true;
-      for (const i of idx) if (r[D_OFF + i] !== first) { ok = false; break; }
-      if (!ok) continue;
+      const dir = matchDirection(r, idx, matchMode);
+      if (dir === 0) continue;
       const ret = r[hIdx];
       if (ret === null) continue;
-      const signed = first * (ret as number);
+      const signed = dir * (ret as number);
       n++;
       if (signed > 0) hits++;
       sum += signed;
     }
     return makeStat(n, hits, sum);
-  }, [matrix, rows, selected, hIdx]);
+  }, [matrix, rows, selected, hIdx, matchMode]);
 
   // — Pair-Tabelle für die Auswahl —
   const pairStats = useMemo(() => {
@@ -108,14 +136,11 @@ export default function LaborExplorer() {
     const idx = [...selected];
     const acc = new Map<number, { n: number; hits: number; sum: number }>();
     for (const r of rows) {
-      const first = r[D_OFF + idx[0]] as number;
-      if (first === 0) continue;
-      let ok = true;
-      for (const i of idx) if (r[D_OFF + i] !== first) { ok = false; break; }
-      if (!ok) continue;
+      const dir = matchDirection(r, idx, matchMode);
+      if (dir === 0) continue;
       const ret = r[hIdx];
       if (ret === null) continue;
-      const signed = first * (ret as number);
+      const signed = dir * (ret as number);
       const pi = r[1] as number;
       const a = acc.get(pi) ?? { n: 0, hits: 0, sum: 0 };
       a.n++;
@@ -126,7 +151,7 @@ export default function LaborExplorer() {
     return [...acc.entries()]
       .map(([pi, a]) => ({ pair: matrix.pairs[pi].replace("_", "/"), stat: makeStat(a.n, a.hits, a.sum) }))
       .sort((a, b) => (b.stat.wr ?? -1) - (a.stat.wr ?? -1));
-  }, [matrix, rows, selected, hIdx]);
+  }, [matrix, rows, selected, hIdx, matchMode]);
 
   // — Währung × Faktor-Heatmap (Einzelfaktoren) —
   const heatmap = useMemo(() => {
@@ -173,14 +198,11 @@ export default function LaborExplorer() {
         hits = 0,
         sum = 0;
       for (const r of rows) {
-        const first = r[D_OFF + idx[0]] as number;
-        if (first === 0) continue;
-        let ok = true;
-        for (const i of idx) if (r[D_OFF + i] !== first) { ok = false; break; }
-        if (!ok) continue;
+        const dir = matchDirection(r, idx, matchMode);
+        if (dir === 0) continue;
         const ret = r[hIdx];
         if (ret === null) continue;
-        const signed = first * (ret as number);
+        const signed = dir * (ret as number);
         n++;
         if (signed > 0) hits++;
         sum += signed;
@@ -191,7 +213,7 @@ export default function LaborExplorer() {
       }
     }
     return out.sort((a, b) => (b.stat.wr ?? -1) - (a.stat.wr ?? -1));
-  }, [matrix, rows, hIdx, minN]);
+  }, [matrix, rows, hIdx, minN, matchMode]);
 
   if (error) {
     return <p className="text-down text-sm font-mono">Matrix-Ladefehler: {error}</p>;
@@ -199,7 +221,7 @@ export default function LaborExplorer() {
   if (!matrix) {
     return (
       <p className="text-muted text-sm font-mono animate-pulse">
-        Lade Faktor-Matrix (8 Jahre × 28 Pairs — erster Aufruf kann 20–30 s dauern) …
+        Lade Faktor-Matrix (~17 Jahre × 28 Pairs — erster Aufruf kann 20–30 s dauern) …
       </p>
     );
   }
@@ -234,7 +256,7 @@ export default function LaborExplorer() {
         <div>
           <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">Zeitraum</div>
           <div className="flex gap-1.5">
-            {[2, 4, 8].map((y) => (
+            {[2, 4, 8, 17].map((y) => (
               <button key={y} className={seg(periodYears === y)} onClick={() => setPeriodYears(y)}>
                 {y} J
               </button>
@@ -243,8 +265,19 @@ export default function LaborExplorer() {
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">
-            Faktoren (einstimmige Kombination)
+            Kombi-Regel — warum n manchmal klein ist
           </div>
+          <div className="flex gap-1.5">
+            <button className={seg(matchMode === "unanimous")} onClick={() => setMatchMode("unanimous")}>
+              Einstimmig
+            </button>
+            <button className={seg(matchMode === "majority")} onClick={() => setMatchMode("majority")}>
+              Mehrheit
+            </button>
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">Faktoren</div>
           <div className="flex gap-1.5 flex-wrap">
             {matrix.factors.map((f, i) => (
               <button key={f} className={seg(selected.has(i))} onClick={() => toggleFactor(i)}>
@@ -412,7 +445,9 @@ export default function LaborExplorer() {
       )}
 
       <p className="text-[11px] text-faint leading-relaxed border-t border-border/50 pt-3">
-        Kombination feuert, wenn alle gewählten Faktoren dieselbe Richtung zeigen (einstimmig).
+        Kombi-Regel: {matchMode === "unanimous"
+          ? "Einstimmig — alle gewählten Faktoren müssen exakt gleich zeigen (streng, kleineres n je Pair)."
+          : "Mehrheit — mind. die Hälfte der gewählten Faktoren muss übereinstimmen (lockerer, mehr n)."}{" "}
         Treffer = Pair-Close nach {horizon} Wochen in Signalrichtung. COT-NC = Non-Commercials,
         COT-C = Commercials (Hedger) — gleiche Flow-Logik (4W-Δ in % OI, Schwelle ±4).
         Signifikanz: 95 %-Konfidenz gegen Münzwurf; kleine Stichproben und nicht-signifikante

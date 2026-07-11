@@ -8,7 +8,15 @@ import type { SeriesPoint } from "@/lib/calc/seriesMath";
 import { G8_CURRENCIES, FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import { CONTRACT_BY_CCY } from "@/lib/constants/cftcContracts";
 import { seriesFor } from "@/lib/constants/fredSeries";
-import { pastMondays, BACKTEST_WEEKS } from "./outlookSnapshots";
+import { pastMondays } from "./outlookSnapshots";
+
+/**
+ * Labor-Historie ist von weekly_outlook_snapshots UNABHÄNGIG (Rohdaten direkt
+ * gelesen) — kann daher deutlich weiter zurück als BACKTEST_WEEKS (8J).
+ * Alle 28 Pairs haben price_daily spätestens ab Okt 2008 (verifiziert) →
+ * 900 Wochen ≈ 17,3 Jahre bleibt sicher innerhalb der Datenabdeckung.
+ */
+export const LABOR_WEEKS = 900;
 
 /**
  * Faktor-Matrix fürs ML-Labor: pro Woche × FX-Pair die Richtungssignale ALLER
@@ -92,7 +100,7 @@ function closeAtOrAfter(
 
 export async function buildFactorMatrix(
   db: SupabaseClient,
-  weeksCount = BACKTEST_WEEKS,
+  weeksCount = LABOR_WEEKS,
 ): Promise<FactorMatrix> {
   const weeks = pastMondays(weeksCount);
   const since = new Date(new Date(weeks[0] + "T00:00:00Z").getTime() - 400 * 86_400_000)

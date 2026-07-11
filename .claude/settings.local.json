@@ -1,7 +1,35 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(mkdir -p marketing-verkauf-backup/frontend-next/app/api marketing-verkauf-backup/frontend-next/lib/constants marketing-verkauf-backup/frontend-next/lib marketing-verkauf-backup/frontend-next/components marketing-verkauf-backup/frontend-next/app/api/auth)",
+      "Bash(git mv *)",
+      "Bash(mv frontend-next/app/LandingPage.tsx marketing-verkauf-backup/frontend-next/app/)",
+      "Bash(mv frontend-next/app/upgrade marketing-verkauf-backup/frontend-next/app/)",
+      "Bash(mv frontend-next/app/agb marketing-verkauf-backup/frontend-next/app/)",
+      "Bash(git rm *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"/ -> %{http_code} %{redirect_url}\\\\n\" http://localhost:3177/)",
+      "Bash(curl -s -o /dev/null -w \"/upgrade -> %{http_code} %{redirect_url}\\\\n\" http://localhost:3177/upgrade)",
+      "Bash(curl -s -o /dev/null -w \"/login -> %{http_code}\\\\n\" http://localhost:3177/login)",
+      "Bash(curl -s -o /dev/null -w \"/dashboard -> %{http_code} %{redirect_url}\\\\n\" http://localhost:3177/dashboard)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__get_project_url",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3177,3178 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -Confirm:$false }; \"done\")",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(git push *)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_projects",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "Bash(git add *)",
+      "Bash(git commit --quiet -m 'docs: STATUS.md auf Stand 2026-07-11 — privater Fokus, ML-Fundament, offene Punkte *)",
+      "Bash(git commit --quiet -m 'docs: STATUS.md — Aufgabe 2 erledigt, nächster Schritt Backtest-Modul *)",
+      "Bash(git commit --quiet -m 'docs: STATUS.md — Backtest-Modul + 8 Jahre erledigt, Backfill-Hinweis *)",
+      "mcp__claude_ai_Supabase__list_organizations"
     ]
   }
 }

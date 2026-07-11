@@ -8,7 +8,7 @@ export const maxDuration = 300;
 
 /**
  * GET /api/ml/matrix — Faktor-Matrix fürs ML-Labor.
- * Rechenintensiv (8J Rohdaten) → 1h Server-Cache; Client cached zusätzlich.
+ * Rechenintensiv (~17J Rohdaten) → 1h Server-Cache; Client cached zusätzlich.
  */
 const getMatrix = unstable_cache(
   async () => {
@@ -18,7 +18,7 @@ const getMatrix = unstable_cache(
       return null;
     }
   },
-  ["ml-factor-matrix-v1"],
+  ["ml-factor-matrix-v2"],
   { revalidate: 3600 },
 );
 

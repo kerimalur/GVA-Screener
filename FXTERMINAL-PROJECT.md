@@ -5,6 +5,83 @@
 
 ## Stand: 2026-07-10
 
+## AGENDA für 2026-07-11 (morgen früh, von Kerim am 10.07. abends festgelegt)
+
+1. **Daten gemeinsam analysieren:** Bestand durchgehen und entscheiden, welche
+   verarbeiteten (nicht nur angezeigten) Daten es wirklich braucht.
+   Grundlage: Kunden-Review unten + `docs/weekly-outlook-roadmap.md` (Δ/Flow-These,
+   FRED-Stale-Audit, TFF-COT).
+2. **Neue Seite „Weekly-Outlook-Rückblick":** Archiv der Weekly Outlooks der letzten
+   Wochen + Vergleich mit dem tatsächlichen Marktverlauf (was hat der Score gesagt vs.
+   was ist im Live-Markt passiert). Deckt sich mit dem Track-Record-Feature aus dem
+   Review — kann dasselbe Fundament nutzen. Hinweis: dafür müssen Weekly-Scores
+   historisiert werden (Snapshot-Tabelle), sonst gibt es rückwirkend nichts zu zeigen
+   → je früher der Snapshot-Cron läuft, desto mehr Historie beim Launch.
+3. **Onboarding aktiv statt passiv umbauen:** Die Tour soll den Nutzer Dinge TUN lassen
+   (z.B. Journal-Konto anlegen, ersten Outlook aus dem Weekly erstellen, eine eigene
+   Confluence anlegen, Pair im Vergleich öffnen) — nicht nur Kästchen zeigen und
+   beschreiben. Heutige Tour (Spotlight/beschreibend) ist die Basis, wird erweitert.
+4. **Differenzierung im Blick behalten:** Das Terminal darf am Ende nicht „eine von
+   vielen Trading-Softwares" sein. Bei jeder Entscheidung fragen: Was macht es eigen?
+   (Kandidaten: transparent nachrechenbare Signale + ehrlicher Track-Record statt
+   Blackbox-Hype, Analyse→Outlook→Journal als geschlossener Kreislauf, deutschsprachig
+   für DACH, Sonntagabend-Workflow als Kernritual.)
+
+## 2026-07-10 — Kunden-Perspektive-Review (komplette Produktanalyse)
+
+> Ziel des Reviews: Beurteilen, ob ein Swing-Trader in CH/DACH/EU das Terminal
+> kauft und behält (CHF 24.95/34.95 pro Monat). Zum Nachkontrollieren morgen: Checkboxen unten.
+
+### Kernbefund
+
+- **Mehrwert ist real:** Das Terminal verarbeitet Daten, statt sie nur anzuzeigen
+  (Screener 5-Kriterien-Logik, Perzentile, Risk-Regime-Score, Weekly-Scoring,
+  COT-Backtests, CB-Spektrum, Journal-Statistiken). Einzeln gibt es alles gratis
+  (Tradingster, Myfxbook, ForexFactory) — der Kaufgrund ist Aggregation + Verdichtung
+  + Journal-Integration. Direktes Vergleichsprodukt: EdgeFinder (~$97/Mt) → Preis konkurrenzfähig.
+- **Grösstes Problem ist NICHT das Produkt**, sondern: (a) fehlender Beweis, dass die
+  Signale historisch funktionieren, (b) keine Testmöglichkeit vor dem Kauf,
+  (c) kein Marketing-Kanal → niemand findet es.
+- **Antwort auf „brauchen wir mehr verarbeitete Daten?":** Nein, nicht mehr Module.
+  Was fehlt: Track-Record (Beweis), Δ/Flow-Logik (Roadmap-These), Alerts (Retention).
+- **Design:** Terminal-Ästhetik konsistent und hochwertig; offene Punkte nur
+  Mobile-Tauglichkeit (Sidebar fix 248px) und Landing-Mockup statt echtem Demo-Video.
+- **Struktur:** Navigation logisch (Analyse → Scanner → Journal → System),
+  Basic/Pro-Schnitt sinnvoll (Journal = Pro-Differenzierer). Fehlt: Upsell-Teaser
+  für Basic-User auf gesperrten Journal-Seiten (aktuell nur Redirect).
+- **Marketing = grösste Baustelle:** vercel.app-Subdomain schadet Vertrauen beim
+  Bezahlen; Fake-Testimonials entfernt (richtig!), aber noch kein echter Social Proof;
+  kein Trial; kein Kanal. `docs/funktionsuebersicht.md` ist exzellent und die fertige
+  Grundlage für Blog/SEO/Produktseite.
+
+### Priorisierte Massnahmen (aus Kundensicht)
+
+1. **Track-Record sichtbar machen** — historische Trefferquote von Screener/Weekly-Score
+   im Produkt + auf der Landing Page (Forward-Return-Infra existiert). ~1–2 Tage. DAS Verkaufsargument.
+2. **Trial** — 7 Tage via Stripe `trial_period_days` (oder Demo-Modus, verzögerte Daten). ~2–4 Std.
+3. **Domain** — fx-terminal.ch aktivieren (~CHF 15/Jahr). ~1–2 Std.
+4. **Alerts + Sonntags-Digest** — E-Mail/Telegram bei neuem Signal (Resend Free-Tier). ~1–2 Tage. Retention!
+5. **Datenqualität** — FRED/OECD-Stale-Audit + TFF-COT (Roadmap Schritt 1+2),
+   CB-Stance-Pflegeprozess vereinfachen (60 % redaktionell = stille Degradierung). ~2–3 Tage.
+6. **Marketing-Kanal** — YouTube/X: echte Sonntagsanalyse MIT dem Terminal; laufend, kostenlos.
+7. Nice-to-have: Beta-Programm für echte Testimonials, Demo-Video auf Landing,
+   Basic→Pro-Upsell-Teaser, Δ/Flow-Screener, Mobile, EN-Version (später; DE = USP in DACH).
+8. **Supabase Pro ($25/Mt)** sobald erste zahlende Kunden — Free-Tier-Pausierung wäre Totalausfall.
+
+### Offene Fragen — morgen kontrollieren
+
+- [ ] Track-Record-Feature: Umfang entschieden? (Nur Screener oder auch Weekly-Score? Wo anzeigen?)
+- [ ] Trial: ja/nein? Länge? (Achtung: Zusammenspiel mit EU-Widerrufs-Checkbox prüfen)
+- [ ] Domain fx-terminal.ch: jetzt kaufen/verbinden oder weiter warten?
+- [ ] Alerts: E-Mail oder Telegram zuerst? (Telegram-Bot-Erfahrung aus GVA-Screener vorhanden)
+- [ ] CB-Stance-Pflege: Wer pflegt sie wie oft? Automatisierbar?
+- [ ] Beta-Programm: 5–10 Trader rekrutieren — woher? (Discord/X/Bekannte)
+- [ ] Marketing-Kanal: welcher zuerst (YouTube vs. X vs. TikTok) und welcher Rhythmus?
+- [ ] Supabase Pro: ab wann upgraden? (Spätestens beim ersten zahlenden Kunden)
+- [ ] Mobile: reicht Landing+Dashboard responsive, oder alles?
+- [ ] Aus früherem Log noch offen: ADMIN_USER_IDS bereinigen, OANDA Live vs. Practice
+      in Vercel prüfen, Impressum-Adresse.
+
 ## 2026-07-10 — Onboarding-Tour + Fixes (umgesetzt)
 
 - **Onboarding-Tour (neu):** `components/onboarding/OnboardingTour.tsx`, eingebunden in
