@@ -12,10 +12,13 @@ import { G8_CURRENCIES } from "@/lib/constants/instruments";
  * d* ∈ {-1,0,1} je Faktor, r* = Pair-Rendite % (LONG-Sicht) je Horizont.
  */
 
-const D_OFF = 2; // Offset der Faktor-Dirs in der Zeile
-const R_OFF = 7; // Offset der Returns
+const D_OFF = 2; // Offset der binären Faktor-Dirs
+const Z_OFF = 7; // Offset der kontinuierlichen z-Scores
+const R_OFF = 12; // Offset der Returns
 
 type MatchMode = "unanimous" | "majority";
+type Sample = "full" | "is" | "oos";
+type Weighting = "equal" | "edge";
 
 /**
  * Richtung einer Faktor-Auswahl für eine Zeile.
@@ -93,6 +96,8 @@ export default function LaborExplorer() {
   const [selected, setSelected] = useState<Set<number>>(new Set([0, 3])); // Zins + Saison
   const [minN, setMinN] = useState(30);
   const [matchMode, setMatchMode] = useState<MatchMode>("unanimous");
+  const [splitPct, setSplitPct] = useState(60); // In-Sample-Anteil (%)
+  const [weighting, setWeighting] = useState<Weighting>("edge");
 
   useEffect(() => {
     fetch("/api/ml/matrix")
@@ -185,6 +190,103 @@ export default function LaborExplorer() {
       cells: (map.get(ccy) ?? []).map((a) => makeStat(a.n, a.hits, a.sum)),
     }));
   }, [matrix, rows, hIdx]);
+
+  // — Walk-Forward: z-Score-Composite, Gewichte auf In-Sample gelernt,
+  //   out-of-sample getestet (verhindert Overfitting) —
+  const walkForward = useMemo(() => {
+    if (!matrix || selected.size === 0) return null;
+    const idx = [...selected];
+
+    const weekIdxs = rows.map((r) => r[0] as number);
+    if (weekIdxs.length === 0) return null;
+    const minW = Math.min(...weekIdxs);
+    const maxW = Math.max(...weekIdxs);
+    const splitW = minW + Math.round((maxW - minW) * (splitPct / 100));
+    const isRows = rows.filter((r) => (r[0] as number) < splitW);
+    const oosRows = rows.filter((r) => (r[0] as number) >= splitW);
+
+    // Kantengewicht je Faktor aus dem In-Sample: 2·(WR−0.5) ∈ [−1,1].
+    // Negativ = Faktor ist konträr → wird automatisch invertiert (löst #2).
+    const edgeWeights = idx.map((fi) => {
+      let n = 0,
+        hits = 0;
+      for (const r of isRows) {
+        const z = r[Z_OFF + fi] as number | null;
+        if (z === null || z === 0) continue;
+        const ret = r[hIdx];
+        if (ret === null) continue;
+        if (Math.sign(z) * (ret as number) > 0) hits++;
+        n++;
+      }
+      const wr = n > 0 ? hits / n : 0.5;
+      return Number((2 * (wr - 0.5)).toFixed(3));
+    });
+    const weights = weighting === "equal" ? idx.map(() => 1) : edgeWeights;
+
+    const compositeOf = (r: Array<number | null>): number | null => {
+      let comp = 0;
+      let any = false;
+      for (let k = 0; k < idx.length; k++) {
+        const z = r[Z_OFF + idx[k]] as number | null;
+        if (z === null) continue;
+        comp += weights[k] * z;
+        any = true;
+      }
+      return any ? comp : null;
+    };
+
+    const evalOn = (subset: Array<Array<number | null>>) => {
+      let n = 0,
+        hits = 0,
+        sum = 0;
+      for (const r of subset) {
+        const comp = compositeOf(r);
+        if (comp === null || comp === 0) continue;
+        const ret = r[hIdx];
+        if (ret === null) continue;
+        const signed = (comp > 0 ? 1 : -1) * (ret as number);
+        n++;
+        if (signed > 0) hits++;
+        sum += signed;
+      }
+      return makeStat(n, hits, sum);
+    };
+
+    // Konfidenz-Quintile (OOS): steigt die WR mit |Composite|? (löst #6)
+    const pts: Array<{ conf: number; signed: number }> = [];
+    for (const r of oosRows) {
+      const comp = compositeOf(r);
+      if (comp === null || comp === 0) continue;
+      const ret = r[hIdx];
+      if (ret === null) continue;
+      pts.push({ conf: Math.abs(comp), signed: (comp > 0 ? 1 : -1) * (ret as number) });
+    }
+    pts.sort((a, b) => a.conf - b.conf);
+    const buckets: Array<{ label: string; stat: Stat }> = [];
+    const Q = 5;
+    for (let b = 0; b < Q; b++) {
+      const lo = Math.floor((b * pts.length) / Q);
+      const hi = Math.floor(((b + 1) * pts.length) / Q);
+      let n = 0,
+        hits = 0,
+        sum = 0;
+      for (let i = lo; i < hi; i++) {
+        n++;
+        if (pts[i].signed > 0) hits++;
+        sum += pts[i].signed;
+      }
+      buckets.push({ label: `Q${b + 1}${b === Q - 1 ? " (stärkste)" : b === 0 ? " (schwächste)" : ""}`, stat: makeStat(n, hits, sum) });
+    }
+
+    return {
+      weights,
+      factorNames: idx.map((i) => matrix.factors[i]),
+      isStat: evalOn(isRows),
+      oosStat: evalOn(oosRows),
+      buckets,
+      splitWeek: matrix.weeks[splitW] ?? null,
+    };
+  }, [matrix, rows, selected, hIdx, splitPct, weighting]);
 
   // — Kombi-Leaderboard: alle Teilmengen ≥1 der 5 Faktoren —
   const leaderboard = useMemo(() => {
@@ -296,7 +398,126 @@ export default function LaborExplorer() {
             ))}
           </div>
         </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">Walk-Forward-Split</div>
+          <div className="flex gap-1.5">
+            {[50, 60, 70].map((s) => (
+              <button key={s} className={seg(splitPct === s)} onClick={() => setSplitPct(s)}>
+                {s}/{100 - s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">Gewichtung</div>
+          <div className="flex gap-1.5">
+            <button className={seg(weighting === "equal")} onClick={() => setWeighting("equal")}>
+              Gleich
+            </button>
+            <button className={seg(weighting === "edge")} onClick={() => setWeighting("edge")}>
+              Edge (IS)
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* ── Walk-Forward-Validierung (Composite aus z-Scores) ── */}
+      {walkForward && (
+        <div className="rounded border border-accent/30 bg-accent/5 p-3.5 space-y-3">
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
+            <div className="text-[12px] font-bold">
+              Walk-Forward-Composite ({horizon}W) —{" "}
+              <span className="text-muted font-normal">
+                {walkForward.factorNames.join(" + ")}, {weighting === "edge" ? "Edge-gewichtet" : "gleich gewichtet"}
+              </span>
+            </div>
+            {walkForward.splitWeek && (
+              <div className="text-[10px] text-faint font-mono">
+                Split: IS bis {new Date(walkForward.splitWeek).toLocaleDateString("de-CH")}, OOS danach
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-surface border border-border rounded p-3">
+              <div className="text-[10px] text-muted font-mono uppercase tracking-wider">In-Sample WR</div>
+              <div className={`text-xl font-bold font-mono mt-1 ${wrCls(walkForward.isStat, minN)}`}>
+                {fmtWr(walkForward.isStat)}
+              </div>
+              <div className="text-[10px] text-faint font-mono mt-0.5">n={walkForward.isStat.n}</div>
+            </div>
+            <div className="bg-surface border border-border rounded p-3">
+              <div className="text-[10px] text-muted font-mono uppercase tracking-wider">
+                Out-of-Sample WR
+              </div>
+              <div className={`text-2xl font-black font-mono mt-1 ${wrCls(walkForward.oosStat, minN)}`}>
+                {fmtWr(walkForward.oosStat)}
+              </div>
+              <div className="text-[10px] text-faint font-mono mt-0.5">
+                n={walkForward.oosStat.n} · {walkForward.oosStat.sig ? "signifikant" : "n.s."}
+              </div>
+            </div>
+            <div className="bg-surface border border-border rounded p-3">
+              <div className="text-[10px] text-muted font-mono uppercase tracking-wider">IS → OOS</div>
+              <div
+                className={`text-xl font-bold font-mono mt-1 ${
+                  walkForward.isStat.wr !== null &&
+                  walkForward.oosStat.wr !== null &&
+                  walkForward.oosStat.wr >= walkForward.isStat.wr - 2
+                    ? "text-up"
+                    : "text-down"
+                }`}
+              >
+                {walkForward.isStat.wr !== null && walkForward.oosStat.wr !== null
+                  ? `${(walkForward.oosStat.wr - walkForward.isStat.wr > 0 ? "+" : "")}${(
+                      walkForward.oosStat.wr - walkForward.isStat.wr
+                    ).toFixed(1)}pp`
+                  : "–"}
+              </div>
+              <div className="text-[10px] text-faint font-mono mt-0.5">
+                {walkForward.isStat.wr !== null &&
+                walkForward.oosStat.wr !== null &&
+                walkForward.oosStat.wr >= walkForward.isStat.wr - 2
+                  ? "hält out-of-sample"
+                  : "bricht ein → Overfit/Zufall"}
+              </div>
+            </div>
+            <div className="bg-surface border border-border rounded p-3">
+              <div className="text-[10px] text-muted font-mono uppercase tracking-wider">Gewichte (IS)</div>
+              <div className="text-[10px] font-mono mt-1 space-y-0.5">
+                {walkForward.factorNames.map((f, i) => (
+                  <div key={f} className="flex justify-between gap-2">
+                    <span className="text-muted">{f}</span>
+                    <span className={walkForward.weights[i] >= 0 ? "text-up" : "text-down"}>
+                      {walkForward.weights[i] >= 0 ? "+" : ""}
+                      {walkForward.weights[i].toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Konfidenz-Quintile OOS */}
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-faint mb-1.5">
+              Konfidenz-Quintile (OOS) — steigt die WR mit der Signalstärke |Composite|?
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {walkForward.buckets.map((b) => (
+                <div key={b.label} className="bg-surface border border-border rounded p-2 text-center">
+                  <div className={`text-[13px] font-bold font-mono ${wrCls(b.stat, 1)}`}>{fmtWr(b.stat)}</div>
+                  <div className="text-[8px] text-faint font-mono mt-0.5">{b.label.split(" ")[0]}</div>
+                  <div className="text-[8px] text-faint font-mono">n={b.stat.n}</div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-faint mt-1.5">
+              Monoton steigend von Q1→Q5 = Konfidenz ist echt (stärkere Confluence → höhere Trefferquote).
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Auswahl-Ergebnis ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

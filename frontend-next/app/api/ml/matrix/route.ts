@@ -18,7 +18,7 @@ const getMatrix = unstable_cache(
       return null;
     }
   },
-  ["ml-factor-matrix-v2"],
+  ["ml-factor-matrix-v3"],
   { revalidate: 3600 },
 );
 

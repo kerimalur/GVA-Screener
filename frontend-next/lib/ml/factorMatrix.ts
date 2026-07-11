@@ -47,11 +47,50 @@ export interface FactorMatrix {
   factors: string[]; // MATRIX_FACTORS
   horizons: number[]; // MATRIX_HORIZONS
   /**
-   * Eine Zeile je (Woche, Pair) mit gültigem Entry-Kurs:
-   * [weekIdx, pairIdx, dZins, dCotNC, dCotC, dSaison, dYield, r1, r2, r3, r4]
-   * d* ∈ {-1,0,1}; r* = Pair-Rendite in % (LONG-Sicht), null wenn Kurs fehlt.
+   * Eine Zeile je (Woche, Pair) mit gültigem Entry-Kurs. Layout (16 Spalten):
+   * [weekIdx, pairIdx,
+   *  d0..d4  (binäre Richtung je Faktor ∈ {-1,0,1}, alte Schwellen-Logik),
+   *  z0..z4  (kontinuierlicher rollierender z-Score je Faktor, as-of, ±4 geklemmt),
+   *  r0..r3] (Pair-Rendite % LONG-Sicht je Horizont, null wenn Kurs fehlt)
+   * Reihenfolge der Faktoren = MATRIX_FACTORS. z-Score normiert jeden Faktor auf
+   * seine eigene rollierende Pair-Historie → regime-robust (löst starre Schwellen).
    */
   rows: Array<Array<number | null>>;
+}
+
+export const ROW_D_OFF = 2; // Dirs beginnen hier
+export const ROW_Z_OFF = 7; // z-Scores beginnen hier
+export const ROW_R_OFF = 12; // Returns beginnen hier
+
+/**
+ * Rollierender z-Score (Fenster `window`, min. `minN` gültige Werte, as-of:
+ * nur aktueller + vergangene Punkte). Null-Rohwerte bleiben null; zu dünne
+ * Historie → 0 (neutral). Ergebnis auf ±`clamp` begrenzt.
+ */
+function rollingZ(vals: Array<number | null>, window = 156, minN = 52, clamp = 4): Array<number | null> {
+  const out: Array<number | null> = vals.map(() => null);
+  for (let i = 0; i < vals.length; i++) {
+    if (vals[i] === null) continue;
+    let sum = 0,
+      sum2 = 0,
+      cnt = 0;
+    for (let j = Math.max(0, i - window + 1); j <= i; j++) {
+      const v = vals[j];
+      if (v === null) continue;
+      sum += v;
+      sum2 += v * v;
+      cnt++;
+    }
+    if (cnt < minN) {
+      out[i] = 0;
+      continue;
+    }
+    const mean = sum / cnt;
+    const varr = Math.max(sum2 / cnt - mean * mean, 1e-9);
+    const z = (vals[i]! - mean) / Math.sqrt(varr);
+    out[i] = Number(Math.max(-clamp, Math.min(clamp, z)).toFixed(2));
+  }
+  return out;
 }
 
 function lastAtOrBefore<T extends { date: string }>(points: T[], asOf: string): T | null {
@@ -160,15 +199,20 @@ export async function buildFactorMatrix(
     pricesByPair.set(r.instrument, arr);
   }
 
-  // — Matrix füllen —
-  const rows: Array<Array<number | null>> = [];
+  // — Pass 1: je (Woche, Pair) Rohwerte + binäre Dirs + Returns sammeln —
+  interface Cell {
+    wi: number;
+    dirs: number[]; // 5 binäre Richtungen (alte Schwellen)
+    raws: Array<number | null>; // 5 kontinuierliche Rohwerte (für z-Score)
+    rets: Array<number | null>;
+  }
+  const byPair = new Map<number, Cell[]>();
 
   for (let wi = 0; wi < weeks.length; wi++) {
     const week = weeks[wi];
     const weekMs = new Date(week + "T00:00:00Z").getTime();
     const month = Number(week.slice(5, 7));
 
-    // Zins-/Yield-Slices je Währung einmal pro Woche (nicht je Pair)
     const polSlice = new Map<string, SeriesPoint[]>();
     const yldSlice = new Map<string, SeriesPoint[]>();
     const ncAt = new Map<string, CotFlowPoint | null>();
@@ -189,43 +233,47 @@ export async function buildFactorMatrix(
       const c0 = closeAtOrAfter(series, weekMs, 5);
       if (c0 === null || c0 === 0) continue;
 
-      // 1) Zins (identisch zu evaluatePair Faktor 1)
+      // 1) Zins — Rohwert = Leitzins-Differenz (Level), Dir = alte Schwelle
+      const rb = latest(polSlice.get(base)!);
+      const rq = latest(polSlice.get(quote)!);
+      const rb6 = valueMonthsAgo(polSlice.get(base)!, 6);
+      const rq6 = valueMonthsAgo(polSlice.get(quote)!, 6);
+      let rawZins: number | null = null;
       let dZins = 0;
-      {
-        const rb = latest(polSlice.get(base)!);
-        const rq = latest(polSlice.get(quote)!);
-        const rb6 = valueMonthsAgo(polSlice.get(base)!, 6);
-        const rq6 = valueMonthsAgo(polSlice.get(quote)!, 6);
-        if (rb !== null && rq !== null) {
-          const diff = rb - rq;
-          const diffChange = rb6 !== null && rq6 !== null ? diff - (rb6 - rq6) : 0;
-          if (diff > 0.25 || diffChange > 0.2) dZins = 1;
-          else if (diff < -0.25 || diffChange < -0.2) dZins = -1;
-        }
+      if (rb !== null && rq !== null) {
+        const diff = rb - rq;
+        rawZins = diff;
+        const diffChange = rb6 !== null && rq6 !== null ? diff - (rb6 - rq6) : 0;
+        if (diff > 0.25 || diffChange > 0.2) dZins = 1;
+        else if (diff < -0.25 || diffChange < -0.2) dZins = -1;
       }
 
-      // 2+3) COT-Flow-Differenz Base−Quote (NC und Commercials, gleiche Schwelle ±4)
-      const flowDir = (m: Map<string, CotFlowPoint | null>): number => {
+      // 2+3) COT-Flow-Differenz Base−Quote (Rohwert = gap, Dir = Schwelle ±4)
+      const flowRaw = (m: Map<string, CotFlowPoint | null>): number | null => {
         const fb = m.get(base);
         const fq = m.get(quote);
-        if (fb?.delta4wPctOi == null || fq?.delta4wPctOi == null) return 0;
-        const gap = fb.delta4wPctOi - fq.delta4wPctOi;
-        return gap >= 4 ? 1 : gap <= -4 ? -1 : 0;
+        if (fb?.delta4wPctOi == null || fq?.delta4wPctOi == null) return null;
+        return fb.delta4wPctOi - fq.delta4wPctOi;
       };
-      const dCotNC = flowDir(ncAt);
-      const dCotC = flowDir(cAt);
+      const rawCotNC = flowRaw(ncAt);
+      const rawCotC = flowRaw(cAt);
+      const dCotNC = rawCotNC === null ? 0 : rawCotNC >= 4 ? 1 : rawCotNC <= -4 ? -1 : 0;
+      const dCotC = rawCotC === null ? 0 : rawCotC >= 4 ? 1 : rawCotC <= -4 ? -1 : 0;
 
-      // 4) Saison (identisch zu evaluatePair Faktor 3)
+      // 4) Saison — Rohwert = Monats-Ø-Return, Dir = alte Schwelle
+      let rawSaison: number | null = null;
       let dSaison = 0;
       {
         const stat = seasonality.get(inst.instrument)?.months.find((m) => m.month === month);
         if (stat && stat.years >= 8) {
+          rawSaison = stat.avgReturn;
           if (stat.avgReturn >= 0.3 && stat.hitRate >= 60) dSaison = 1;
           else if (stat.avgReturn <= -0.3 && stat.hitRate <= 40) dSaison = -1;
         }
       }
 
-      // 5) Yield-Spread-Trend 3M (identisch zu evaluatePair Faktor 4)
+      // 5) Yield-Spread-Trend 3M — Rohwert = 3M-Änderung des Spreads, Dir = Schwelle
+      let rawYield: number | null = null;
       let dYield = 0;
       {
         const yb = yldSlice.get(base)!;
@@ -236,22 +284,41 @@ export async function buildFactorMatrix(
         const pastQ = valueMonthsAgo(yq, 3);
         if (nowB !== null && nowQ !== null && pastB !== null && pastQ !== null) {
           const change = nowB - nowQ - (pastB - pastQ);
+          rawYield = change;
           if (change >= 0.15) dYield = 1;
           else if (change <= -0.15) dYield = -1;
         }
       }
 
-      // Forward-Returns (LONG-Sicht, %)
       const rets: Array<number | null> = MATRIX_HORIZONS.map((h) => {
         const cN = closeAtOrAfter(series, weekMs + h * 7 * 86_400_000, 7);
         return cN === null ? null : Number((((cN - c0) / c0) * 100).toFixed(4));
       });
-
-      // Zeilen ohne jedes Signal UND ohne Return bringen nichts
-      if (dZins === 0 && dCotNC === 0 && dCotC === 0 && dSaison === 0 && dYield === 0) continue;
       if (rets.every((r) => r === null)) continue;
 
-      rows.push([wi, pi, dZins, dCotNC, dCotC, dSaison, dYield, ...rets]);
+      const arr = byPair.get(pi) ?? [];
+      arr.push({
+        wi,
+        dirs: [dZins, dCotNC, dCotC, dSaison, dYield],
+        raws: [rawZins, rawCotNC, rawCotC, rawSaison, rawYield],
+        rets,
+      });
+      byPair.set(pi, arr);
+    }
+  }
+
+  // — Pass 2: je Pair rollierende z-Scores der Rohwerte, dann emittieren —
+  const rows: Array<Array<number | null>> = [];
+  const nFac = MATRIX_FACTORS.length;
+  for (const [pi, cells] of byPair) {
+    const zByFactor: Array<Array<number | null>> = [];
+    for (let f = 0; f < nFac; f++) {
+      zByFactor.push(rollingZ(cells.map((c) => c.raws[f])));
+    }
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
+      const zs = zByFactor.map((zf) => zf[i]);
+      rows.push([c.wi, pi, ...c.dirs, ...zs, ...c.rets]);
     }
   }
 
