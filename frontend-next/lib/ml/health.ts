@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pagedSelect } from "@/lib/data/util";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
-import { mondayOf, pastMondays } from "./outlookSnapshots";
+import { mondayOf, pastMondays, BACKTEST_WEEKS } from "./outlookSnapshots";
 
 /**
  * Daten-Gesundheitscheck für die ML-Seite: Sind alle Quellen da, aktuell
@@ -101,7 +101,7 @@ async function checkSource(db: SupabaseClient, def: SourceDef): Promise<SourceHe
   };
 }
 
-async function checkSnapshots(db: SupabaseClient, expectedWeeks = 104): Promise<SnapshotHealth> {
+async function checkSnapshots(db: SupabaseClient, expectedWeeks = BACKTEST_WEEKS): Promise<SnapshotHealth> {
   const rows = await pagedSelect<{
     week_start: string;
     direction: string | null;

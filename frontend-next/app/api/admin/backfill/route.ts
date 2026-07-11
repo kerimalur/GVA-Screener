@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
         await runJob(db, "backfill:sentiment", () => snapshotSentiment(db)),
       );
     case "outlooks": {
-      const weeks = parseInt(req.nextUrl.searchParams.get("weeks") ?? "104", 10);
+      const weeks = parseInt(req.nextUrl.searchParams.get("weeks") ?? "416", 10);
       return NextResponse.json(
         await runJob(db, "backfill:outlook-snapshots", () =>
           backfillOutlookSnapshots(db, Math.min(Math.max(weeks, 1), 520)),

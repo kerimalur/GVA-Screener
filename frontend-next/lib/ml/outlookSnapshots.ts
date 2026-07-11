@@ -31,6 +31,9 @@ import { chunkUpsert } from "@/lib/jobs/util";
  * Montag sieht ihn auch live.
  */
 
+/** Backtest-Horizont der Snapshot-Historie: 416 Wochen ≈ 8 Jahre. */
+export const BACKTEST_WEEKS = 416;
+
 export interface OutlookSnapshotRow extends Record<string, unknown> {
   week_start: string;
   instrument: string;
@@ -195,7 +198,7 @@ function computeWeek(
  */
 export async function backfillOutlookSnapshots(
   db: SupabaseClient,
-  weeks = 104,
+  weeks = BACKTEST_WEEKS,
 ): Promise<Record<string, unknown>> {
   const weekStarts = pastMondays(weeks);
   const since = new Date(new Date(weekStarts[0] + "T00:00:00Z").getTime() - 400 * 86_400_000)
@@ -216,7 +219,7 @@ export async function backfillOutlookSnapshots(
  */
 export async function ensureOutlookBackfill(
   db: SupabaseClient,
-  weeks = 104,
+  weeks = BACKTEST_WEEKS,
 ): Promise<Record<string, unknown>> {
   const expected = pastMondays(weeks);
   const currentWeek = mondayOf(new Date());

@@ -26,7 +26,7 @@ if (!url || !key) {
 }
 const db = createClient(url, key, { auth: { persistSession: false } });
 
-const weeks = Number(process.argv[2] ?? 104);
+const weeks = Number(process.argv[2] ?? 416);
 if (!Number.isFinite(weeks) || weeks < 1 || weeks > 520) {
   console.error(`Ungültige Wochenzahl '${process.argv[2]}' (erlaubt: 1–520)`);
   process.exit(1);

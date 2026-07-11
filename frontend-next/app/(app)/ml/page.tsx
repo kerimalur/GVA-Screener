@@ -1,10 +1,20 @@
 import Panel from "@/components/layout/Panel";
+import BacktestPanel from "@/components/ml/BacktestPanel";
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { tryQuery } from "@/lib/data/util";
 import { loadMlHealth, type HealthStatus } from "@/lib/ml/health";
+import { loadBacktest } from "@/lib/ml/backtest";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 
 export const dynamic = "force-dynamic";
+
+// Backtest ist rechenintensiv (alle Snapshots × 8J Kurse) → 30 min Server-Cache.
+const getBacktest = unstable_cache(
+  () => tryQuery(() => loadBacktest(createServiceClient())),
+  ["ml-backtest-v1"],
+  { revalidate: 1800 },
+);
 
 const STATUS_UI: Record<HealthStatus, { label: string; cls: string }> = {
   ok:    { label: "OK",     cls: "bg-up/15 text-up" },
@@ -26,7 +36,10 @@ function fmtDate(d: string | null): string {
 }
 
 export default async function Page() {
-  const health = await tryQuery(() => loadMlHealth(createServiceClient()));
+  const [health, backtest] = await Promise.all([
+    tryQuery(() => loadMlHealth(createServiceClient())),
+    getBacktest(),
+  ]);
 
   if (!health) {
     return (
@@ -97,6 +110,17 @@ export default async function Page() {
             </>
           )}
         </div>
+      </Panel>
+
+      <Panel
+        title="Backtest — Weekly-Outlook-Signale"
+        subtitle="Trefferquote + Ø gerichtete Rendite nach 1–4 Wochen (Snapshots × echte Kurse, ~8 Jahre)"
+      >
+        {backtest ? (
+          <BacktestPanel bt={backtest} />
+        ) : (
+          <p className="text-muted text-sm">Backtest lädt noch oder Daten fehlen — Backfill ausführen.</p>
+        )}
       </Panel>
 
       <Panel
