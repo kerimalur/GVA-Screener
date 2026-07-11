@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Globale Daten, ändern sich nur per Cron — 5 min Server-Cache wie Dashboard.
 const getWeekly = unstable_cache(
   () => tryQuery(() => loadWeeklyData(createServiceClient())),
-  ["weekly-data"],
+  ["weekly-data-v2"],
   { revalidate: 300 },
 );
 

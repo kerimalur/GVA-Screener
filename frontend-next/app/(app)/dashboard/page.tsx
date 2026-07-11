@@ -14,9 +14,11 @@ export const dynamic = "force-dynamic";
 
 // Daten sind global (Service-Client) und ändern sich nur per Cron —
 // 5 min Server-Cache statt Dutzender Supabase-Roundtrips pro Aufruf.
+// Key-Suffix v2: erzwingt frische Berechnung nach dem Cockpit-Umbau
+// (alte gecachte Payload hatte kein cockpit-Feld).
 const getDashboard = unstable_cache(
   () => tryQuery(() => loadDashboardData(createServiceClient())),
-  ["dashboard-data"],
+  ["dashboard-data-v2"],
   { revalidate: 300 },
 );
 
@@ -55,7 +57,7 @@ export default async function Page() {
         title="Währungs-Cockpit"
         subtitle="8 Währungen im Überblick — Bias (4 Faktoren) · COT · Zinsen · Retail · Saisonalität · High-Impact-News. Zeile aufklappen für Details."
       >
-        <CurrencyCockpit rows={data.cockpit} extremeHi={hi} extremeLo={lo} />
+        <CurrencyCockpit rows={data.cockpit ?? []} extremeHi={hi} extremeLo={lo} />
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">

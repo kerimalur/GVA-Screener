@@ -64,12 +64,22 @@ Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
 - Saisonalität im Backfill nutzt die heutige `seasonality_stats`-View
   (minimales Lookahead, bewusst akzeptiert — Kommentar in outlookSnapshots.ts).
 
-## Nächste Schritte (Reihenfolge aus docs/refactor-prompt.md)
-1. **Aufgabe 3 — Dashboard = Währungs-Cockpit:** 8 Währungen untereinander mit
-   COT/Zinsen/Retail/Saisonalität + High-Impact-News-Flag (currencyBias.ts erweitern,
-   nicht neu bauen). Weekly Outlook: "Signal seit KW x / n Wochen" aus
-   weekly_outlook_snapshots + News auf den Karten.
-2. **Aufgabe 2 — Erklär-Bericht** (`docs/analyse-leitfaden.html`): Was bedeuten
+## Aufgabe 3 — ERLEDIGT (2026-07-11, Commit 64d59aa)
+- **Dashboard = Währungs-Cockpit:** 8 Währungen untereinander (Commit oben).
+  `lib/calc/currencyCockpit.ts` reichert currencyBias an (nicht neu gebaut) um
+  Retail-Aggregat (Ø über die 7 Pairs je Währung, konträr), Saisonalität (pro/contra
+  Pairs des Monats) und High-Impact-News-Flag (7 Tage). Retail/Saison/News sind reine
+  Anzeige, ändern die Bias-Richtung NICHT. Zeile aufklappbar → Faktor-Details.
+  `components/dashboard/CurrencyCockpit.tsx`; loadDashboardData lädt zusätzlich
+  High-Impact-Events + Sentiment-Latest (limit 120). Alter `CurrencyBiasPanel`
+  nicht mehr im Dashboard (Datei bleibt, evtl. woanders genutzt).
+- **Weekly Outlook:** "seit N Wochen · KWxx" je Signal aus weekly_outlook_snapshots
+  (Streak = gleiche Richtung rückwärts). News waren schon auf den Karten.
+- Verifiziert: Build sauber, Deploy READY, Routen 307→Login. Rendering hinter Auth
+  noch nicht visuell gesichtet (kein Login lokal) — bei nächstem Login prüfen.
+
+## Nächste Schritte
+1. **Aufgabe 2 — Erklär-Bericht** (`docs/analyse-leitfaden.html`): Was bedeuten
    COT-Perzentil/Flow, Makro, Retail, Intermarket — und was fließt in Signale ein
    (Weekly: 5 Faktoren; Currency-Bias: 4; Intermarket/Kalender: nur Anzeige).
 3. **Backtest-/ML-Modul:** Snapshots × price_daily → Trefferquote nach 1–4 Wochen,

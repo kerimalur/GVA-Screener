@@ -53,7 +53,7 @@ export default function CurrencyCockpit({
   extremeHi: number;
   extremeLo: number;
 }) {
-  if (rows.length === 0) {
+  if (!rows || rows.length === 0) {
     return <p className="text-muted text-sm font-mono">Daten fehlen — Backfill ausführen.</p>;
   }
 
