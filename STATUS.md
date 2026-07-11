@@ -103,6 +103,26 @@ Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
 - Signal-Quote historisch hoch → Backtest nach aligned_count getrennt auswerten
   (Panel „Nach Faktor-Konfluenz“ zeigt genau das).
 
+## ML-Labor — ERLEDIGT (2026-07-11, Commit 10290fa)
+- **/ml/labor** (Nav: Machine Learning → Labor): interaktiver Faktor-Explorer.
+  `lib/ml/factorMatrix.ts` rechnet pro Woche × Pair alle Faktor-Varianten direkt
+  aus Rohdaten (as-of): Zins, COT-NC (Non-Comm), **COT-C (Commercials)**, Saison,
+  Yield + Forward-Returns 1–4W. `/api/ml/matrix` (1h-Cache) → Client aggregiert
+  alles im Browser (Filter ohne Roundtrip).
+- Filter: Horizont 1–4W (Default 2), Zeitraum 2/4/8J, Faktor-Checkboxen
+  (einstimmige Kombination), Min-n 10/30/100. Ansichten: Kennzahlen der Auswahl,
+  Währung×Faktor-Heatmap, Kombi-Bestenliste (alle 31 Teilmengen), Pair-Tabelle.
+  Signifikanz (95%-Konfidenz) markiert, kleine n ausgegraut.
+- **Backtest-Erkenntnisse (8J, SQL-verifiziert):** Outlook-Verdict gesamt ~50 %
+  (keine Edge). Einzeln: Saison 53,5→55,7 % (1→4W, bester Faktor), Zins ~51,5 %,
+  Yield ~49 %, COT-NC 48,9→46,7 % (schädlich). Beste Kombi: **Zins+Saison 57,9 %**
+  (4W, n=1499). Alle-4-Kombi 47,4 % → mehr Konfluenz ≠ besser. COT je Währung:
+  NZD/CAD → Commercials besser (53,5/52,8 %), CHF → Non-Comm (51,6 %) — Tendenz,
+  einzeln knapp unter 95%-Signifikanz.
+- Nächster logischer Schritt: Weekly-Outlook-Verdict-Logik auf die Labor-
+  Erkenntnisse umbauen (Kern Zins+Saison, COT-Variante je Währung) — erst nach
+  Kerims Review der Labor-Zahlen.
+
 ## Arbeitsweise
 - Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
 - Nach jeder Aufgabe `npm run build` + Smoke-Test.
