@@ -58,6 +58,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml/labor", label: "Labor", icon: "ph-flask" },
+      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
       { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
     ],
   },
@@ -93,6 +94,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/ml": "Machine Learning — Daten-Check",
   "/ml/labor": "ML-Labor — Faktor-Explorer",
   "/ml/modell": "ML-Modell — Anleitung",
+  "/ml/season": "Saisonalität 2.0 — Feature-Explorer",
   "/leitfaden": "Analyse-Leitfaden",
   "/einstellungen": "Einstellungen",
 };
