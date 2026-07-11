@@ -5,6 +5,7 @@ import { updateFred } from "@/lib/jobs/updateFred";
 import { updateCalendar } from "@/lib/jobs/updateCalendar";
 import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
 import { updateCot } from "@/lib/jobs/updateCot";
+import { snapshotCurrentWeek } from "@/lib/ml/outlookSnapshots";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -41,6 +42,9 @@ export async function GET(req: NextRequest) {
   const results: JobResult[] = await Promise.all(
     jobDefs.map(([name, fn]) => runJob(db, name, fn)),
   );
+
+  // NACH den Daten-Updates: Wochen-Verdict einfrieren (erster Lauf der Woche schreibt)
+  results.push(await runJob(db, "cron:outlook-snapshot", () => snapshotCurrentWeek(db)));
 
   return NextResponse.json({
     ok: results.every((r) => r.status !== "error"),
