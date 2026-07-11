@@ -85,12 +85,23 @@ Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
   Oben Übersicht: Signale = Pair-Screener (5 Faktoren) + Währungs-Bias (4);
   nur Anzeige = Intermarket, Kalender, Makro-Detail, Cockpit-Zusätze.
 
-## Nächster Schritt — Backtest-/ML-Modul
-Snapshots (`weekly_outlook_snapshots`) × `price_daily` → Trefferquote nach 1–4
-Wochen, getrennt nach Währung/Faktor/`aligned_count` (2 vs 3 vs 4). Auf /ml-Seite
-ausbauen. Backfill-Cap in scripts/backfill-outlooks.mts + admin-route ggf. auf
-~780 Wochen anheben (Daten bis 2006/2007; sauber ab ~2011 nach 260W-Warmup).
-Retail-Faktor historisch nicht verfügbar → nur 4 Faktoren.
+## Backtest-Modul + 8 Jahre — ERLEDIGT (2026-07-11, Commit 514f1b3)
+- `lib/ml/backtest.ts`: Weekly-Outlook-Signale × `price_daily` über 1–4 Wochen.
+  Trefferquote (Close in Signalrichtung) + Ø gerichtete Rendite, aufgeschlüsselt
+  nach Horizont, Faktor-Konfluenz (`aligned_count`), Basiswährung, Pair. Ohne Kosten.
+- `BacktestPanel` auf /ml (unstable_cache 30 min, key `ml-backtest-v1`).
+- **BACKTEST_WEEKS = 416 (8 J.)** zentral in outlookSnapshots.ts — Backfill,
+  Cron-Selbstheilung (ensureOutlookBackfill), Health-Coverage, Script, Admin-Route.
+
+### OFFEN / zu prüfen
+- **DB hat noch 104 Wochen** — der 416-Backfill füllt sich beim nächsten
+  `fundamentals`-Cron (06:00 UTC) ODER manuell: Vercel → Cron Jobs → „fundamentals“
+  → Run. Danach zeigt /ml 416/416; Backtest-Tabelle refresht in ≤ 30 min (Cache).
+- Backtest-Seite lädt beim ersten (uncached) Aufruf ~8 J. FX-Kurse (≈ 56k Zeilen,
+  paginiert) → kann 15–30 s dauern; danach gecacht.
+- MCP-Supabase-Server war zeitweise disconnected (nur Info; kein Code-Problem).
+- Signal-Quote historisch hoch → Backtest nach aligned_count getrennt auswerten
+  (Panel „Nach Faktor-Konfluenz“ zeigt genau das).
 
 ## Arbeitsweise
 - Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
