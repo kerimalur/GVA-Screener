@@ -59,7 +59,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "System",
-    items: [{ href: "/einstellungen", label: "Einstellungen", icon: "ph-gear" }],
+    items: [
+      { href: "/leitfaden", label: "Analyse-Leitfaden", icon: "ph-book-open" },
+      { href: "/einstellungen", label: "Einstellungen", icon: "ph-gear" },
+    ],
   },
 ];
 
@@ -84,5 +87,6 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal/strategie": "Strategie-Builder",
   "/journal/backtest": "Backtest-Lab",
   "/ml": "Machine Learning — Daten-Check",
+  "/leitfaden": "Analyse-Leitfaden",
   "/einstellungen": "Einstellungen",
 };
