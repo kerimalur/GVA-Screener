@@ -3,61 +3,80 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-06-20
+Stand: 2026-07-11
 
-## Was die Software macht
-Trading-Scanner für 28 FX-Pairs. Erkennt GVA-Kerzenmuster → bildet Linien (Short/Long).
-Wird eine Linie live berührt → Telegram-Alert. Dashboard zeigt alle Pairs farbig.
+## Ausrichtung (WICHTIG, seit 2026-07-11)
+**Privates Trading-Tool. Kein Verkaufsprodukt mehr.** Fokus: Funktion, Effizienz,
+Mehrwert für Kerims eigenes Trading — Endziel ML-/Backtesting über die Weekly Outlooks.
+Alles Marketing/Verkauf (Landing, Stripe, Upgrade, Onboarding-Tour, AGB/Impressum,
+Scanner-Zugangscode, Feedback-API) liegt in `marketing-verkauf-backup/` (gitignored,
+README mit Original-Pfaden drin). Eingeloggt = voller Zugriff; Scanner bleibt Admin-only.
 
-## Deployment (alles Cloud, läuft 24/7 unabhängig vom PC)
-- **Backend (Render):** Service `gva-screener` → https://gva-screener.onrender.com
-  - Repo-Ordner `Backend/`, FastAPI, `uvicorn main:app`
-  - Env vars in Render gesetzt: `OANDA_API_KEY`, `OANDA_ACCOUNT_ID`, `OANDA_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-  - Free Tier → Cron-Ping (cron-job.org) auf `/api/health` alle 10 min hält wach
-- **Frontend (Vercel):** Vite/React, Root Directory = `Frontend`
-  - Env var `VITE_API_URL = https://gva-screener.onrender.com` (KEIN `/` am Ende, KEIN `-backend`)
+Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
 
-## Architektur Backend (`Backend/`)
-- `data_pipeline.py` — OANDA: `fetch_and_resample_3d` (3-Tage-Blöcke), `fetch_live_prices` (1 Call alle Pairs)
-- `analyzer.py` — `analyze_gva_zones` → gibt closest + ALLE aktiven Short/Long-Lines zurück
-- `main.py`:
-  - 2 Background-Threads: `_zones_loop` (15 min, schwer) + `_price_loop` (30s, Live-Preis + HIT-Check)
-  - `evaluate_pair` — Bewertung je Pair, Sticky-HIT-Logik
-  - Endpoints: `GET /api/screener`, `GET /api/health`, `POST /api/mark`
-  - State in `state.json` (gitignored): `TRIGGERED` (sticky HITs) + `CONSUMED` (verbrauchte Lines)
+## Architektur
+- **Backend (Render):** `Backend/`, FastAPI → https://gva-screener.onrender.com
+  GVA-Kerzenmuster-Scanner für 28 FX-Pairs, Live-Preis-HIT-Check, Telegram-Alerts.
+  (Details/Sticky-HIT-Logik: siehe Git-History dieser Datei, unverändert seit Juni.)
+- **Frontend (Vercel):** `frontend-next/` (Next.js 16), Projekt `gva-screener`,
+  https://gva-screener.vercel.app — Analyse-Suite + Journal + Markt-Scanner-UI.
+- **Supabase** (Projekt `bpggwelpuvbkeudrqoiv`): Marktdaten + Journal + Snapshots.
+  Alle Daten-Tabellen: RLS an, KEINE Policies → nur Service-Role-Key (liegt nur in
+  Vercel-Env, nicht lokal!). Lokal fehlt `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
+  → Daten-Seiten laufen lokal nur eingeschränkt; URL + Anon-Key sind eingetragen.
+- **Crons (Vercel):** `/api/cron/daily` 05:30 UTC (Preise), `/api/cron/fundamentals`
+  06:00 UTC (FRED, Kalender, Sentiment, COT-wenn-fällig, Outlook-Backfill+Snapshot).
+  Manuelle Ausführung: Vercel Dashboard → Settings → Cron Jobs → Run.
+  Backfill einzeln: `/api/admin/backfill?task=outlooks` (Bearer CRON_SECRET).
 
-## Features fertig & live
-- Live-Preis-HIT-Erkennung (mid-price), Alert nur bei echtem Touch/Cross (0.1 Pip), kein 2.5-Pip-Frühalarm
-- Re-Trigger verhindert (ALERT_CACHE pro Line-Level)
-- Farb-Logik: nahe Long-GVA = grün, nahe Short-GVA = rot, relevante Linie fett
-- **Sticky HIT**: getroffenes Pair behält gelben Rand bis User reagiert
-  - Popup-Aktionen: **Pending** (bleibt gelb, Label "HIT · PENDING") / **Setup Fertig** (Line verbraucht → nächste untouched Line → neutral)
-  - Jede Line nur 1× nutzbar (CONSUMED-Blacklist)
+## Was am 2026-07-11 geändert wurde
+1. **Marketing raus** (Commit `446899b`): Dateien in Backup-Ordner verschoben,
+   proxy.ts ohne Abo-/Tier-Checks, `/` redirectet direkt Dashboard/Login,
+   Einstellungen ohne Abo-Karte, `stripe`-Dependency entfernt.
+2. **Nav aufgeräumt** (`141dd5c`): Analyse zeigt nur Dashboard, Weekly Outlook,
+   Vergleich. Rest (COT, Makro, Sentiment, Intermarket, Saisonalität, Kalender)
+   in einklappbarer "Details"-Gruppe (localStorage, Auto-Open bei aktiver Route).
+3. **ML-Fundament** (`680204d`, `86e3b6d`):
+   - Tabelle `weekly_outlook_snapshots` (PK week_start+instrument): eingefrorene
+     Wochen-Verdicts des 5-Faktoren-Screeners als Backtest-Datenbasis.
+   - `lib/ml/outlookSnapshots.ts`: as-of-Rekonstruktion (Rolling-Perzentile/Flows
+     enden am Stichtag, kein Lookahead), `ensureOutlookBackfill` (selbstheilend im
+     Cron), `snapshotCurrentWeek` (Insert-only, erster Lauf der Woche gewinnt).
+   - Seite **/ml "Machine Learning → Daten-Check"**: Frische aller Quellen,
+     Snapshot-Abdeckung, fehlende/unvollständige Wochen, Signal-Quote.
 
-## IN ARBEIT — Fundamental-Bias-Modul (NÄCHSTER SCHRITT)
-Ziel: separater Fundamental-Block je Pair. Pro Währung Sub-Scores → Pair-Bias = Base − Quote.
-Entscheidungen des Users: **FRED automatisch** + **Phase 1 inkl. Zinsen komplett**.
+## Was FUNKTIONIERT (verifiziert 2026-07-11)
+- Deployment READY, `/` → Login, `/upgrade` & Co. weg, Build fehlerfrei.
+- Backfill gelaufen: **2912 Backfill-Zeilen** (104 Wochen × 28 Pairs,
+  2024-07-08 … 2026-06-29, Ø 4.0 Faktoren — ohne Sentiment, korrekt) +
+  **28 Live-Zeilen** (Woche 2026-07-06, Ø 5.0 Faktoren). Signal-Quote 66 %.
+- Wöchentlicher Live-Snapshot läuft ab jetzt automatisch im 06:00-Cron.
 
-Datei `Backend/fundamentals.py` angelegt (WIP, noch NICHT importiert/verdrahtet):
-- ✅ FRED-Fetcher fertig: `long_term_rate` (OECD 10Y + 3M-Änderung), `cpi_yoy` (aus Index), Real-Zins
-- Verifiziert live: FRED CSV ohne Key funktioniert; CFTC Socrata-JSON funktioniert
+## Was NOCH NICHT geht / offen
+- **Login-Flow nach Marketing-Umbau nur per Redirect-Codes getestet**, nicht mit
+  echtem Login durchgeklickt (kein Credential lokal). Kurz manuell prüfen.
+- **/ml-Seite noch nicht im Browser gesichtet** (liegt hinter Auth) — Daten dahinter
+  stimmen (SQL-geprüft), Rendering einmal anschauen.
+- **Sentiment-Historie beginnt erst 2026-07-03** → Backtest über 2 Jahre kann den
+  Retail-Faktor nicht nutzen; per `source`/`factor_count` unterscheidbar.
+- Signal-Quote 66 % ist hoch (≥2 gleichgerichtete von 4 Faktoren ist leicht erfüllt)
+  → Backtest sollte nach `aligned_count` (2 vs. 3 vs. 4) getrennt auswerten.
+- Saisonalität im Backfill nutzt die heutige `seasonality_stats`-View
+  (minimales Lookahead, bewusst akzeptiert — Kommentar in outlookSnapshots.ts).
 
-### TODO Reihenfolge
-1. `fundamentals.py` testen: `python fundamentals.py` (selftest druckt Zins/CPI/Real-Zins-Tabelle) → FRED-Coverage je Währung prüfen, fehlende Serien-IDs fixen (v.a. NZD `IRLTLT01NZ...`, evtl. EUR/CHF CPI-Index-Code)
-2. **COT Z-Score** ergänzen: CFTC `https://publicreporting.cftc.gov/resource/6dca-aqww.json` (Legacy Futures), Felder `noncomm_positions_long_all`/`short_all`, Netto = long−short, Z-Score über ~156 Wochen. Contract-Namen: "EURO FX", "BRITISH POUND STERLING", "JAPANESE YEN", "AUSTRALIAN DOLLAR", "NEW ZEALAND DOLLAR", "CANADIAN DOLLAR", "SWISS FRANC", "U.S. DOLLAR INDEX". → Umkehr-Warnung, NICHT Richtung
-3. **Risk-Regime** (OANDA): SPX500_USD + AUDJPY + XAU_USD Trend → Risk-On/Off-Ampel. Adjustiert AUD/NZD/CAD (+) vs JPY/CHF (−)
-4. **Öl-Trend** (OANDA WTICO_USD) → CAD (stark), AUD/NZD (leicht)
-5. **Saisonalität** je Pair aus Kerzen-History (Durchschnittsrendite aktueller Monat über N Jahre) — Tiebreaker
-6. Scoring: Richtungs-Score je Währung = Real-Zins + Zins-Drehung + Risk-Adj + Commodity. COT & Saisonalität separat anzeigen
-7. Background-Loop (z.B. alle 6h, Fundamentaldaten ändern langsam) → `FUND_CACHE`, in Screener-Output je Pair als `fundamentals`-Block mergen
-8. Frontend: eigener Fundamental-Abschnitt im Pair-Popup (+ kleine Bias-Ampel auf Karte)
+## Nächste Schritte (Reihenfolge aus docs/refactor-prompt.md)
+1. **Aufgabe 3 — Dashboard = Währungs-Cockpit:** 8 Währungen untereinander mit
+   COT/Zinsen/Retail/Saisonalität + High-Impact-News-Flag (currencyBias.ts erweitern,
+   nicht neu bauen). Weekly Outlook: "Signal seit KW x / n Wochen" aus
+   weekly_outlook_snapshots + News auf den Karten.
+2. **Aufgabe 2 — Erklär-Bericht** (`docs/analyse-leitfaden.html`): Was bedeuten
+   COT-Perzentil/Flow, Makro, Retail, Intermarket — und was fließt in Signale ein
+   (Weekly: 5 Faktoren; Currency-Bias: 4; Intermarket/Kalender: nur Anzeige).
+3. **Backtest-/ML-Modul:** Snapshots × price_daily → Trefferquote nach 1–4 Wochen,
+   je Währung/Faktor/aligned_count. Erst bauen, wenn 1+2 stehen.
 
-### Bewusst weggelassen
-- Lower-Timeframe-Automatik (zu komplex, kleiner Mehrwert)
-- Tier 4 (Monatsende-Flows, Handelsbilanz — zu verrauscht)
-
-## Bekannte offene Punkte / Ideen (Backlog)
-- Signal-Journal (jeden HIT loggen → Win-Rate messen) — wichtig für "ist die Strategie profitabel?"
-- Alert-Message aufwerten: TradingView-Chart-Link, Session, News-Flag
-- News-Blackout-Filter (High-Impact-News unterdrücken)
-- `state.json` überlebt Render-Redeploy NICHT (ephemeres FS) → bei Bedarf auf DB/Supabase
+## Arbeitsweise
+- Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
+- Nach jeder Aufgabe `npm run build` + Smoke-Test.
+- Trading-Roadmap-Kontext: Backtest GVA/BOS (manuell) läuft parallel; FTMO erst
+  wenn Backtest positiv; ML erst mit genug Daten.
