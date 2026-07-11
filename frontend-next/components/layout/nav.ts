@@ -55,7 +55,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Machine Learning",
-    items: [{ href: "/ml", label: "Daten-Check", icon: "ph-robot" }],
+    items: [
+      { href: "/ml/labor", label: "Labor", icon: "ph-flask" },
+      { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
+    ],
   },
   {
     title: "System",
@@ -87,6 +90,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal/strategie": "Strategie-Builder",
   "/journal/backtest": "Backtest-Lab",
   "/ml": "Machine Learning — Daten-Check",
+  "/ml/labor": "ML-Labor — Faktor-Explorer",
   "/leitfaden": "Analyse-Leitfaden",
   "/einstellungen": "Einstellungen",
 };
