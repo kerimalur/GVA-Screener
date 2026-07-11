@@ -1,4 +1,4 @@
-import type { BacktestResult, BacktestBucket, HorizonStat } from "@/lib/ml/backtest";
+import type { BacktestResult, BacktestBucket, HorizonStat, FactorRow, ComboRow } from "@/lib/ml/backtest";
 
 function hitCls(v: number | null): string {
   if (v === null) return "text-faint";
@@ -74,6 +74,52 @@ function BucketTable({
   );
 }
 
+/** Tabelle für Einzelfaktoren / Kombinationen (erste Spalte = Label, keine Signal-Spalte). */
+function FactorTable({
+  label,
+  firstCol,
+  rows,
+}: {
+  label: string;
+  firstCol: string;
+  rows: Array<{ key: string; size?: number; horizons: HorizonStat[] }>;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted font-mono uppercase tracking-wider mb-1.5">{label}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[560px]">
+          <thead>
+            <tr className="text-[9px] text-faint font-mono uppercase tracking-wider">
+              <th className="text-left pb-1.5 px-2">{firstCol}</th>
+              {[1, 2, 3, 4].map((w) => (
+                <th key={w} colSpan={2} className="text-right pb-1.5 px-2">
+                  {w}W (Treffer · Ø)
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((b) => (
+              <tr key={b.key} className="border-t border-border">
+                <td className="py-1.5 px-2 font-medium">
+                  {b.key}
+                  {b.size !== undefined && (
+                    <span className="text-faint text-[10px] font-mono"> ({b.size})</span>
+                  )}
+                </td>
+                {b.horizons.map((h) => (
+                  <HorizonCells key={h.horizon} h={h} />
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function BacktestPanel({ bt }: { bt: BacktestResult }) {
   if (bt.signalsTotal === 0) {
     return (
@@ -111,17 +157,30 @@ export default function BacktestPanel({ bt }: { bt: BacktestResult }) {
         ))}
       </div>
 
-      <BucketTable label="Gesamt nach Horizont" rows={overallAsBucket} firstCol="" />
+      <BucketTable label="Gesamt-Verdict nach Horizont" rows={overallAsBucket} firstCol="" />
+
+      <FactorTable
+        label="Einzelfaktoren — jeder Faktor allein als Richtungssignal"
+        firstCol="Faktor"
+        rows={bt.factorsSingle.map((f: FactorRow) => ({ key: f.name, horizons: f.horizons }))}
+      />
+
+      <FactorTable
+        label="Alle Kombinationen — feuert bei einstimmiger Ausrichtung, sortiert nach 4W-Treffer (Zahl = Anzahl Faktoren)"
+        firstCol="Kombination"
+        rows={bt.combos.map((c: ComboRow) => ({ key: c.label, size: c.size, horizons: c.horizons }))}
+      />
+
       <BucketTable
-        label="Nach Faktor-Konfluenz — lohnt sich ab wie vielen gleichgerichteten Faktoren?"
+        label="Verdict nach Faktor-Konfluenz — lohnt sich ab wie vielen gleichgerichteten Faktoren?"
         rows={bt.byAligned}
         firstCol="Konfluenz"
       />
-      <BucketTable label="Nach Basiswährung des Pairs" rows={bt.byCurrency} firstCol="Währung" />
+      <BucketTable label="Verdict nach Basiswährung des Pairs" rows={bt.byCurrency} firstCol="Währung" />
 
       <details>
         <summary className="cursor-pointer text-[11px] text-muted font-mono uppercase tracking-wider hover:text-text transition-colors select-none">
-          Nach Pair (28) — aufklappen
+          Verdict nach Pair (28) — aufklappen
         </summary>
         <div className="mt-2">
           <BucketTable label="Sortiert nach 4W-Trefferquote" rows={bt.byInstrument} firstCol="Pair" />

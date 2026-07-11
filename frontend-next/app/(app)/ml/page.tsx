@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // (zeigte nur ~105 Wochen). v2 erzwingt Neuberechnung über die volle Historie.
 const getBacktest = unstable_cache(
   () => tryQuery(() => loadBacktest(createServiceClient())),
-  ["ml-backtest-v2"],
+  ["ml-backtest-v3"],
   { revalidate: 1800 },
 );
 
