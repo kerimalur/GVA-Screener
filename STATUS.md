@@ -147,6 +147,26 @@ Adressiert die bewiesenen Kernprobleme der Faktor-Logik:
 - **Produktiv-Umbau Weekly Outlook** auf Composite+Konfidenz — erst nach Kerims
   Review, wenn Filter-Regel steht.
 
+## ML-Modul (LightGBM) — Backend/ml/ (2026-07-11, Commit 94f30d1)
+Echtes ML statt Regel-Schwellen: lernt Direction 1–4W aus COT-Rohdaten + Saison.
+- **Backend/ml/**: db.py (Supabase REST wie supabase_signals.py), features.py
+  (~40 Features je Woche×Pair, strikt as-of: COT Legacy+TFF Perzentile/Flows/
+  Divergenz/OI, Saison rolling nur Jahre < aktuellem Jahr), train.py (LightGBM,
+  Walk-Forward 156/52/26, Grid auf Ø OOS-AUC, Modelle als BYTEA in ml_models),
+  predict.py (Cache, Confidence ≥0.58 high / ≥0.54 medium), routes.py.
+- **Endpoints** (Render): POST /ml/train (Background; optional Env ML_TRAIN_KEY
+  → Header X-ML-KEY), GET /ml/status|/ml/predict?pair=&horizon=|/ml/predict-all|
+  /ml/report|/ml/feature-importance.
+- **Supabase**: ml_models + ml_predictions NEU (Migration angewandt; Legacy
+  ml_predictions aus FX-Terminal ersetzt — war 0 Zeilen). migrations.sql im Repo.
+- **Frontend /ml**: Panel "ML-Modell" — Predictions 28 Pairs, OOS-Kacheln,
+  Fold-Balken, Feature-Importance. Nutzt NEXT_PUBLIC_GVA_API_URL (Fallback Render).
+- **Getestet lokal**: as-of-Sicherheit, Fold-Temporalität, Pipeline lernt
+  synthetisches Signal (AUC 0.74) und lässt Rauschen bei 0.5, Blob-Roundtrip.
+- **OFFEN**: erstes echtes Training auf Render ausführen (POST /ml/train,
+  ~5–15 min) → /ml/report zeigt ob echte OOS-Edge da ist. Free-Tier-Hinweis:
+  Render schläft nach Inaktivität; Training nur bei wachem Service starten.
+
 ## Arbeitsweise
 - Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
 - Nach jeder Aufgabe `npm run build` + Smoke-Test.
