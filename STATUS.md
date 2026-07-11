@@ -123,6 +123,30 @@ Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
   Erkenntnisse umbauen (Kern Zins+Saison, COT-Variante je Währung) — erst nach
   Kerims Review der Labor-Zahlen.
 
+## ML-Labor v2 — z-Scores + Walk-Forward (2026-07-11, Commit 968a164)
+Adressiert die bewiesenen Kernprobleme der Faktor-Logik:
+- **#1 starre Schwellen** → jeder Faktor zusätzlich als rollierender z-Score
+  (156W, as-of, per Pair) in factorMatrix.ts. Row v3: [wi,pi, d0-4, z0-4, r0-3].
+- **#2 Gleichgewichtung** → Edge-Gewichte 2·(WR−0.5) aus In-Sample; konträre
+  Faktoren → negatives Gewicht (Auto-Invert). COT-NC bekam −0.05, COT-C +0.04.
+- **#5 kein OOS** → Walk-Forward-Split (50/60/70) im Labor, IS vs OOS getrennt.
+- **#6 binär** → kontinuierlicher Composite Σ(w·z) + Konfidenz-Quintile (OOS).
+
+### Validiertes Ergebnis (live-Daten, out-of-sample)
+- Zins+Saison edge: IS 51.9 / OOS 51.8 % (2W), IS 52.7 / OOS 52.0 % (4W) →
+  **kein Overfit** (IS≈OOS), aber breit angewandt nur schwache Edge.
+- **Konfidenz-Quintile OOS (alle 5, 4W): Q1 49.5 → Q5 57.6 %** → Edge lebt NUR
+  im oberen Konfidenz-Fünftel. Design-Regel für Weekly-Outlook-Umbau: nur die
+  Top-~20%-Konfidenz-Signale flaggen, nicht jedes Pair.
+
+### Noch offen (nicht bewiesen / größer)
+- **#3 Regime-Filter**: Risk-Gauge existiert (riskGauge.ts, nur für BTC genutzt).
+  Erst im Labor testen ob Zins in Risk-On besser läuft, DANN bauen.
+- **#4 COT-pro-Währung** feiner: aktuell global via Edge-Gewicht; per-Währungs-
+  Auswahl (NZD/CAD→Commercials, CHF→NonComm) braucht currency-level Umbau.
+- **Produktiv-Umbau Weekly Outlook** auf Composite+Konfidenz — erst nach Kerims
+  Review, wenn Filter-Regel steht.
+
 ## Arbeitsweise
 - Lokal arbeiten, Commits je Aufgabe, Push = Deploy auf Vercel (main → Production).
 - Nach jeder Aufgabe `npm run build` + Smoke-Test.
