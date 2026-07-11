@@ -5,10 +5,11 @@ import { updateFred } from "@/lib/jobs/updateFred";
 import { updateCalendar } from "@/lib/jobs/updateCalendar";
 import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
 import { updateCot } from "@/lib/jobs/updateCot";
-import { snapshotCurrentWeek } from "@/lib/ml/outlookSnapshots";
+import { snapshotCurrentWeek, ensureOutlookBackfill } from "@/lib/ml/outlookSnapshots";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// 300s: erster Lauf rechnet ggf. den 104-Wochen-Outlook-Backfill mit
+export const maxDuration = 300;
 
 async function cotDue(db: ReturnType<typeof createServiceClient>): Promise<boolean> {
   const day = new Date().getUTCDay();
@@ -43,7 +44,9 @@ export async function GET(req: NextRequest) {
     jobDefs.map(([name, fn]) => runJob(db, name, fn)),
   );
 
-  // NACH den Daten-Updates: Wochen-Verdict einfrieren (erster Lauf der Woche schreibt)
+  // NACH den Daten-Updates: fehlende Snapshot-Historie nachrechnen (skipped wenn
+  // vollständig), dann Wochen-Verdict einfrieren (erster Lauf der Woche schreibt)
+  results.push(await runJob(db, "cron:outlook-backfill", () => ensureOutlookBackfill(db)));
   results.push(await runJob(db, "cron:outlook-snapshot", () => snapshotCurrentWeek(db)));
 
   return NextResponse.json({

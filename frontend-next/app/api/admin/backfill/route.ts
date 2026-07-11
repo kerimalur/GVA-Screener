@@ -6,6 +6,7 @@ import { updateFred } from "@/lib/jobs/updateFred";
 import { updateCalendar } from "@/lib/jobs/updateCalendar";
 import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
 import { updateCot } from "@/lib/jobs/updateCot";
+import { backfillOutlookSnapshots } from "@/lib/ml/outlookSnapshots";
 import { INSTRUMENTS } from "@/lib/constants/instruments";
 
 export const dynamic = "force-dynamic";
@@ -54,9 +55,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         await runJob(db, "backfill:sentiment", () => snapshotSentiment(db)),
       );
+    case "outlooks": {
+      const weeks = parseInt(req.nextUrl.searchParams.get("weeks") ?? "104", 10);
+      return NextResponse.json(
+        await runJob(db, "backfill:outlook-snapshots", () =>
+          backfillOutlookSnapshots(db, Math.min(Math.max(weeks, 1), 520)),
+        ),
+      );
+    }
     default:
       return NextResponse.json(
-        { error: "task=prices|cot|fred|calendar|sentiment nötig" },
+        { error: "task=prices|cot|fred|calendar|sentiment|outlooks nötig" },
         { status: 400 },
       );
   }

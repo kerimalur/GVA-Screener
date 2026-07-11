@@ -211,6 +211,30 @@ export async function backfillOutlookSnapshots(
 }
 
 /**
+ * Selbstheilender Cron-Wrapper: rechnet den Backfill nur, wenn in den
+ * letzten `weeks` Wochen Snapshots fehlen — sonst skipped (billiger Count).
+ */
+export async function ensureOutlookBackfill(
+  db: SupabaseClient,
+  weeks = 104,
+): Promise<Record<string, unknown>> {
+  const expected = pastMondays(weeks);
+  const currentWeek = mondayOf(new Date());
+  const { count, error } = await db
+    .from("weekly_outlook_snapshots")
+    .select("*", { count: "exact", head: true })
+    .gte("week_start", expected[0])
+    .lt("week_start", currentWeek);
+  if (error) throw new Error(`weekly_outlook_snapshots: ${error.message}`);
+
+  const expectedRows = expected.length * FX_INSTRUMENTS.length;
+  if ((count ?? 0) >= expectedRows) {
+    return { skipped: true, reason: "Historie vollständig", rows: count };
+  }
+  return backfillOutlookSnapshots(db, weeks);
+}
+
+/**
  * Cron-Job: friert den Verdict der AKTUELLEN Woche ein (inkl. Sentiment).
  * Insert-only — der erste Lauf der Woche gewinnt, spätere Läufe ändern nichts.
  * So misst der Backtest das Signal, wie es am Wochenstart wirklich aussah.
