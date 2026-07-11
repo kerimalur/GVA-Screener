@@ -31,6 +31,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ML-Modul (LightGBM Direction-Prediction) — eigenständiger Router, siehe ml/
+from ml.routes import ml_router  # noqa: E402
+app.include_router(ml_router, prefix="/ml")
+
 # Globaler Cache, um mehrfache Telegram-Alerts bei Refreshes zu blockieren
 # Key: "PAIR_SHORT" oder "PAIR_LONG" -> Value: line_level (float)
 ALERT_CACHE = {}
