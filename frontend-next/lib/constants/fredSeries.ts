@@ -9,6 +9,12 @@ export type FredCategory =
   | "gdp"           // reales BIP
   | "cli"           // OECD Composite Leading Indicator (PMI-Proxy)
   | "trade"         // Handelsbilanz
+  | "yield_curve"   // 10Y-2Y-Spread (Rezessions-Signal)
+  | "sentiment"     // Consumer Confidence
+  | "pmi"           // ISM / Einkaufsmanager (nur USA)
+  | "retail_sales"  // Retail Trade Volume
+  | "balance_sheet" // Zentralbank-Bilanzsumme (QE/QT)
+  | "business_confidence" // Business Tendency Survey (Manufacturing)
   | "market";       // Marktdaten (VIX, Dollar-Indizes, FX)
 
 export interface FredSeriesDef {
@@ -103,6 +109,46 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "XTNTVA01AUM667S", ccy: "AUD", category: "trade", label: "Australien Handelsbilanz" },
   { id: "XTNTVA01NZM667S", ccy: "NZD", category: "trade", label: "Neuseeland Handelsbilanz" },
   { id: "XTNTVA01CAM667S", ccy: "CAD", category: "trade", label: "Kanada Handelsbilanz" },
+
+  // — Yield Curve (nur USA; Rezessions-Signal bei Inversion) —
+  { id: "T10Y2Y", ccy: "USD", category: "yield_curve", label: "US 10-2Y Spread" },
+
+  // — PMI (nur USA; Rest nutzt OECD CLI + BCI als Doppel-Proxy) —
+  { id: "NAPM", ccy: "USD", category: "pmi", label: "ISM Manufacturing PMI" },
+
+  // — Business Confidence Index / BCI (7 von 8 — CHF fehlt auf FRED) —
+  // OECD Business Tendency Surveys (Manufacturing), Percent Balance, SB.
+  { id: "BSCICP02USM460S", ccy: "USD", category: "business_confidence", label: "Business Confidence USD" },
+  { id: "BSCICP02EZM460S", ccy: "EUR", category: "business_confidence", label: "Business Confidence EUR" },
+  { id: "BSCICP02GBM460S", ccy: "GBP", category: "business_confidence", label: "Business Confidence GBP" },
+  { id: "JPNBSCICP02STSAQ", ccy: "JPY", category: "business_confidence", label: "Business Confidence JPY (Q)" },
+  { id: "BSCICP02AUQ460S", ccy: "AUD", category: "business_confidence", label: "Business Confidence AUD (Q)" },
+  { id: "BSCICP02NZQ460S", ccy: "NZD", category: "business_confidence", label: "Business Confidence NZD (Q)" },
+  { id: "CANBSCICP02STSAQ", ccy: "CAD", category: "business_confidence", label: "Business Confidence CAD (Q)" },
+
+  // — Consumer Confidence / Sentiment (alle 8; CAD fehlt auf FRED) —
+  { id: "UMCSENT", ccy: "USD", category: "sentiment", label: "UMich Consumer Sentiment" },
+  { id: "CSCICP02EZM460S", ccy: "EUR", category: "sentiment", label: "Consumer Confidence EUR" },
+  { id: "CSCICP02GBM460S", ccy: "GBP", category: "sentiment", label: "Consumer Confidence GBP" },
+  { id: "CSCICP02JPM460S", ccy: "JPY", category: "sentiment", label: "Consumer Confidence JPY" },
+  { id: "CSCICP02AUM460S", ccy: "AUD", category: "sentiment", label: "Consumer Confidence AUD" },
+  { id: "LOCOCIORNZQ665S", ccy: "NZD", category: "sentiment", label: "Consumer Confidence NZD (Q)" },
+  { id: "CSCICP02CHQ460S", ccy: "CHF", category: "sentiment", label: "Consumer Confidence CHF (Q)" },
+
+  // — Retail Sales (Volume Index, alle 8) —
+  { id: "RSXFS", ccy: "USD", category: "retail_sales", label: "US Retail Sales ex Food Services" },
+  { id: "SLRTTO01EZM659S", ccy: "EUR", category: "retail_sales", label: "Retail Trade Volume EUR" },
+  { id: "SLRTTO01GBM659S", ccy: "GBP", category: "retail_sales", label: "Retail Trade Volume GBP" },
+  { id: "SLRTTO01JPM659S", ccy: "JPY", category: "retail_sales", label: "Retail Trade Volume JPY" },
+  { id: "SLRTTO01AUM659S", ccy: "AUD", category: "retail_sales", label: "Retail Trade Volume AUD" },
+  { id: "SLRTTO01NZM659S", ccy: "NZD", category: "retail_sales", label: "Retail Trade Volume NZD" },
+  { id: "SLRTTO01CAM659S", ccy: "CAD", category: "retail_sales", label: "Retail Trade Volume CAD" },
+  { id: "SLRTTO01CHM659S", ccy: "CHF", category: "retail_sales", label: "Retail Trade Volume CHF" },
+
+  // — Zentralbank-Bilanzsummen (Fed/EZB/BoJ decken >80% globaler ZB-Liquidität) —
+  { id: "WALCL", ccy: "USD", category: "balance_sheet", label: "Fed Total Assets" },
+  { id: "ECBASSETSW", ccy: "EUR", category: "balance_sheet", label: "ECB Total Assets" },
+  { id: "JPNASSETS", ccy: "JPY", category: "balance_sheet", label: "BoJ Total Assets" },
 
   // — Marktdaten —
   { id: "VIXCLS", ccy: null, category: "market", label: "VIX" },
