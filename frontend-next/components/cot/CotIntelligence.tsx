@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { CotIntelData, HeatmapRow, ScanItem } from "@/lib/data/cotIntel";
 import type { CurrencySignal } from "@/lib/calc/cotIntel";
-import { CCY_META } from "@/lib/calc/macroScore";
+import { CCY_FLAGS } from "@/lib/constants/flags";
 
 type Tab = "signale" | "ranking" | "heatmap" | "scanner";
 
@@ -22,7 +22,7 @@ function scoreCls(v: number | null): string {
   return "text-muted";
 }
 function flag(ccy: string): string {
-  return CCY_META[ccy]?.flag ?? "🏳️";
+  return CCY_FLAGS[ccy] ?? "🏳️";
 }
 
 export default function CotIntelligence() {

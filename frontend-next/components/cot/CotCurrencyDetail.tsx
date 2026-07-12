@@ -18,7 +18,7 @@ import TimeSeriesChart, { type TimeSeriesPoint } from "@/components/charts/TimeS
 import Panel from "@/components/layout/Panel";
 import { chart, tooltipStyle, fmtDate } from "@/components/charts/chartTheme";
 import type { CotCurrencyDetail } from "@/lib/data/cotIntel";
-import { CCY_META } from "@/lib/calc/macroScore";
+import { CCY_FLAGS } from "@/lib/constants/flags";
 import { indexText } from "@/lib/calc/cotIntel";
 
 function biasCls(bias: string): string {
@@ -39,7 +39,7 @@ const fmtD = (v: number | null) =>
   v === null ? "–" : `${v > 0 ? "+" : ""}${v.toLocaleString("de-DE")}`;
 
 export default function CotCurrencyDetailView({ d }: { d: CotCurrencyDetail }) {
-  const flag = CCY_META[d.ccy]?.flag ?? "🏳️";
+  const flag = CCY_FLAGS[d.ccy] ?? "🏳️";
   const s = d.signal;
 
   const tffData: TimeSeriesPoint[] = d.tff.map((p) => ({

@@ -11,10 +11,7 @@ const PAIRS = [
 ];
 
 // Analyse pages that show the search bar
-const ANALYSE_PREFIXES = [
-  "/dashboard","/weekly","/cot","/makro","/sentiment",
-  "/intermarket","/saisonalitaet","/kalender","/vergleich",
-];
+const ANALYSE_PREFIXES = ["/dashboard", "/weekly", "/cot", "/makro"];
 
 function isAnalysePage(pathname: string): boolean {
   return ANALYSE_PREFIXES.some(

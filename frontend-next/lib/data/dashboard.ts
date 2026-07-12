@@ -6,38 +6,24 @@ import { computeCotFlow, latestFlow, type CotFlowSummary } from "@/lib/calc/cotD
 import type { SeriesPoint } from "@/lib/calc/seriesMath";
 import { currencyStrength, type StrengthResult } from "@/lib/calc/strength";
 import { riskGauge, type RiskGaugeResult } from "@/lib/calc/riskGauge";
-import { combineStance, type StanceResult } from "@/lib/calc/cbStance";
 import {
   evaluatePair,
   type ScreenerVerdict,
   type ScreenerInputs,
 } from "@/lib/calc/screenerReasoning";
-import { evaluateAllCurrencies, type CurrencyBias } from "@/lib/calc/currencyBias";
-import { buildCockpit, type CurrencyCockpitRow, type CockpitNews } from "@/lib/calc/currencyCockpit";
 import { G8_CURRENCIES, FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import { CONTRACT_BY_CCY } from "@/lib/constants/cftcContracts";
 import { seriesFor } from "@/lib/constants/fredSeries";
-import { BANKS } from "@/lib/constants/banks";
-import type { CbStanceRow } from "@/lib/supabase/types";
 
 export interface DashboardData {
   strength: StrengthResult;
   risk: RiskGaugeResult;
-  stances: StanceResult[];
   verdicts: ScreenerVerdict[];
   cotPercentiles: Array<{ ccy: string; percentile: number }>;
   /** Δ-zentrierter COT-Flow je Währung (TFF Leveraged Funds, Fallback Legacy) */
   cotFlows: Array<{ ccy: string } & CotFlowSummary>;
-  /** Long/Short-Bias je Währung (4-Faktoren-Modell) für den Währungs-Kompass */
-  currencyBias: CurrencyBias[];
-  /** Angereicherte Cockpit-Zeilen je Währung (Bias + Retail + Saison + News) */
-  cockpit: CurrencyCockpitRow[];
   sentimentAge: string | null;
 }
-
-/** High-Impact-Events (CPI/NFP/Zinsentscheid) für die News-Flags im Cockpit. */
-const DRIFT_EVENT_RE =
-  /(CPI|Consumer Price|Inflation Rate|Nonfarm|Non-Farm|Payroll|Rate Decision|Interest Rate|FOMC|Monetary Policy|Cash Rate|Bank Rate)/i;
 
 /** Mehrere FRED-Serien in einem Query (gruppiert). */
 export async function getFredBatch(
@@ -83,11 +69,8 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     (x): x is string => Boolean(x),
   );
 
-  const now = new Date();
-  const next7 = new Date(now.getTime() + 7 * 86_400_000).toISOString();
-
   // Alle unabhängigen Blöcke parallel — statt sequenzieller Roundtrips
-  const [priceRows, rateSeries, vixSeries, cotByCode, tffByCode, seasonalityByInstrument, sentRes, stanceRes, eventsRes] =
+  const [priceRows, rateSeries, vixSeries, cotByCode, tffByCode, seasonalityByInstrument, sentRes] =
     await Promise.all([
       pagedSelect<{ instrument: string; date: string; close: number }>(
         db,
@@ -106,14 +89,6 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
         .select("pair, captured_at, long_pct")
         .order("captured_at", { ascending: false })
         .limit(120),
-      db.from("cb_stance").select("*"),
-      db
-        .from("calendar_events")
-        .select("title, currency, event_time")
-        .eq("impact", "High")
-        .gte("event_time", now.toISOString())
-        .lte("event_time", next7)
-        .order("event_time"),
     ]);
 
   const closesByInstrument = new Map<string, number[]>();
@@ -171,10 +146,6 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     }
   }
 
-  const stanceByBank = new Map(
-    ((stanceRes.data ?? []) as CbStanceRow[]).map((r) => [r.bank, r]),
-  );
-
   // ===== Berechnungen =====
   const strength = currencyStrength(closesByInstrument);
 
@@ -184,17 +155,6 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     jpyStrength1M: strength.scores["1M"]["JPY"] ?? 0,
     chfStrength1M: strength.scores["1M"]["CHF"] ?? 0,
     spxCloses: closesByInstrument.get("SPX500_USD") ?? [],
-  });
-
-  const stances = BANKS.map((b) => {
-    const row = stanceByBank.get(b.bank);
-    return combineStance({
-      bank: b.bank,
-      ccy: b.ccy,
-      manualScore: row?.stance_score ?? 0,
-      manualRationale: row?.rationale ?? null,
-      policyRate: policyByCcy.get(b.ccy) ?? [],
-    });
   });
 
   const inputs: ScreenerInputs = {
@@ -210,37 +170,10 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     (a, b) => b.alignedCount - a.alignedCount,
   );
 
-  const currencyBias = evaluateAllCurrencies(G8_CURRENCIES, {
-    cotFlowByCcy,
-    cotPercentileByCcy,
-    policyByCcy,
-    stanceByCcy: new Map(stances.map((s) => [s.ccy, s])),
-    strength,
-  });
-
-  // News-Flags je Währung (High-Impact, nächste 7 Tage)
-  const newsByCcy = new Map<string, CockpitNews[]>();
-  for (const e of eventsRes.data ?? []) {
-    if (!e.currency) continue;
-    const arr = newsByCcy.get(e.currency) ?? [];
-    arr.push({ title: e.title, date: e.event_time, drift: DRIFT_EVENT_RE.test(e.title) });
-    newsByCcy.set(e.currency, arr);
-  }
-
-  const cockpit = buildCockpit(currencyBias, {
-    sentimentByPair,
-    seasonalityByInstrument,
-    newsByCcy,
-    currentMonth: now.getMonth() + 1,
-  });
-
   return {
     strength,
     risk,
-    stances,
     verdicts,
-    currencyBias,
-    cockpit,
     cotPercentiles: [...cotPercentileByCcy.entries()].map(([ccy, percentile]) => ({
       ccy,
       percentile,
