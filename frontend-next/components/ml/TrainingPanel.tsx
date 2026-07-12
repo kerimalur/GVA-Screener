@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * ML-Modell-Panel: spricht das Python-Backend (Render) an — LightGBM-Modelle.
- * Predictions aller 28 Pairs, Walk-Forward-Report, Feature Importance, Training.
+ * ML-Training — einziger Ort für Trainings-Button, Live-Status, Walk-Forward-Report,
+ * Predictions und Feature Importance. Ersetzt TrainingButton.tsx + MlModelPanel.tsx
+ * (waren zwei unabhängige Poll-Loops an zwei Orten).
  */
 
 const API = (process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com").replace(
@@ -59,13 +60,42 @@ function confCls(c: Prediction["confidence"], dir: Prediction["direction"]): str
   return c === "high" ? `${base} font-black` : base;
 }
 
-export default function MlModelPanel() {
+/** 95%-Signifikanz einer Trefferquote gegen Münzwurf. */
+function isSignificant(wr: number, n: number): boolean {
+  if (n === 0) return false;
+  return Math.abs(wr - 0.5) > 1.96 * Math.sqrt(0.25 / n);
+}
+
+/** Automatisches Urteil aus dem Walk-Forward-Report — analog SeasonVerdict. */
+function verdictOf(s: Report["summary"] | undefined): { text: string; cls: string } | null {
+  if (!s) return null;
+  const hcWr = s.oos_high_conf_wr;
+  if (hcWr !== null && hcWr !== undefined && s.oos_high_conf_n >= 30 && isSignificant(hcWr, s.oos_high_conf_n)) {
+    return {
+      text: `Edge im High-Confidence-Bereich: ${(hcWr * 100).toFixed(1)} % (n=${s.oos_high_conf_n}).`,
+      cls: "border-up/30 bg-up/5 text-up",
+    };
+  }
+  if (isSignificant(s.oos_acc, s.oos_n)) {
+    return {
+      text: `Schwache Gesamt-Edge: ${(s.oos_acc * 100).toFixed(1)} % (n=${s.oos_n.toLocaleString("de-CH")}).`,
+      cls: "border-[#D8A430]/30 bg-[#D8A430]/5 text-[#D8A430]",
+    };
+  }
+  return {
+    text: "Keine Out-of-Sample-Edge (~50 %) — Modell findet aktuell kein verwertbares Muster.",
+    cls: "border-border bg-surface2 text-muted",
+  };
+}
+
+export default function TrainingPanel() {
   const [horizon, setHorizon] = useState(2);
   const [predictions, setPredictions] = useState<Prediction[] | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState<TrainStatus>({ state: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [startMsg, setStartMsg] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async (h: number) => {
@@ -94,6 +124,23 @@ export default function MlModelPanel() {
     }
   }, []);
 
+  const startPolling = useCallback(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const s: TrainStatus = await (await fetch(`${API}/ml/status`)).json();
+        setStatus(s);
+        if (s.state === "done" || s.state === "error") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          if (s.state === "done") load(horizon);
+        }
+      } catch {
+        /* nächster Tick */
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, 5000);
+  }, [horizon, load]);
+
   useEffect(() => {
     load(horizon);
   }, [horizon, load]);
@@ -101,33 +148,34 @@ export default function MlModelPanel() {
   useEffect(() => {
     fetch(`${API}/ml/status`)
       .then((r) => r.json())
-      .then(setStatus)
+      .then((s) => {
+        setStatus(s);
+        if (s.state === "running") startPolling();
+      })
       .catch(() => {});
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startTraining = async () => {
+    setStartMsg(null);
     try {
       const r = await fetch(`${API}/ml/train`, { method: "POST" });
+      if (r.status === 401) {
+        setStartMsg("Training ist schreibgeschützt (ML_TRAIN_KEY gesetzt).");
+        return;
+      }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setStatus({ state: "running", stage: "starting" });
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(async () => {
-        try {
-          const s: TrainStatus = await (await fetch(`${API}/ml/status`)).json();
-          setStatus(s);
-          if (s.state === "done" || s.state === "error") {
-            if (pollRef.current) clearInterval(pollRef.current);
-            if (s.state === "done") load(horizon);
-          }
-        } catch {
-          /* Poll-Fehler ignorieren, nächster Tick */
-        }
-      }, 5000);
+      startPolling();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Training-Start fehlgeschlagen");
+      setStartMsg(
+        e instanceof Error
+          ? `Backend nicht erreichbar (${e.message}). Render-Service evtl. eingeschlafen — kurz warten und erneut.`
+          : "Fehler",
+      );
     }
   };
 
@@ -138,6 +186,8 @@ export default function MlModelPanel() {
 
   const s = report?.summary;
   const maxGain = report?.feature_importance[0]?.gain_pct ?? 1;
+  const running = status.state === "running";
+  const verdict = verdictOf(s);
 
   return (
     <div className="space-y-5">
@@ -152,16 +202,14 @@ export default function MlModelPanel() {
         </div>
         <button
           onClick={startTraining}
-          disabled={status.state === "running"}
+          disabled={running}
           className={`px-3 py-1 rounded text-[11px] font-mono font-bold border transition-colors ${
-            status.state === "running"
+            running
               ? "border-border text-faint cursor-not-allowed"
               : "border-up/50 text-up hover:bg-up/10 cursor-pointer"
           }`}
         >
-          {status.state === "running"
-            ? `Training läuft… (${status.stage ?? "…"})`
-            : "Training starten"}
+          {running ? `Training läuft… (${status.stage ?? "…"})` : "Training starten"}
         </button>
         {status.state === "error" && (
           <span className="text-[11px] text-down font-mono">Training-Fehler: {status.error}</span>
@@ -169,10 +217,18 @@ export default function MlModelPanel() {
         {status.state === "done" && (
           <span className="text-[11px] text-up font-mono">Training abgeschlossen ✓</span>
         )}
+        {startMsg && <span className="text-[11px] text-warn font-mono">{startMsg}</span>}
       </div>
 
       {loading && <p className="text-muted text-sm font-mono animate-pulse">Lade ML-Backend…</p>}
       {error && !loading && <p className="text-[12px] text-warn font-mono">{error}</p>}
+
+      {/* Auto-Verdict */}
+      {verdict && (
+        <div className={`rounded border p-3 text-[13px] font-medium ${verdict.cls}`}>
+          {verdict.text}
+        </div>
+      )}
 
       {/* Walk-Forward-Report */}
       {s && (

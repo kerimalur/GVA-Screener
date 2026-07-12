@@ -19,6 +19,8 @@ const R_OFF = 12; // Offset der Returns
 type MatchMode = "unanimous" | "majority";
 type Sample = "full" | "is" | "oos";
 type Weighting = "equal" | "edge";
+type LaborTab = "uebersicht" | "heatmap" | "bestenliste" | "pair";
+type SortKey = "robust" | "wr" | "avg" | "n";
 
 /**
  * Richtung einer Faktor-Auswahl für eine Zeile.
@@ -98,6 +100,8 @@ export default function LaborExplorer() {
   const [matchMode, setMatchMode] = useState<MatchMode>("unanimous");
   const [splitPct, setSplitPct] = useState(60); // In-Sample-Anteil (%)
   const [weighting, setWeighting] = useState<Weighting>("edge");
+  const [tab, setTab] = useState<LaborTab>("uebersicht");
+  const [sortKey, setSortKey] = useState<SortKey>("robust");
 
   useEffect(() => {
     fetch("/api/ml/matrix")
@@ -191,17 +195,22 @@ export default function LaborExplorer() {
     }));
   }, [matrix, rows, hIdx]);
 
-  // — Walk-Forward: z-Score-Composite, Gewichte auf In-Sample gelernt,
-  //   out-of-sample getestet (verhindert Overfitting) —
-  const walkForward = useMemo(() => {
-    if (!matrix || selected.size === 0) return null;
-    const idx = [...selected];
-
+  // Split-Woche für IS/OOS — Basis für Walk-Forward-Composite UND Robustheits-Scan
+  // der Bestenliste (gleicher Regler `splitPct`, ein einziger Schnittpunkt in der Historie).
+  const splitWeek = useMemo(() => {
     const weekIdxs = rows.map((r) => r[0] as number);
     if (weekIdxs.length === 0) return null;
     const minW = Math.min(...weekIdxs);
     const maxW = Math.max(...weekIdxs);
-    const splitW = minW + Math.round((maxW - minW) * (splitPct / 100));
+    return minW + Math.round((maxW - minW) * (splitPct / 100));
+  }, [rows, splitPct]);
+
+  // — Walk-Forward: z-Score-Composite, Gewichte auf In-Sample gelernt,
+  //   out-of-sample getestet (verhindert Overfitting) —
+  const walkForward = useMemo(() => {
+    if (!matrix || selected.size === 0 || splitWeek === null) return null;
+    const idx = [...selected];
+    const splitW = splitWeek;
     const isRows = rows.filter((r) => (r[0] as number) < splitW);
     const oosRows = rows.filter((r) => (r[0] as number) >= splitW);
 
@@ -286,36 +295,109 @@ export default function LaborExplorer() {
       buckets,
       splitWeek: matrix.weeks[splitW] ?? null,
     };
-  }, [matrix, rows, selected, hIdx, splitPct, weighting]);
+  }, [matrix, rows, selected, hIdx, splitWeek, weighting]);
 
-  // — Kombi-Leaderboard: alle Teilmengen ≥1 der 5 Faktoren —
-  const leaderboard = useMemo(() => {
-    if (!matrix) return [];
+  // — Kombi-Scan: alle Teilmengen ≥1 der 5 Faktoren, je Kombi auch IS/OOS-Split —
+  // "Robust" = hält der gleichen IS→OOS-Prüfung stand wie der Walk-Forward-Composite-
+  // Block oben (Signifikanz + kein Einbruch OOS ggü. IS), damit Bestenliste und
+  // Labor-Verdict nicht auf reiner (potenziell zufälliger) Gesamt-Winrate beruhen.
+  interface ComboEntry {
+    label: string;
+    size: number;
+    stat: Stat;
+    isStat: Stat;
+    oosStat: Stat;
+    robust: boolean;
+  }
+
+  const comboStats = useMemo<ComboEntry[]>(() => {
+    if (!matrix || splitWeek === null) return [];
     const nf = matrix.factors.length;
-    const out: Array<{ label: string; size: number; stat: Stat }> = [];
+    const out: ComboEntry[] = [];
     for (let mask = 1; mask < 1 << nf; mask++) {
       const idx: number[] = [];
       for (let i = 0; i < nf; i++) if (mask & (1 << i)) idx.push(i);
-      let n = 0,
-        hits = 0,
-        sum = 0;
+
+      const acc = { n: 0, hits: 0, sum: 0 };
+      const accIs = { n: 0, hits: 0, sum: 0 };
+      const accOos = { n: 0, hits: 0, sum: 0 };
       for (const r of rows) {
         const dir = matchDirection(r, idx, matchMode);
         if (dir === 0) continue;
         const ret = r[hIdx];
         if (ret === null) continue;
         const signed = dir * (ret as number);
-        n++;
-        if (signed > 0) hits++;
-        sum += signed;
+        const target = (r[0] as number) < splitWeek ? accIs : accOos;
+        for (const a of [acc, target]) {
+          a.n++;
+          if (signed > 0) a.hits++;
+          a.sum += signed;
+        }
       }
-      const stat = makeStat(n, hits, sum);
-      if (stat.n >= minN) {
-        out.push({ label: idx.map((i) => matrix.factors[i]).join(" + "), size: idx.length, stat });
-      }
+      const stat = makeStat(acc.n, acc.hits, acc.sum);
+      if (stat.n < minN) continue;
+      const isStat = makeStat(accIs.n, accIs.hits, accIs.sum);
+      const oosStat = makeStat(accOos.n, accOos.hits, accOos.sum);
+      const robust =
+        isStat.n >= minN &&
+        oosStat.n >= minN &&
+        oosStat.sig &&
+        isStat.wr !== null &&
+        oosStat.wr !== null &&
+        oosStat.wr >= isStat.wr - 2;
+
+      out.push({
+        label: idx.map((i) => matrix.factors[i]).join(" + "),
+        size: idx.length,
+        stat,
+        isStat,
+        oosStat,
+        robust,
+      });
     }
-    return out.sort((a, b) => (b.stat.wr ?? -1) - (a.stat.wr ?? -1));
-  }, [matrix, rows, hIdx, minN, matchMode]);
+    return out;
+  }, [matrix, rows, hIdx, minN, matchMode, splitWeek]);
+
+  const leaderboard = useMemo(() => {
+    const arr = [...comboStats];
+    switch (sortKey) {
+      case "wr":
+        return arr.sort((a, b) => (b.stat.wr ?? -1) - (a.stat.wr ?? -1));
+      case "avg":
+        return arr.sort((a, b) => (b.stat.avg ?? -Infinity) - (a.stat.avg ?? -Infinity));
+      case "n":
+        return arr.sort((a, b) => b.stat.n - a.stat.n);
+      case "robust":
+      default:
+        return arr.sort((a, b) => {
+          if (a.robust !== b.robust) return a.robust ? -1 : 1;
+          return (b.stat.wr ?? -1) - (a.stat.wr ?? -1);
+        });
+    }
+  }, [comboStats, sortKey]);
+
+  // — Labor-Verdict: robusteste Kombi über den ganzen Scan, unabhängig von der
+  //   manuell angehakten Auswahl (das eigentliche "zieht selbst Schlüsse") —
+  const verdict = useMemo(() => {
+    const robustCombos = comboStats.filter((c) => c.robust);
+    if (robustCombos.length === 0) {
+      return {
+        text: "Keine Kombination hält der IS→OOS-Prüfung stand (aktueller Filter) — Overfit-Gefahr bei jeder Einzelauswahl.",
+        cls: "border-border bg-surface2 text-muted",
+        best: null as ComboEntry | null,
+        count: 0,
+      };
+    }
+    const best = robustCombos.reduce((a, b) => ((b.oosStat.wr ?? -1) > (a.oosStat.wr ?? -1) ? b : a));
+    return {
+      text: `Robusteste Kombi: ${best.label} — OOS ${fmtWr(best.oosStat)} (n=${best.oosStat.n})${
+        robustCombos.length > 1 ? `, ${robustCombos.length} von ${comboStats.length} Kombinationen robust` : ", hält IS→OOS"
+      }.`,
+      cls: "border-up/30 bg-up/5 text-up",
+      best,
+      count: robustCombos.length,
+    };
+  }, [comboStats]);
 
   if (error) {
     return <p className="text-down text-sm font-mono">Matrix-Ladefehler: {error}</p>;
@@ -419,6 +501,29 @@ export default function LaborExplorer() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* ── Sub-Tabs ── */}
+      <div className="flex gap-1.5 border-b border-border pb-3">
+        {(
+          [
+            ["uebersicht", "Übersicht"],
+            ["heatmap", "Heatmap"],
+            ["bestenliste", "Bestenliste"],
+            ["pair", "Pair-Tabelle"],
+          ] as Array<[LaborTab, string]>
+        ).map(([key, label]) => (
+          <button key={key} className={seg(tab === key)} onClick={() => setTab(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "uebersicht" && (
+      <>
+      {/* ── Labor-Verdict: automatischer Scan, robusteste Kombi ── */}
+      <div className={`rounded border p-3 text-[13px] font-medium ${verdict.cls}`}>
+        {verdict.text}
       </div>
 
       {/* ── Walk-Forward-Validierung (Composite aus z-Scores) ── */}
@@ -550,8 +655,11 @@ export default function LaborExplorer() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* ── Währung × Faktor-Heatmap ── */}
+      {tab === "heatmap" && (
       <div>
         <div className="text-[11px] text-muted font-mono uppercase tracking-wider mb-1.5">
           Währung × Einzelfaktor — Winrate ({horizon}W, {periodYears} J) · grau = n&lt;{minN} oder nicht signifikant
@@ -582,14 +690,33 @@ export default function LaborExplorer() {
           </table>
         </div>
       </div>
+      )}
 
       {/* ── Kombi-Leaderboard ── */}
+      {tab === "bestenliste" && (
       <div>
-        <div className="text-[11px] text-muted font-mono uppercase tracking-wider mb-1.5">
-          Bestenliste — alle Kombinationen ({horizon}W, {periodYears} J, n≥{minN})
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+          <div className="text-[11px] text-muted font-mono uppercase tracking-wider">
+            Bestenliste — alle Kombinationen ({horizon}W, {periodYears} J, n≥{minN})
+          </div>
+          <div className="flex gap-1.5 items-center">
+            <span className="text-[9px] uppercase tracking-widest text-faint">Sortierung</span>
+            {(
+              [
+                ["robust", "Robustheit"],
+                ["wr", "Winrate"],
+                ["avg", "Ø Rendite"],
+                ["n", "n"],
+              ] as Array<[SortKey, string]>
+            ).map(([key, label]) => (
+              <button key={key} className={seg(sortKey === key)} onClick={() => setSortKey(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
-          <table className="w-full text-[12px] min-w-[480px]">
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          <table className="w-full text-[12px] min-w-[520px]">
             <thead>
               <tr className="text-[9px] text-faint font-mono uppercase tracking-wider sticky top-0 bg-surface">
                 <th className="text-left pb-1.5 px-2">Kombination</th>
@@ -597,11 +724,12 @@ export default function LaborExplorer() {
                 <th className="text-right pb-1.5 px-2">Winrate</th>
                 <th className="text-right pb-1.5 px-2">Ø Rendite</th>
                 <th className="text-right pb-1.5 px-2">Signifikant</th>
+                <th className="text-right pb-1.5 px-2">Robust</th>
               </tr>
             </thead>
             <tbody>
               {leaderboard.map((c) => (
-                <tr key={c.label} className="border-t border-border">
+                <tr key={c.label} className={`border-t border-border ${c.robust ? "bg-up/5" : ""}`}>
                   <td className="py-1.5 px-2 font-medium">
                     {c.label} <span className="text-faint text-[10px] font-mono">({c.size})</span>
                   </td>
@@ -619,15 +747,27 @@ export default function LaborExplorer() {
                   <td className="py-1.5 px-2 text-right font-mono text-[10px]">
                     {c.stat.sig ? <span className="text-up">✓</span> : <span className="text-faint">—</span>}
                   </td>
+                  <td className="py-1.5 px-2 text-right font-mono text-[10px]">
+                    {c.robust ? <span className="text-up font-bold">✓</span> : <span className="text-faint">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <div className="text-[10px] text-faint mt-1.5">
+          Robust = signifikant im Out-of-Sample-Teil UND kein Einbruch ggü. In-Sample (Split{" "}
+          {splitPct}/{100 - splitPct}, gleicher Regler wie oben in Übersicht) — dieselbe Prüfung wie
+          der Walk-Forward-Composite-Block, angewendet auf alle 31 Kombinationen statt nur der Auswahl.
+        </div>
       </div>
+      )}
 
       {/* ── Pair-Tabelle der Auswahl ── */}
-      {selected.size > 0 && (
+      {tab === "pair" && selected.size === 0 && (
+        <p className="text-muted text-sm">Mindestens einen Faktor in der Filterleiste anhaken.</p>
+      )}
+      {tab === "pair" && selected.size > 0 && (
         <div>
           <div className="text-[11px] text-muted font-mono uppercase tracking-wider mb-1.5">
             Auswahl nach Pair — wo funktioniert die Kombination? ({horizon}W, {periodYears} J)

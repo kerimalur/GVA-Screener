@@ -89,7 +89,7 @@ Eine Seite die auf einen Blick zeigt: wie steht jede G8-Währung fundamental da?
 - **Swing Bias:** LONG/SHORT/NEUTRAL Badge — abgeleitet aus dem Score (+/-Schwelle ≥15 = LONG/SHORT)
 
 #### 1b. Score Breakdown (Tabelle darunter)
-Tabelle mit 8 Zeilen (Währungen) × 7 Sub-Score-Spalten + Total + Bias:
+Tabelle mit 8 Zeilen (Währungen) × 9 Sub-Score-Spalten + Total + Bias:
 
 | Spalte | Berechnung | Normierung |
 |--------|-----------|------------|
@@ -98,8 +98,10 @@ Tabelle mit 8 Zeilen (Währungen) × 7 Sub-Score-Spalten + Total + Bias:
 | **Labour** | Arbeitslosenquote: 3M-Trend fallend = +50, stabil = 0, steigend = -50 | -100 bis +100 |
 | **Rates** | Policy-Rate-Trend (3M-Änderung): >0.25 = +100 (hawkish), <-0.25 = -100 (dovish) | -100 bis +100 |
 | **Real Yield** | 10Y - CPI YoY: >2% = +100, >0 = +50, <0 = -50, <-2% = -100 | -100 bis +100 |
-| **Liquidity** | Für USD: VIX <15=+50, >25=-50. Für Rest: 0 (keine Daten ohne externe API). | -100 bis +100 |
-| **Curve/Risk** | Für USD: T10Y2Y >0 = +50, <0 = -50 (invertiert = Rezession). Für Rest: 0. | -100 bis +100 |
+| **Sentiment** | Consumer Confidence: 3M-Trend steigend = +50, stabil = 0, fallend = -50. Für Quartalsserien (NZD, CHF): Q/Q-Vergleich. CAD: 0 (keine Daten). | -100 bis +100 |
+| **Retail** | Retail Sales Volume: 3M-Trend steigend = +50, stabil = 0, fallend = -50. | -100 bis +100 |
+| **Liquidity** | Balance Sheet 3M-Trend: wachsend = +50 (QE), schrumpfend = -50 (QT). Für USD/EUR/JPY aus FRED. Für Rest: 0 (keine Daten). Zusätzlich für USD: VIX <15 = +25 Bonus, >25 = -25 Malus. | -100 bis +100 |
+| **Curve/Risk** | Für USD: T10Y2Y >0 = +50, <0 = -50 (invertiert = Rezession). Für Rest: 0 (keine Yield-Curve-Serien). | -100 bis +100 |
 | **TOTAL** | Gleichgewichteter Durchschnitt der Sub-Scores | -100 bis +100 |
 | **BIAS** | TOTAL ≥15 = NEUTRAL(LONG-Tendenz), ≤-15 = NEUTRAL(SHORT-Tendenz), sonst NEUTRAL | Text |
 
@@ -116,15 +118,46 @@ Tabelle: 8 Zentralbanken:
 | Last Change | Aus fred_series: Vergleich letzter vs. vorletzter Wert. "↑ 25 bps · YYYY-MM-DD" oder "↓ 25 bps" |
 | Real Rate | Policy Rate − CPI YoY |
 | Inflation Gap | CPI YoY − Ziel (2% Default, 0% JPY, 2.5% AUD/NZD Midpoint) |
+| Balance Sheet | FRED Balance Sheet Serie (WALCL/ECBASSETSW/JPNASSETS). Aktueller Wert formatiert (z.B. "$7.2T"). Für BoE/RBA/BoC/SNB/RBNZ: "n/a" |
+| QE/QT | Aus Balance Sheet 3M-Trend: wachsend = "QE 🟢", schrumpfend = "QT 🔴", stabil = "HOLD 🟡". Für fehlende: "—" |
 | Policy Bias | HAWKISH (Rate stieg letzte 6M oder Inflation Gap >1) / DOVISH (Rate fiel oder Gap <-1) / NEUTRAL |
 
 #### 1d. Neue FRED-Serien ergänzen
 In `fredSeries.ts` FRED_CATALOG ergänzen:
-- `T10Y2Y` (yield_curve Kategorie, ccy: "USD", label: "US 10-2Y Spread")
-- `UMCSENT` (neue Kategorie "sentiment", ccy: "USD", label: "UMich Consumer Sentiment")
-- `NAPM` (neue Kategorie "pmi", ccy: "USD", label: "ISM Manufacturing PMI")
 
-Neue FredCategory-Werte hinzufügen: `"yield_curve" | "sentiment" | "pmi"`.
+**Yield Curve:**
+- `T10Y2Y` (Kategorie "yield_curve", ccy: "USD", label: "US 10-2Y Spread")
+
+**PMI (nur USA, Rest nutzt OECD CLI als Proxy):**
+- `NAPM` (Kategorie "pmi", ccy: "USD", label: "ISM Manufacturing PMI")
+
+**Consumer Confidence (alle 8 Währungen):**
+- `UMCSENT` (Kategorie "sentiment", ccy: "USD", label: "UMich Consumer Sentiment")
+- `CSCICP02EZM460S` (Kategorie "sentiment", ccy: "EUR", label: "Consumer Confidence EUR")
+- `CSCICP02GBM460S` (Kategorie "sentiment", ccy: "GBP", label: "Consumer Confidence GBP")
+- `CSCICP02JPM460S` (Kategorie "sentiment", ccy: "JPY", label: "Consumer Confidence JPY")
+- `CSCICP02AUM460S` (Kategorie "sentiment", ccy: "AUD", label: "Consumer Confidence AUD")
+- `LOCOCIORNZQ665S` (Kategorie "sentiment", ccy: "NZD", label: "Consumer Confidence NZD (quarterly)")
+- `CSCICP02CHQ460S` (Kategorie "sentiment", ccy: "CHF", label: "Consumer Confidence CHF (quarterly)")
+- Hinweis: Kanada (CAD) hat keine aktive FRED-Serie für Consumer Confidence — Feld leer lassen mit ⚠️.
+
+**Retail Sales (alle 8 Währungen):**
+- `RSXFS` (Kategorie "retail_sales", ccy: "USD", label: "US Retail Sales ex Food Services")
+- `SLRTTO01EZM659S` (Kategorie "retail_sales", ccy: "EUR", label: "Retail Trade Volume EUR")
+- `SLRTTO01GBM659S` (Kategorie "retail_sales", ccy: "GBP", label: "Retail Trade Volume GBP")
+- `SLRTTO01JPM659S` (Kategorie "retail_sales", ccy: "JPY", label: "Retail Trade Volume JPY")
+- `SLRTTO01AUM659S` (Kategorie "retail_sales", ccy: "AUD", label: "Retail Trade Volume AUD")
+- `SLRTTO01NZM659S` (Kategorie "retail_sales", ccy: "NZD", label: "Retail Trade Volume NZD")
+- `SLRTTO01CAM659S` (Kategorie "retail_sales", ccy: "CAD", label: "Retail Trade Volume CAD")
+- `SLRTTO01CHM659S` (Kategorie "retail_sales", ccy: "CHF", label: "Retail Trade Volume CHF")
+
+**Central Bank Balance Sheets (3 große):**
+- `WALCL` (Kategorie "balance_sheet", ccy: "USD", label: "Fed Total Assets")
+- `ECBASSETSW` (Kategorie "balance_sheet", ccy: "EUR", label: "ECB Total Assets")
+- `JPNASSETS` (Kategorie "balance_sheet", ccy: "JPY", label: "BoJ Total Assets")
+- Hinweis: BoE/RBA/BoC/SNB/RBNZ haben keine FRED-Serien für Balance Sheets. Für diese Währungen bleibt das Feld leer. Fed+ECB+BoJ decken >80% der globalen ZB-Liquidität ab.
+
+Neue FredCategory-Werte hinzufügen: `"yield_curve" | "sentiment" | "pmi" | "retail_sales" | "balance_sheet"`.
 
 Dann im Update-Job sicherstellen, dass diese neuen Serien beim nächsten FRED-Cron-Run gefetcht werden.
 
@@ -229,7 +262,7 @@ PAGE_TITLES ergänzen:
 
 ## Anforderungen
 
-- **Keine neuen APIs/externe Dienste:** Alles aus bestehenden Supabase-Tabellen (fred_series, cot_reports, cot_tff_reports, price_daily, calendar_events). Die einzigen neuen FRED-Serien (T10Y2Y, UMCSENT, NAPM) werden über den bestehenden FRED-Update-Job automatisch befüllt.
+- **Keine neuen APIs/externe Dienste:** Alles aus bestehenden Supabase-Tabellen (fred_series, cot_reports, cot_tff_reports, price_daily, calendar_events). Die ~25 neuen FRED-Serien (Sentiment, Retail Sales, Balance Sheets, Yield Curve, PMI) werden über den bestehenden FRED-Update-Job automatisch befüllt — FRED ist kostenlos und braucht keinen neuen API-Key.
 - **Berechnungen im Frontend:** Alle Scores, Regime-Klassifikationen und Textgenerierung sind deterministische Berechnungen auf den Rohdaten — kein LLM, kein Backend-Aufruf.
 - **API-Routes mit Caching:** Wie `/api/ml/matrix` — `unstable_cache` mit 1h Revalidate, `maxDuration: 300`.
 - **Styling:** Identisch zu `LaborExplorer.tsx` — dunkles Theme, gleiche Tailwind-Klassen, `font-mono` für Zahlen, Farbcodierung für positive/negative Werte.
@@ -278,14 +311,14 @@ frontend-next/
 ## Akzeptanzkriterien
 
 1. `/makro/terminal` zeigt 8 Währungskarten mit Score, Regime-Badge, Policy Rate, CPI, 10Y, Swing Bias.
-2. Score Breakdown Tabelle zeigt 7 Sub-Scores + Total + Bias für alle 8 Währungen.
-3. Central Bank Monitor zeigt Policy Rate, Last Change, Real Rate, Inflation Gap, Policy Bias.
+2. Score Breakdown Tabelle zeigt 9 Sub-Scores (Growth, Inflation, Labour, Rates, Real Yield, Sentiment, Retail, Liquidity, Curve/Risk) + Total + Bias für alle 8 Währungen.
+3. Central Bank Monitor zeigt Policy Rate, Last Change, Real Rate, Inflation Gap, Balance Sheet, QE/QT, Policy Bias.
 4. `/cot/intelligence` zeigt Signal Engine mit gewichtetem Bias und Confidence für alle G8-Währungen.
 5. COT Strength Ranking Tabelle mit Dealer/AM/LF/Retail Scores + Strongest/Weakest Sidebar.
 6. Klick auf Währung → Detailseite mit Charts (TFF Netto, Legacy Netto, OI, COT Index) und Positionstabelle.
 7. Weekly Heatmap zeigt Δ Net pro Markt × Trader-Gruppe, farbcodiert.
 8. Flips & Extremes Scanner zeigt automatisch relevante Positionswechsel und Extrempositionen.
-9. Neue FRED-Serien (T10Y2Y, UMCSENT, NAPM) in fredSeries.ts ergänzt.
+9. ~25 neue FRED-Serien (Sentiment 7×, Retail Sales 8×, Balance Sheets 3×, T10Y2Y, UMCSENT, NAPM, RSXFS) in fredSeries.ts ergänzt mit 5 neuen Kategorien.
 10. Navigation korrekt: Macro Terminal + COT Intelligence erreichbar.
 11. Alle Daten aus bestehenden Supabase-Tabellen, keine neuen externen APIs.
 12. `npm run build` fehlerfrei.
@@ -298,8 +331,19 @@ frontend-next/
 
 | Veltrix-Feature | Warum nicht | Alternative im GVA-Screener |
 |---|---|---|
-| Top Setups Scorecard (20 Makro-Indikatoren) | Braucht PMI/Retail Sales/ADP/JOLTS etc. für alle Länder — FRED hat das nur für USA, Rest braucht Trading Economics API (~$50/Mo) | Macro Terminal Score + Bias Engine (existiert ähnlich als Weekly Outlook) |
+| Top Setups Scorecard (20 Makro-Indikatoren) | Braucht ADP/JOLTS/NFP-Detail/ISM für alle Länder — FRED hat das nur für USA | Macro Terminal 9-Faktor Score (Growth/Inflation/Labour/Rates/RealYield/Sentiment/Retail/Liquidity/Curve) |
 | Bias Engine (4 Engines) | Existiert bereits als Weekly Outlook + screenerReasoning.ts (5 Faktoren) | Bestehender 5-Faktor-Screener + ML-Modell |
 | Retail Sentiment Detail | Existiert bereits unter `/sentiment` | Bestehende Sentiment-Seite |
 | Quant Models / Market Scanner | Eigenes System, proprietär | GVA-Scanner ist unser Quant-Ansatz |
-| Balance Sheet / QE/QT Tracking | Braucht Zentralbank-APIs die manuell gepflegt werden müssen | Erstmal weglassen, bei Bedarf später ergänzen |
+| Balance Sheet für BoE/RBA/BoC/SNB/RBNZ | Nicht auf FRED, bräuchte Scraping der jeweiligen ZB-Websites | Fed+ECB+BoJ decken >80% der globalen Liquidität ab |
+| Echte PMI-Daten für Nicht-USA | S&P Global lizenziert, ~$50/Mo via Trading Economics | OECD CLI als Proxy (Korrelation ~0.85 mit PMI) |
+
+## Was jetzt NEU abgedeckt ist (vs. erste Version des Prompts)
+
+| Feature | Vorher | Jetzt |
+|---|---|---|
+| Consumer Confidence | nur USA (UMCSENT) | 7/8 Währungen (alle außer CAD) via FRED OECD-Serien |
+| Retail Sales | nur USA (RSXFS) | alle 8 Währungen via FRED OECD Retail Trade Volume |
+| Central Bank Balance Sheets | gar nicht | Fed + ECB + BoJ (WALCL, ECBASSETSW, JPNASSETS) |
+| QE/QT Tracking | gar nicht | 3M-Trend aus Balance Sheet Daten |
+| Score Sub-Faktoren | 7 (davon 2 nur USD) | 9 (davon 2 nur USD: Curve/Risk, teilweise Liquidity) |

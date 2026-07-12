@@ -1,5 +1,5 @@
+import Link from "next/link";
 import Panel from "@/components/layout/Panel";
-import TrainingButton from "@/components/ml/TrainingButton";
 
 export const dynamic = "force-static";
 
@@ -86,7 +86,7 @@ export default function Page() {
       </Panel>
 
       {/* Was es kann */}
-      <Panel title="Was es kann" subtitle="Auf der Seite „Daten-Check“ im Panel „ML-Modell“">
+      <Panel title="Was es kann" subtitle="Auf der Seite „Training“">
         <div className="grid md:grid-cols-3 gap-3 text-[12.5px]">
           <div className="rounded border border-border bg-surface2 p-3">
             <div className="text-text font-bold mb-1">Predictions</div>
@@ -116,9 +116,12 @@ export default function Page() {
       <Panel title="Wie man es trainiert" subtitle="Einmal auf Knopfdruck, dann fertige Modelle in der DB">
         <div className="space-y-3.5">
           <Step n={1} title="„Training starten“ klicken">
-            Direkt hier (oder im ML-Modell-Panel auf der Daten-Check-Seite). Läuft im Hintergrund auf
-            dem Render-Backend — der Button zeigt live den Fortschritt (Features → Training 1W → 2W → …).
-            <TrainingButton />
+            Auf der Seite{" "}
+            <Link href="/ml/training" className="text-accent hover:underline">
+              ML-Training
+            </Link>{" "}
+            — läuft im Hintergrund auf dem Render-Backend, der Button dort zeigt live den
+            Fortschritt (Features → Training 1W → 2W → …).
           </Step>
           <Step n={2} title="5–15 Minuten warten">
             Das Modell baut ~40 Merkmale über die volle Historie, macht eine Grid-Suche über

@@ -1,6 +1,5 @@
 import Panel from "@/components/layout/Panel";
 import BacktestPanel from "@/components/ml/BacktestPanel";
-import MlModelPanel from "@/components/ml/MlModelPanel";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { tryQuery } from "@/lib/data/util";
@@ -113,13 +112,6 @@ export default async function Page() {
             </>
           )}
         </div>
-      </Panel>
-
-      <Panel
-        title="ML-Modell (LightGBM)"
-        subtitle="Lernt Direction 1–4W aus COT-Rohdaten + Saisonalität — Python-Backend (Render), Walk-Forward-validiert"
-      >
-        <MlModelPanel />
       </Panel>
 
       <Panel
