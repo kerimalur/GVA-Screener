@@ -16,6 +16,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Analyse",
     items: [
+      { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
       { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
