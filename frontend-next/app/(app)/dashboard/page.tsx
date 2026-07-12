@@ -1,33 +1,39 @@
 import Panel from "@/components/layout/Panel";
-import StrengthPanel from "@/components/dashboard/StrengthPanel";
-import ScreenerPanel from "@/components/dashboard/ScreenerPanel";
-import CbSpectrumPanel from "@/components/dashboard/CbSpectrumPanel";
-import RiskGaugePanel from "@/components/dashboard/RiskGaugePanel";
-import CurrencyCockpit from "@/components/dashboard/CurrencyCockpit";
+import NewsPanel from "@/components/dashboard/NewsPanel";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
-import { loadDashboardData } from "@/lib/data/dashboard";
 import { tryQuery } from "@/lib/data/util";
-import { getServerSettings } from "@/lib/settings/server";
+import type { CalendarEventRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
-// Daten sind global (Service-Client) und ändern sich nur per Cron —
-// 5 min Server-Cache statt Dutzender Supabase-Roundtrips pro Aufruf.
-// Key-Suffix v2: erzwingt frische Berechnung nach dem Cockpit-Umbau
-// (alte gecachte Payload hatte kein cockpit-Feld).
-const getDashboard = unstable_cache(
-  () => tryQuery(() => loadDashboardData(createServiceClient())),
-  ["dashboard-data-v2"],
+// Kalender ändert sich täglich per Cron — 5 min Server-Cache.
+// Nur Mid- + High-Impact, heute 00:00 bis +7 Tage (Client toggelt heute/Woche).
+const getNews = unstable_cache(
+  () =>
+    tryQuery(async () => {
+      const db = createServiceClient();
+      const from = new Date();
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from.getTime() + 8 * 86_400_000);
+
+      const { data } = await db
+        .from("calendar_events")
+        .select("*")
+        .in("impact", ["High", "Medium"])
+        .gte("event_time", from.toISOString())
+        .lte("event_time", to.toISOString())
+        .order("event_time", { ascending: true });
+      return (data ?? []) as CalendarEventRow[];
+    }),
+  ["dashboard-news-v1"],
   { revalidate: 300 },
 );
 
 export default async function Page() {
-  const [data, settings] = await Promise.all([getDashboard(), getServerSettings()]);
-  const hi = settings.terminal.cotExtremePct;
-  const lo = 100 - hi;
+  const events = await getNews();
 
-  if (!data) {
+  if (events === null) {
     return (
       <Panel title="Dashboard — Setup nötig">
         <p className="text-muted text-sm">
@@ -41,61 +47,14 @@ export default async function Page() {
     );
   }
 
-  const hasPrices = Object.values(data.strength.scores["1M"]).some((v) => v !== 0);
-
   return (
-    <div className="space-y-5 max-w-[1500px] mx-auto">
-      {!hasPrices && (
-        <Panel title="Hinweis">
-          <p className="text-warn text-sm font-mono">
-            Preisdaten fehlen — <code>npx tsx scripts/backfill.mts prices</code> ausführen.
-          </p>
-        </Panel>
-      )}
-
+    <div className="space-y-5 max-w-[1400px] mx-auto">
       <Panel
-        title="Währungs-Cockpit"
-        subtitle="8 Währungen im Überblick — Bias (4 Faktoren) · COT · Zinsen · Retail · Saisonalität · High-Impact-News. Zeile aufklappen für Details."
+        title="Wirtschafts-News"
+        subtitle="Mid- + High-Impact-Events — heute oder ganze Woche · Analyse im Macro Terminal, Setups im Weekly Outlook"
       >
-        <CurrencyCockpit rows={data.cockpit ?? []} extremeHi={hi} extremeLo={lo} />
+        <NewsPanel events={events} />
       </Panel>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <Panel
-          title="Currency Strength Index"
-          subtitle="Relative Stärke aus 28 Paaren (Ø signierter Return)"
-          className="xl:col-span-2"
-        >
-          <StrengthPanel
-            strength={data.strength}
-            initialLookback={settings.terminal.strengthLookback}
-          />
-        </Panel>
-
-        <Panel
-          title="Risk-On / Risk-Off"
-          subtitle="VIX · Gold · JPY/CHF-Flows · S&P-Trend"
-        >
-          <RiskGaugePanel risk={data.risk} />
-        </Panel>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <Panel
-          title="Pair-Screener"
-          subtitle="Long/Short-Einschätzung — nur Signale mit ≥2 gleichgerichteten Faktoren (Zinsdifferenz, COT, Saisonalität, Yield-Spread, Sentiment)"
-          className="xl:col-span-2"
-        >
-          <ScreenerPanel verdicts={data.verdicts} />
-        </Panel>
-
-        <Panel
-          title="Zentralbank-Spektrum"
-          subtitle="Hawkish/Dovish je Notenbank"
-        >
-          <CbSpectrumPanel stances={data.stances} />
-        </Panel>
-      </div>
     </div>
   );
 }

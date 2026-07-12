@@ -18,21 +18,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
-      { href: "/vergleich", label: "Vergleich", icon: "ph-chart-scatter" },
-    ],
-  },
-  {
-    title: "Details",
-    collapsible: true,
-    items: [
-      { href: "/cot", label: "COT-Analyse", icon: "ph-chart-line-up" },
-      { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
-      { href: "/makro", label: "Makro & Zinsen", icon: "ph-bank" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
-      { href: "/sentiment", label: "Retail Sentiment", icon: "ph-users-three" },
-      { href: "/intermarket", label: "Intermarket", icon: "ph-arrows-left-right" },
-      { href: "/saisonalitaet", label: "Saisonalitaet", icon: "ph-calendar-dots" },
-      { href: "/kalender", label: "Kalender", icon: "ph-calendar-check" },
+      { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
     ],
   },
   {
@@ -72,24 +59,18 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "System",
     items: [
-      { href: "/leitfaden", label: "Analyse-Leitfaden", icon: "ph-book-open" },
       { href: "/einstellungen", label: "Einstellungen", icon: "ph-gear" },
+      { href: "/leitfaden", label: "Leitfaden", icon: "ph-book-open" },
     ],
   },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard — Pair-Uebersicht",
+  "/dashboard": "Dashboard — Wirtschafts-News",
   "/weekly": "Weekly Outlook — Sonntags-Cockpit",
-  "/cot": "Commitment of Traders",
   "/cot/intelligence": "COT Intelligence — Institutionelle Positionierung",
-  "/makro": "Makro & Fundamentaldaten",
-  "/makro/terminal": "Macro Terminal — G10 Currency Bias",
-  "/sentiment": "Retail Sentiment",
-  "/intermarket": "Intermarket-Analyse",
-  "/saisonalitaet": "Saisonalitaet",
-  "/kalender": "Wirtschaftskalender",
-  "/vergleich": "Vergleichs-Tool",
+  "/makro/terminal": "Macro Terminal — G8 Currency Bias",
+  "/makro/terminal/vergleich": "Macro Terminal — Währungsvergleich",
   "/scanner/radar": "Visuelles Radar",
   "/scanner/signale": "Signals-Inbox",
   "/scanner/heatmap": "Heatmap 28",
