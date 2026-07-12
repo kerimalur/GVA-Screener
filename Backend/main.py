@@ -35,6 +35,10 @@ app.add_middleware(
 from ml.routes import ml_router  # noqa: E402
 app.include_router(ml_router, prefix="/ml")
 
+# Replay-Modul (historische GVA-Hits + manuelle Backtest-Bewertung), siehe replay/
+from replay.routes import replay_router  # noqa: E402
+app.include_router(replay_router, prefix="/replay")
+
 # Globaler Cache, um mehrfache Telegram-Alerts bei Refreshes zu blockieren
 # Key: "PAIR_SHORT" oder "PAIR_LONG" -> Value: line_level (float)
 ALERT_CACHE = {}
