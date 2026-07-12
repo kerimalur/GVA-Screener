@@ -1,3 +1,6 @@
 .vercel
 .env*
 marketing-verkauf-backup/
+
+# macro_features Rohdaten-Cache
+Backend/macro_features/cache/
