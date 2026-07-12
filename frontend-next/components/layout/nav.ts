@@ -35,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Markt-Scanner",
+    collapsible: true,
     items: [
       { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresAdmin: true },
       { href: "/scanner/signale", label: "Signale", icon: "ph-tray", requiresAdmin: true },
@@ -43,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Journal",
+    collapsible: true,
     items: [
       { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
       { href: "/journal", label: "Trades", icon: "ph-notebook" },
@@ -55,6 +57,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Machine Learning",
+    collapsible: true,
     items: [
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml/labor", label: "Labor", icon: "ph-flask" },
