@@ -17,9 +17,19 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Analyse",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
+      { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
+    ],
+  },
+  {
+    // Faktor-Detail-Ansichten: erklären das "Warum" hinter dem Ranking,
+    // sind aber keine Entscheidungsquelle (Labor: Gleichgewichtung ~50 %).
+    title: "Diagnose",
+    collapsible: true,
+    items: [
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
       { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
+      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
     ],
   },
   {
@@ -49,9 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { href: "/ml/training", label: "Training", icon: "ph-play-circle" },
-      { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
       { href: "/ml/replay", label: "Replay", icon: "ph-rewind" },
-      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
     ],

@@ -1,5 +1,5 @@
 import Panel from "@/components/layout/Panel";
-import { loadRankingData, type RankingRow } from "@/lib/ml/ranking";
+import { loadRankingData, type PairIdea, type RankingRow } from "@/lib/ml/ranking";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +69,106 @@ function RankingTable({ rows }: { rows: RankingRow[] }) {
   );
 }
 
+function PairList({ ideas }: { ideas: PairIdea[] }) {
+  const best = ideas.filter((i) => i.tier === "best");
+  const gut = ideas.filter((i) => i.tier === "gut");
+  const Row = ({ i }: { i: PairIdea }) => (
+    <div className="flex items-center gap-3 py-1.5 border-t border-border/40 first:border-t-0">
+      <span className="font-mono font-bold w-24">{i.pair}</span>
+      <span
+        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+          i.direction === "long" ? "bg-up/15 text-up" : "bg-down/15 text-down"
+        }`}
+      >
+        {i.direction.toUpperCase()}
+      </span>
+      <span className="text-xs text-muted font-mono">{i.reason}</span>
+    </div>
+  );
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <div>
+        <div className="text-xs text-muted mb-2 font-bold">
+          Beste Konstellation — beide Seiten extrem
+        </div>
+        {best.length ? best.map((i) => <Row key={i.pair} i={i} />) : (
+          <p className="text-xs text-muted">Diese Woche keine Q5×Q1-Paarung.</p>
+        )}
+      </div>
+      <div>
+        <div className="text-xs text-muted mb-2 font-bold">
+          Rückenwind — eine Seite extrem, andere neutral
+        </div>
+        {gut.length ? gut.map((i) => <Row key={i.pair} i={i} />) : (
+          <p className="text-xs text-muted">–</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Explainer() {
+  return (
+    <div className="space-y-3">
+      <details className="group">
+        <summary className="cursor-pointer text-sm font-bold py-1">
+          Wie kommen Score und Q-Stufe zustande?
+        </summary>
+        <div className="text-xs text-muted leading-relaxed space-y-2 pl-4 pt-1">
+          <p>
+            <span className="font-bold text-fg">Score (−1 … +1)</span>: erwartete relative Stärke
+            der Währung gegen den Korb der anderen 7 über die nächsten {`4`} Wochen. Beim aktuellen
+            Champion (Baseline): 0.5 × Zins-Score + 0.5 × Saison-Score. Zins-Score = Differenzial
+            zum Ø der anderen Leitzinsen (±2 pp = ±1) plus 6-Monats-Momentum. Saison-Score = nur
+            aktiv, wenn der Kalendermonat in ≥12 von 17 Jahren dieselbe Richtung hatte, sonst 0.
+            Die Spalte «Top-Faktoren» zeigt die Beiträge pro Währung.
+          </p>
+          <p>
+            <span className="font-bold text-fg">Q-Stufe (1–5)</span>: der heutige Score wird gegen
+            die Verteilung aller Scores der letzten 156 Wochen gestellt. Q5 = oberstes Fünftel,
+            Q1 = unterstes. Grund: der 8-Jahres-Backtest zeigt Trefferquote 57.6 % in Q5, aber nur
+            49.5 % in Q1–Q3 gemischt — die Edge lebt ausschliesslich in den Extremen. Deshalb
+            zählen nur Q5 (long) und Q1 (short); Q2–Q4 ist Rauschen und wird ignoriert.
+          </p>
+        </div>
+      </details>
+      <details className="group">
+        <summary className="cursor-pointer text-sm font-bold py-1">
+          Was testet die ML-Engine jede Nacht?
+        </summary>
+        <div className="text-xs text-muted leading-relaxed space-y-2 pl-4 pt-1">
+          <p>
+            Jedes Experiment = eine Modell-Variante: Algorithmus (LightGBM oder logistische
+            Regression) × Horizont (1/2/4 Wochen) × Feature-Teilmenge (COT-Kategorien, Zinsen,
+            Saison — 31 Kombinationen) × zufällige Hyperparameter. Datenbasis: 25 Jahre × 8
+            Währungen ≈ 10&#39;000 Wochen-Beobachtungen, alle Werte strikt «as of» (COT erst ab
+            Freitags-Release nutzbar, Zinsen mit Publikations-Lag — kein Blick in die Zukunft).
+          </p>
+          <p>
+            Bewertung: Purged Walk-Forward — Training nur auf Vergangenheit, Test auf 5
+            chronologische Out-of-Sample-Blöcke à 52 Wochen, mit Sperrzone gegen Target-Leaks.
+            hall_score = Ø-Trefferquote minus Streuung: ein Modell, das nur in einer Marktphase
+            funktioniert, fällt durch. Die letzten 104 Wochen sieht die Suche nie — sie werden
+            erst bei einer Champion-Beförderung geprüft, und jeder dieser Zugriffe wird gezählt
+            (Zähler unten). Beförderung passiert nie automatisch.
+          </p>
+          <p>
+            <span className="font-bold text-fg">Warum 57 % viel ist:</span> 57 % Trefferquote
+            heisst pro Signal ein Erwartungswert von +14 % einer Risikoeinheit (0.57 − 0.43) —
+            über 50+ Signale pro Jahr substanziell, pro Einzeltrade fast unsichtbar. Werte ab
+            ~60 % auf Wochenhorizont sind in liquiden FX-Märkten praktisch immer Overfitting.
+            Die Engine sucht deshalb nicht «mehr Prozent», sondern Konsistenz — und der
+            Paper-Track unten misst live, ob die Edge echt ist: jede Samstags-Prognose wird nach
+            4 Wochen gegen die Realität abgerechnet. Erst reift eine Prognose (4 Wochen), dann
+            braucht es ~50 gereifte für Aussagekraft — daher 2–3 Monate. Der Backtest lässt sich
+            nicht als Ersatz vorziehen, sonst wäre der Live-Beweis wieder ein Rückblick.
+          </p>
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export default async function Page() {
   const d = await loadRankingData();
   const fmt = (m: { hits: number; total: number } | undefined) =>
@@ -79,12 +179,24 @@ export default async function Page() {
   return (
     <div className="space-y-5 max-w-[1200px] mx-auto">
       <Panel
+        title={`Pairs der Woche — ${d.weekStart ?? "?"}`}
+        subtitle="Automatisch aus Q5 (long) × Q1 (short) abgeleitet. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
+      >
+        <div className="p-5">
+          {d.pairIdeas.length ? <PairList ideas={d.pairIdeas} /> : (
+            <p className="text-sm text-muted">Diese Woche keine Q5/Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.</p>
+          )}
+        </div>
+      </Panel>
+
+      <Panel
         title={`Währungs-Ranking — Woche ${d.weekStart ?? "?"}`}
         subtitle={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, stark long → stark short. Nur Q5-Signale gelten als handelbar (Labor-Regel: Edge lebt im obersten Konfidenz-Fünftel).`}
       >
         {d.champion.length > 0 ? (
-          <div className="p-5">
+          <div className="p-5 space-y-4">
             <RankingTable rows={d.champion} />
+            <Explainer />
           </div>
         ) : (
           <p className="p-5 text-sm text-muted">

@@ -1,5 +1,6 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/server";
+import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 
 export interface RankingRow {
   ccy: string;
@@ -16,13 +17,49 @@ export interface EngineStats {
   champion: { promoted_at: string; config: Record<string, unknown>; note: string | null } | null;
 }
 
+export interface PairIdea {
+  pair: string; // Anzeige, z.B. "AUD/USD"
+  direction: "long" | "short";
+  tier: "best" | "gut";
+  reason: string; // z.B. "AUD Q5 × USD Q1"
+}
+
 export interface RankingData {
   weekStart: string | null;
   horizon: number | null;
   champion: RankingRow[];
   baseline: RankingRow[];
+  pairIdeas: PairIdea[];
   liveHitrate: Record<string, { hits: number; total: number }>;
   stats: EngineStats;
+}
+
+/** Pairs der Woche aus Q5 (long) × Q1 (short) der Champion-Zeilen.
+ *  "best" = beide Seiten extrem; "gut" = eine Seite extrem, andere neutral. */
+export function derivePairIdeas(rows: RankingRow[]): PairIdea[] {
+  const q5 = new Set(rows.filter((r) => r.confidence_quintile === 5).map((r) => r.ccy));
+  const q1 = new Set(rows.filter((r) => r.confidence_quintile === 1).map((r) => r.ccy));
+  const ideas: PairIdea[] = [];
+  for (const inst of FX_INSTRUMENTS) {
+    const b = inst.baseCcy!, q = inst.quoteCcy!;
+    const bLong = q5.has(b), bShort = q1.has(b);
+    const qLong = q5.has(q), qShort = q1.has(q);
+    if ((bLong && qLong) || (bShort && qShort)) continue; // beide Seiten gleich extrem → kein Signal
+    if (bLong && qShort) {
+      ideas.push({ pair: inst.displayName, direction: "long", tier: "best", reason: `${b} Q5 × ${q} Q1` });
+    } else if (bShort && qLong) {
+      ideas.push({ pair: inst.displayName, direction: "short", tier: "best", reason: `${b} Q1 × ${q} Q5` });
+    } else if (bLong) {
+      ideas.push({ pair: inst.displayName, direction: "long", tier: "gut", reason: `${b} Q5` });
+    } else if (qShort) {
+      ideas.push({ pair: inst.displayName, direction: "long", tier: "gut", reason: `${q} Q1` });
+    } else if (bShort) {
+      ideas.push({ pair: inst.displayName, direction: "short", tier: "gut", reason: `${b} Q1` });
+    } else if (qLong) {
+      ideas.push({ pair: inst.displayName, direction: "short", tier: "gut", reason: `${q} Q5` });
+    }
+  }
+  return ideas.sort((a, b) => (a.tier === b.tier ? a.pair.localeCompare(b.pair) : a.tier === "best" ? -1 : 1));
 }
 
 export async function loadRankingData(): Promise<RankingData> {
@@ -91,6 +128,7 @@ export async function loadRankingData(): Promise<RankingData> {
     horizon,
     champion,
     baseline,
+    pairIdeas: derivePairIdeas(champion),
     liveHitrate,
     stats: {
       experimentsTotal: total ?? 0,
