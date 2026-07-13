@@ -12,8 +12,10 @@ PAGE_SIZE = 1000
 
 
 def _config():
-    url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    # strip(): Copy-Paste-Newlines/Spaces in Secrets (GitHub Actions) sind
+    # ein klassischer Fehler — %0a im Hostnamen lässt DNS scheitern.
+    url = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
+    key = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not url or not key:
         raise RuntimeError(
             "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY fehlen — ML-Modul braucht Supabase."
