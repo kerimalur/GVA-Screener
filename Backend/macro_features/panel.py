@@ -27,8 +27,12 @@ from .config import (
     RATES_DIFF_FULL_SCALE,
     RATES_MOM_FULL_SCALE,
     RATES_MOMENTUM_MONTHS,
+    SEASON_RET_FULL_SCALE,
+    SEASONALITY_MIN_HIT_YEARS,
+    SEASONALITY_YEARS,
 )
 from .data_sources import fetch_cot_legacy, fetch_cot_tff, fetch_fred, fetch_prices
+from .seasonality_factor import build_ccy_monthly_returns
 
 HORIZONS = [1, 2, 4]
 
@@ -190,6 +194,57 @@ def _rates_features(grid: pd.DatetimeIndex) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True)
 
 
+def _season_lookup(end: pd.Timestamp) -> dict[tuple[str, int, int], dict]:
+    """(ccy, jahr, monat) → Stats über die 17 vorherigen Vorkommen des Monats.
+
+    Semantik exakt wie seasonality_factor.monthly_stats: tail(17) der
+    EXISTIERENDEN Monatswerte strikt vor dem Monat des Stichtags.
+    """
+    # Panel ohne as_of-Cut: alle vollständig abgeschlossenen Monate bis `end`
+    full = build_ccy_monthly_returns(end + pd.DateOffset(months=1))
+    lookup: dict[tuple[str, int, int], dict] = {}
+    years = range(full.index.year.min(), end.year + 2)
+    for ccy in G8:
+        s = full[ccy].dropna()
+        for month in range(1, 13):
+            vals = s[s.index.month == month]
+            val_years = vals.index.year.to_numpy()
+            arr = vals.to_numpy()
+            for y in years:
+                idx = int(np.searchsorted(val_years, y))  # Werte mit Jahr < y
+                window = arr[max(0, idx - SEASONALITY_YEARS):idx]
+                n = len(window)
+                pos = int((window > 0).sum())
+                neg = int((window < 0).sum())
+                mean_ret = float(window.mean()) if n else np.nan
+                hit = max(pos, neg) if n else 0
+                active = n >= SEASONALITY_YEARS and hit >= SEASONALITY_MIN_HIT_YEARS
+                score = (
+                    float(np.clip(mean_ret / SEASON_RET_FULL_SCALE, -1.0, 1.0))
+                    if active else 0.0
+                )
+                lookup[(ccy, y, month)] = {
+                    "season_mean_ret": mean_ret,
+                    "season_hit_years": hit,
+                    "season_n_years": n,
+                    "season_active": float(active),
+                    "season_score": score,
+                }
+    return lookup
+
+
+def _season_features(grid: pd.DatetimeIndex) -> pd.DataFrame:
+    lookup = _season_lookup(grid.max())
+    rows = []
+    for w in grid:
+        for ccy in G8:
+            rows.append({
+                "week_start": w, "ccy": ccy,
+                **lookup[(ccy, w.year, w.month)],
+            })
+    return pd.DataFrame(rows)
+
+
 def build_feature_panel(
     start: str | pd.Timestamp = "1999-06-01",
     end: str | pd.Timestamp | None = None,
@@ -200,4 +255,5 @@ def build_feature_panel(
     panel = _targets(grid)
     panel = panel.merge(_cot_features(grid), on=["week_start", "ccy"], how="left")
     panel = panel.merge(_rates_features(grid), on=["week_start", "ccy"], how="left")
+    panel = panel.merge(_season_features(grid), on=["week_start", "ccy"], how="left")
     return panel.sort_values(["week_start", "ccy"]).reset_index(drop=True)
