@@ -14,10 +14,29 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .config import FRED_FX, G8
-from .data_sources import fetch_prices
+from .config import (
+    CFTC_CODE,
+    COT_RELEASE_LAG_DAYS,
+    COT_Z_FULL_SCALE,
+    COT_Z_MIN_PERIODS,
+    COT_Z_WINDOW_WEEKS,
+    FRED_FX,
+    G8,
+)
+from .data_sources import fetch_cot_legacy, fetch_cot_tff, fetch_prices
 
 HORIZONS = [1, 2, 4]
+
+_LEGACY_CATS = {
+    "noncomm": ("noncomm_long", "noncomm_short"),
+    "comm": ("comm_long", "comm_short"),
+    "retail": ("nonrept_long", "nonrept_short"),
+}
+_TFF_CATS = {
+    "dealer": ("dealer_long", "dealer_short"),
+    "asset": ("asset_long", "asset_short"),
+    "lev": ("lev_long", "lev_short"),
+}
 
 
 def week_grid(start: str | pd.Timestamp, end: str | pd.Timestamp) -> pd.DatetimeIndex:
@@ -64,6 +83,57 @@ def _targets(grid: pd.DatetimeIndex) -> pd.DataFrame:
     return out
 
 
+def _cot_history(ccy: str) -> pd.DataFrame:
+    """Volle COT-Feature-Historie einer Währung, Key = available_from."""
+    code = CFTC_CODE[ccy]
+    legacy = fetch_cot_legacy(code)
+    f = pd.DataFrame({"report_date": legacy["date"]})
+    for cat, (lo, sh) in _LEGACY_CATS.items():
+        net = legacy[lo] - legacy[sh]
+        f[f"{cat}_net"] = net
+        f[f"{cat}_net_d1w"] = net.diff()
+    prod = f["comm_net_d1w"] * f["noncomm_net_d1w"]
+    f["cot_divergence"] = np.where(prod.isna(), np.nan, (prod < 0).astype(float))
+    roll = f["comm_net"].rolling(COT_Z_WINDOW_WEEKS, min_periods=COT_Z_MIN_PERIODS)
+    f["comm_z"] = (f["comm_net"] - roll.mean()) / roll.std()
+    f["cot_score"] = (-f["comm_z"] / COT_Z_FULL_SCALE).clip(-1.0, 1.0)
+    f["comm_net_pct156"] = f["comm_net"].rolling(156, min_periods=52).rank(pct=True)
+    f["open_interest"] = legacy["open_interest"]
+    f["oi_d1w"] = legacy["open_interest"].diff()
+
+    tff = fetch_cot_tff(code)
+    if not tff.empty:
+        t = pd.DataFrame({"report_date": tff["date"]})
+        for cat, (lo, sh) in _TFF_CATS.items():
+            net = tff[lo] - tff[sh]
+            t[f"{cat}_net"] = net
+            t[f"{cat}_net_d1w"] = net.diff()
+        f = f.merge(t, on="report_date", how="left")
+    else:
+        for cat in _TFF_CATS:
+            f[f"{cat}_net"] = np.nan
+            f[f"{cat}_net_d1w"] = np.nan
+
+    f["available_from"] = f["report_date"] + pd.Timedelta(days=COT_RELEASE_LAG_DAYS)
+    return f.sort_values("available_from").reset_index(drop=True)
+
+
+def _cot_features(grid: pd.DatetimeIndex) -> pd.DataFrame:
+    """Long-Format (week_start, ccy) × COT-Spalten via as-of-Merge."""
+    weeks = pd.DataFrame({"week_start": grid})
+    parts = []
+    for ccy in G8:
+        hist = _cot_history(ccy)
+        m = pd.merge_asof(
+            weeks, hist, left_on="week_start", right_on="available_from",
+            direction="backward",
+        )
+        m["ccy"] = ccy
+        parts.append(m.drop(columns=["available_from"]))
+    out = pd.concat(parts, ignore_index=True)
+    return out.rename(columns={"report_date": "cot_report_date"})
+
+
 def build_feature_panel(
     start: str | pd.Timestamp = "1999-06-01",
     end: str | pd.Timestamp | None = None,
@@ -72,4 +142,5 @@ def build_feature_panel(
     end = pd.Timestamp(end) if end is not None else pd.Timestamp.today().normalize()
     grid = week_grid(start, end)
     panel = _targets(grid)
+    panel = panel.merge(_cot_features(grid), on=["week_start", "ccy"], how="left")
     return panel.sort_values(["week_start", "ccy"]).reset_index(drop=True)

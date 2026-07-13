@@ -9,8 +9,8 @@ from macro_features.config import G8
 
 @pytest.fixture(scope="module")
 def panel() -> pd.DataFrame:
-    # Kurzes Fenster reicht für Struktur-Tests; nutzt lokalen CSV-Cache
-    return build_feature_panel("2020-01-01", "2024-12-31")
+    # Fenster deckt alle LEAK_DATES ab; nutzt lokalen CSV-Cache
+    return build_feature_panel("2013-01-01", "2024-12-31")
 
 
 def test_panel_shape_und_index(panel):
@@ -40,3 +40,34 @@ def test_targets_am_ende_nan(panel):
     last = panel["week_start"].max()
     tail = panel[panel["week_start"] > last - pd.Timedelta(weeks=4)]
     assert tail["fwd_ret_4w"].isna().all()
+
+
+# ── Leak-Tests: Panel-Zeile == Punkt-Build (gleiche Quelle, gleiche Cutoffs) ──
+from macro_features import build_feature_table
+
+LEAK_DATES = ["2015-03-02", "2020-06-01", "2024-06-03"]  # Montage
+COT_COLS = [
+    "noncomm_net", "noncomm_net_d1w", "comm_net", "comm_net_d1w",
+    "retail_net", "retail_net_d1w", "comm_z", "cot_score",
+    "dealer_net", "dealer_net_d1w",
+]
+
+
+@pytest.fixture(scope="module")
+def leak_refs():
+    return {d: build_feature_table(pd.Timestamp(d)) for d in LEAK_DATES}
+
+
+@pytest.mark.parametrize("as_of", LEAK_DATES)
+def test_cot_leak_panel_gleich_punkt_build(panel, leak_refs, as_of):
+    ts = pd.Timestamp(as_of)
+    ref = leak_refs[as_of]
+    rows = panel[panel["week_start"] == ts].set_index("ccy")
+    assert len(rows) == 8
+    for ccy in G8:
+        for col in COT_COLS:
+            a, b = rows.loc[ccy, col], ref.loc[ccy, col]
+            if pd.isna(b):
+                assert pd.isna(a), f"{ccy}.{col}: Panel {a}, Punkt NaN"
+            else:
+                assert a == pytest.approx(b, abs=1e-9), f"{ccy}.{col}"
