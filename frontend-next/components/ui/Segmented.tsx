@@ -16,7 +16,7 @@ export default function Segmented<T extends string>({
 }: SegmentedProps<T>) {
   return (
     <div
-      className={`inline-flex items-center bg-bg border border-border2 rounded-md p-0.5 gap-0.5 ${className}`}
+      className={`inline-flex items-center bg-sidebar border border-border rounded-md p-0.5 gap-0.5 ${className}`}
       role="tablist"
     >
       {options.map((opt) => {
@@ -29,7 +29,7 @@ export default function Segmented<T extends string>({
             onClick={() => onChange(opt.value)}
             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded text-[12px] font-medium transition-colors ${
               active
-                ? "bg-surface2 text-text border border-border2"
+                ? "bg-active text-text border border-border"
                 : "text-muted hover:text-text border border-transparent"
             }`}
           >

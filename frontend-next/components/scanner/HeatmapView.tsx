@@ -7,21 +7,21 @@ function tileStyle(type: RadarType): { wrapper: string; pairText: string; subTex
     case "hit-short":
     case "hit-long":
       return {
-        wrapper: "bg-warn/85 border-warn text-bg",
-        pairText: "text-bg",
-        subText: "text-bg/90 bg-black/15",
+        wrapper: "bg-warn/85 border-warn text-active",
+        pairText: "text-active",
+        subText: "text-active/90 bg-black/15",
       };
     case "short":
       return {
-        wrapper: "bg-down/80 border-down text-bg",
-        pairText: "text-bg",
-        subText: "text-bg/90 bg-black/15",
+        wrapper: "bg-down/80 border-down text-active",
+        pairText: "text-active",
+        subText: "text-active/90 bg-black/15",
       };
     case "long":
       return {
-        wrapper: "bg-up/80 border-up text-bg",
-        pairText: "text-bg",
-        subText: "text-bg/90 bg-black/15",
+        wrapper: "bg-up/80 border-up text-active",
+        pairText: "text-active",
+        subText: "text-active/90 bg-black/15",
       };
     default:
       return {
@@ -44,9 +44,9 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
     <div className="max-w-[1400px] mx-auto space-y-4">
       <p className="text-[13px] text-muted">
         Ultra-kompakt. Die Farbe verrät alles. <strong className="text-text">Hits</strong> zeigen ein
-        <span className="bg-down text-bg px-1.5 py-0.5 rounded text-[10px] font-bold mx-1">S</span>
+        <span className="bg-down text-active px-1.5 py-0.5 rounded text-[10px] font-bold mx-1">S</span>
         (Short) oder
-        <span className="bg-up text-bg px-1.5 py-0.5 rounded text-[10px] font-bold mx-1">L</span>
+        <span className="bg-up text-active px-1.5 py-0.5 rounded text-[10px] font-bold mx-1">L</span>
         (Long) Abzeichen.
       </p>
 
@@ -73,7 +73,7 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
               >
                 {badge && (
                   <div
-                    className={`absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded-full text-bg text-xs font-bold border border-bg/20 ${
+                    className={`absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded-full text-active text-xs font-bold border border-active/20 ${
                       badge === "S" ? "bg-down" : "bg-up"
                     }`}
                   >
@@ -81,7 +81,7 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
                   </div>
                 )}
                 {isHit && (
-                  <i className="ph-bold ph-warning-circle text-bg text-2xl mb-1.5 animate-pulse" />
+                  <i className="ph-bold ph-warning-circle text-active text-2xl mb-1.5 animate-pulse" />
                 )}
                 <span className={`font-black text-sm tracking-wide ${style.pairText}`}>
                   {item.pair}

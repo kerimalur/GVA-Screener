@@ -1,9 +1,9 @@
 export type Direction = "LONG" | "SHORT" | "NEUTRAL";
 
 const STYLE: Record<Direction, string> = {
-  LONG: "bg-up text-bg",
-  SHORT: "bg-down text-bg",
-  NEUTRAL: "bg-muted text-bg",
+  LONG: "bg-up text-active",
+  SHORT: "bg-down text-active",
+  NEUTRAL: "bg-muted text-active",
 };
 
 /**

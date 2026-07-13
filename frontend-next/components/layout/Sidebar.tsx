@@ -152,8 +152,8 @@ export default function Sidebar() {
                       data-tour={item.href}
                       className={`py-2 rounded-lg text-[13.5px] flex items-center justify-between transition-colors duration-100 ${
                         active
-                          ? "pl-3 pr-2.5 -ml-0.5 font-semibold text-text bg-surface2 border-l-2 border-accent"
-                          : "px-2.5 font-medium text-muted hover:bg-surface2 hover:text-text"
+                          ? "px-2.5 font-semibold text-text bg-active"
+                          : "px-2.5 font-medium text-text/85 hover:bg-active/50 hover:text-text"
                       }`}
                     >
                       <span>{item.label}</span>
@@ -191,7 +191,7 @@ export default function Sidebar() {
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          className={`w-full flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[12.5px] font-medium text-left text-faint transition-colors duration-100 hover:bg-down-dim hover:text-down ${
+          className={`w-full flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[12.5px] font-medium text-left text-muted transition-colors duration-100 hover:bg-down-dim hover:text-down ${
             signingOut ? "cursor-not-allowed" : "cursor-pointer"
           }`}
         >

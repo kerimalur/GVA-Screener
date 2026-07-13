@@ -1,30 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  /* === FX Terminal Design Tokens — warme Anthrazit/Weiß/Grau-Welt
-     (Referenz-Screenshot Macro Terminal). Kein Blau; Grün/Rot sind die
-     einzigen semantischen Farben, Akzent = warmes Weiß. === */
-  --color-bg:       #1c1c1a;
-  --color-sidebar:  #141412;
-  --color-surface:  #21211f;
-  --color-surface2: #262523;
-  --color-border:   rgba(255,255,255,0.08);
-  --color-border2:  rgba(255,255,255,0.16);
+  /* === FX Terminal Design Tokens — helle Grau-Welt (Kerims Vorgabe):
+     Hintergrund #737373, Boxen/Sidebar DUNKLER (#3A3A3A) mit schwach-weißem
+     Rand — Kontrast entsteht durch dunkle Karten auf heller Fläche.
+     Kein Blau; Grün/Rot einzige semantische Farben, aktive Tabs schwarz. === */
+  --color-bg:       #737373;
+  --color-sidebar:  #3a3a3a;
+  --color-surface:  #414141;
+  --color-surface2: #3a3a3a;
+  --color-border:   rgba(255,255,255,0.30);
+  --color-border2:  rgba(255,255,255,0.50);
+  /* aktive Tabs/Pills: schwarz mit weißer Schrift */
+  --color-active:   #161616;
 
-  --color-text:     #f1f0ec;
-  --color-muted:    #a09f98;
-  --color-faint:    #6e6d66;
+  --color-text:     #ffffff;
+  --color-muted:    #d6d5d0;
+  --color-faint:    #b0afa8;
 
-  --color-accent:        #e8e6de;
-  --color-accent-dim:    rgba(232,230,222,0.10);
+  --color-accent:        #f2f1ea;
+  --color-accent-dim:    rgba(242,241,234,0.12);
   --color-up:            #46d275;
   --color-up-dim:        rgba(70,210,117,0.12);
   --color-down:          #f05b52;
   --color-down-dim:      rgba(240,91,82,0.12);
   --color-warn:          #f5a623;
   --color-warn-dim:      rgba(245,166,35,0.12);
-  --color-neutral:       #6e6d66;
-  --color-neutral-dim:   rgba(110,109,102,0.18);
+  --color-neutral:       #b0afa8;
+  --color-neutral-dim:   rgba(176,175,168,0.20);
 
   /* Regime-Tags: farbiger Text + Rand (Outline-Chips) */
   --color-regime-goldilocks:       #46d275;
@@ -41,7 +44,7 @@
   --radius-card: 12px;
   --radius-tag: 4px;
 
-  --font-sans: var(--font-manrope), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: var(--font-space-grotesk), 'Space Grotesk', -apple-system, sans-serif;
   --font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 }
 

@@ -181,7 +181,7 @@ export default function DetailsModal({ item, onClose, onMark }: DetailsModalProp
             </button>
             <button
               onClick={() => onMark(item.pair, "done")}
-              className="flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all bg-up hover:bg-up/80 text-bg"
+              className="flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all bg-up hover:bg-up/80 text-active"
             >
               SETUP FERTIG
             </button>

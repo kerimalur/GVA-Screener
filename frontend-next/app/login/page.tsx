@@ -182,7 +182,7 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={loading !== null}
-                className="w-full py-3 px-4 rounded-xl bg-accent text-bg font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 rounded-xl bg-accent text-active font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading === "password"
                   ? "Einen Moment…"

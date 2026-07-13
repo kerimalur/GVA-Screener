@@ -34,7 +34,7 @@ function CurrencyBox({
       } ${compareMode && compareSlot === null ? "opacity-90" : ""}`}
     >
       {compareSlot !== null && (
-        <span className="absolute -top-2 -right-2 bg-accent text-bg text-[10px] font-black px-1.5 py-0.5 rounded-(--radius-tag)">
+        <span className="absolute -top-2 -right-2 bg-accent text-active text-[10px] font-black px-1.5 py-0.5 rounded-(--radius-tag)">
           Pair {compareSlot}
         </span>
       )}
