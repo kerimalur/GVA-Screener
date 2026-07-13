@@ -21,9 +21,14 @@ from .config import (
     COT_Z_MIN_PERIODS,
     COT_Z_WINDOW_WEEKS,
     FRED_FX,
+    FRED_POLICY_RATE,
+    FRED_PUBLICATION_LAG_DAYS,
     G8,
+    RATES_DIFF_FULL_SCALE,
+    RATES_MOM_FULL_SCALE,
+    RATES_MOMENTUM_MONTHS,
 )
-from .data_sources import fetch_cot_legacy, fetch_cot_tff, fetch_prices
+from .data_sources import fetch_cot_legacy, fetch_cot_tff, fetch_fred, fetch_prices
 
 HORIZONS = [1, 2, 4]
 
@@ -134,6 +139,57 @@ def _cot_features(grid: pd.DatetimeIndex) -> pd.DataFrame:
     return out.rename(columns={"report_date": "cot_report_date"})
 
 
+def _rate_history(ccy: str) -> pd.DataFrame:
+    """rate_level + rate_mom_6m je Beobachtung, Key = available_from."""
+    df = fetch_fred(FRED_POLICY_RATE[ccy]).copy()
+    past = df.rename(columns={"date": "past_date", "value": "past_value"})
+    df["key_date"] = df["date"] - pd.DateOffset(months=RATES_MOMENTUM_MONTHS)
+    m = pd.merge_asof(
+        df.sort_values("key_date"), past,
+        left_on="key_date", right_on="past_date", direction="backward",
+    ).sort_values("date")
+    m["rate_mom_6m"] = m["value"] - m["past_value"]
+    m["available_from"] = m["date"] + pd.Timedelta(days=FRED_PUBLICATION_LAG_DAYS)
+    return m.rename(columns={"value": "rate_level"})[
+        ["date", "rate_level", "rate_mom_6m", "available_from"]
+    ].sort_values("available_from")
+
+
+def _rates_features(grid: pd.DatetimeIndex) -> pd.DataFrame:
+    """Long-Format (week_start, ccy): Level, Momentum, Diff-Ø, Score."""
+    weeks = pd.DataFrame({"week_start": grid})
+    levels = pd.DataFrame(index=grid)
+    moms = pd.DataFrame(index=grid)
+    for ccy in G8:
+        hist = _rate_history(ccy)
+        m = pd.merge_asof(
+            weeks, hist, left_on="week_start", right_on="available_from",
+            direction="backward",
+        )
+        levels[ccy] = m["rate_level"].to_numpy()
+        moms[ccy] = m["rate_mom_6m"].to_numpy()
+
+    total = levels.sum(axis=1)  # skipna default
+    cnt = levels.notna().sum(axis=1)
+    parts = []
+    for ccy in G8:
+        lvl, mom = levels[ccy], moms[ccy]
+        # Ø der anderen notna-Level: (Summe − eigener) / (Anzahl − 1_wenn_eigener_da)
+        other_cnt = (cnt - lvl.notna().astype(int)).replace(0, np.nan)
+        other_mean = (total - lvl.fillna(0)) / other_cnt
+        diff_avg = (lvl - other_mean).where(lvl.notna())
+        diff_part = (diff_avg / RATES_DIFF_FULL_SCALE).fillna(0.0)
+        mom_part = (mom / RATES_MOM_FULL_SCALE).fillna(0.0)
+        score = (0.5 * diff_part + 0.5 * mom_part).clip(-1.0, 1.0)
+        score = score.where(diff_avg.notna() | mom.notna())
+        parts.append(pd.DataFrame({
+            "week_start": grid, "ccy": ccy,
+            "rate_level": lvl.to_numpy(), "rate_mom_6m": mom.to_numpy(),
+            "rate_diff_avg": diff_avg.to_numpy(), "rates_score": score.to_numpy(),
+        }))
+    return pd.concat(parts, ignore_index=True)
+
+
 def build_feature_panel(
     start: str | pd.Timestamp = "1999-06-01",
     end: str | pd.Timestamp | None = None,
@@ -143,4 +199,5 @@ def build_feature_panel(
     grid = week_grid(start, end)
     panel = _targets(grid)
     panel = panel.merge(_cot_features(grid), on=["week_start", "ccy"], how="left")
+    panel = panel.merge(_rates_features(grid), on=["week_start", "ccy"], how="left")
     return panel.sort_values(["week_start", "ccy"]).reset_index(drop=True)

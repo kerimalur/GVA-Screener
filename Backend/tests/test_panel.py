@@ -71,3 +71,20 @@ def test_cot_leak_panel_gleich_punkt_build(panel, leak_refs, as_of):
                 assert pd.isna(a), f"{ccy}.{col}: Panel {a}, Punkt NaN"
             else:
                 assert a == pytest.approx(b, abs=1e-9), f"{ccy}.{col}"
+
+
+RATE_COLS = ["rate_level", "rate_mom_6m", "rate_diff_avg", "rates_score"]
+
+
+@pytest.mark.parametrize("as_of", LEAK_DATES)
+def test_rates_leak_panel_gleich_punkt_build(panel, leak_refs, as_of):
+    ts = pd.Timestamp(as_of)
+    ref = leak_refs[as_of]
+    rows = panel[panel["week_start"] == ts].set_index("ccy")
+    for ccy in G8:
+        for col in RATE_COLS:
+            a, b = rows.loc[ccy, col], ref.loc[ccy, col]
+            if pd.isna(b):
+                assert pd.isna(a), f"{ccy}.{col}"
+            else:
+                assert a == pytest.approx(b, abs=1e-9), f"{ccy}.{col}"
