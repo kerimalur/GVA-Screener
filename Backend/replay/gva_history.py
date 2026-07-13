@@ -1,38 +1,24 @@
-"""Historische GVA-Hit-Rekonstruktion aus `price_daily` (Supabase).
+"""Historische GVA-Hit-Rekonstruktion — EXAKT dieselbe Kerzen- und Muster-
+Basis wie der Live-Scanner, damit Replay == Scanner == TradingView.
 
-Statt Live-OANDA-Daten (begrenzte Historie) werden die Tageskerzen aus
-Supabase geladen und mit EXAKT derselben Business-Day-Matrix wie in
-`data_pipeline.fetch_and_resample_3d` auf 3D-Kerzen resampled
-(Anker 2026-04-21, np.busday_count // 3). Die Muster-/Linien-Logik ist
-1:1 aus `analyzer.analyze_gva_zones` portiert — aber statt nur die aktuell
-aktiven Linien zurückzugeben, wird JEDER Hit (Berührung einer Linie)
-chronologisch gesammelt.
-
-analyzer.py / data_pipeline.py bleiben unverändert.
+Tageskerzen kommen von OANDA (data_pipeline.fetch_daily_oanda, NY-Alignment),
+3D-Kerzen entstehen per resample_3d_bars (je 3 aufeinanderfolgende echte
+Handelstage, TV-Gruppierung). Muster-/Level-Logik ist 1:1 aus
+analyzer.analyze_gva_zones (Pine Script v4.0) — nur wird hier JEDER Hit
+chronologisch gesammelt statt nur die aktiven Linien.
 """
 from __future__ import annotations
 
 from datetime import date, timedelta
 
-import numpy as np
 import pandas as pd
 
-from ml.db import select_all
-
-# Identisch zu data_pipeline.py — der bewiesene TV-Anker (Dienstag).
-BUSDAY_ANCHOR = np.datetime64("2026-04-21")
-
-# Muster-Parameter — identisch zu analyzer.py (Pine Script v4.0):
-# Toleranz = 5% vom Body der 1. Kerze, 2. Kerze min. 40% groesser.
 from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
-
-# Vorlauf vor dem angefragten Zeitraum, damit Linien die vor dem Zeitraum
-# gebildet wurden (und im Zeitraum gehittet werden) existieren.
-WARMUP_DAYS = 183  # ~6 Monate
+from data_pipeline import fetch_daily_oanda, resample_3d_bars
 
 
 def normalize_pair(pair: str) -> str:
-    """'EURUSD' / 'EUR/USD' / 'EUR_USD' -> 'EUR_USD' (price_daily-Notation)."""
+    """'EURUSD' / 'EUR/USD' / 'EUR_USD' -> 'EUR_USD'."""
     p = pair.upper().replace("/", "_")
     if "_" not in p and len(p) == 6:
         p = p[:3] + "_" + p[3:]
@@ -41,44 +27,6 @@ def normalize_pair(pair: str) -> str:
 
 def pip_size_of(instrument: str) -> float:
     return 0.01 if "JPY" in instrument else 0.0001
-
-
-def fetch_daily(instrument: str, date_from: str, date_to: str) -> pd.DataFrame:
-    """Tageskerzen aus price_daily, chronologisch. Index = DatetimeIndex."""
-    rows = select_all(
-        "price_daily",
-        {
-            "select": "date,open,high,low,close",
-            "instrument": f"eq.{instrument}",
-            # zwei Filter auf derselben Spalte -> Listen-Param (requests serialisiert beide)
-            "date": [f"gte.{date_from}", f"lte.{date_to}"],
-            "order": "date.asc",
-        },
-    )
-    if not rows:
-        return pd.DataFrame()
-    df = pd.DataFrame(rows)
-    df["time"] = pd.to_datetime(df["date"])
-    df = df.dropna(subset=["open", "high", "low", "close"])
-    for col in ("open", "high", "low", "close"):
-        df[col] = df[col].astype(float)
-    df = df.set_index("time").sort_index()
-    return df[["open", "high", "low", "close"]]
-
-
-def resample_3d(df: pd.DataFrame) -> pd.DataFrame:
-    """EXAKT dieselbe 3D-Logik wie data_pipeline.fetch_and_resample_3d:
-    Wochenenden raus, Business-Day-Matrix mit Anker 2026-04-21, // 3."""
-    if df.empty:
-        return df
-    df = df[df.index.dayofweek < 5].copy()
-    dates = df.index.values.astype("datetime64[D]")
-    df["block_id"] = np.busday_count(BUSDAY_ANCHOR, dates) // 3
-    df_3d = df.groupby("block_id").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last"}
-    )
-    df_3d.index = df.groupby("block_id").apply(lambda x: x.index.min())
-    return df_3d.sort_index().dropna()
 
 
 def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
@@ -169,19 +117,16 @@ def refine_hit_day(hit: dict, daily: pd.DataFrame) -> str:
     return hit["hit_block_date"]
 
 
-def reconstruct_hits(
-    pair: str, date_from: str, date_to: str, warmup_days: int = WARMUP_DAYS
-) -> list[dict]:
+def reconstruct_hits(pair: str, date_from: str, date_to: str) -> list[dict]:
     """Alle GVA-Hits eines Pairs im Zeitraum, chronologisch — rein technisch
-    (nur Linien-Logik, bewusst ohne Fundamentals)."""
+    (nur Linien-Logik). Linien werden aus der VOLLEN OANDA-Historie gebildet
+    (automatischer Vorlauf), die Hits danach auf den Zeitraum gefiltert."""
     instrument = normalize_pair(pair)
-    warmup_start = (date.fromisoformat(date_from) - timedelta(days=warmup_days)).isoformat()
-
-    daily = fetch_daily(instrument, warmup_start, date_to)
+    daily = fetch_daily_oanda(instrument, count=5000)
     if daily.empty:
         return []
 
-    df_3d = resample_3d(daily)
+    df_3d = resample_3d_bars(daily)
     all_hits = collect_hits(df_3d, instrument)
 
     # Tagesgenau verfeinern + auf den angefragten Zeitraum filtern
@@ -197,16 +142,12 @@ def reconstruct_hits(
 
 def find_hit(pair: str, hit_date: str, direction: str, level: float | None = None) -> dict | None:
     """Einzelnen Hit für /evaluate re-rekonstruieren (Level + Signal-Kerze).
-
-    Großzügiges Warmup (2 Jahre): die getroffene Linie kann lange vor dem
-    Hit gebildet worden sein. Bei mehreren Hits gleicher Richtung am selben
-    Tag disambiguiert `level` (Toleranz 0.5 Pips)."""
+    Bei mehreren Hits gleicher Richtung am selben Tag disambiguiert `level`."""
     d = date.fromisoformat(hit_date)
     hits = reconstruct_hits(
         pair,
         (d - timedelta(days=7)).isoformat(),
         (d + timedelta(days=7)).isoformat(),
-        warmup_days=730,
     )
     tol = 0.5 * pip_size_of(normalize_pair(pair))
     candidates = [

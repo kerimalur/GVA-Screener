@@ -11,7 +11,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from .gva_history import fetch_daily, pip_size_of
+from data_pipeline import fetch_daily_oanda
+from .gva_history import pip_size_of
 
 SL_BUFFER_PIPS = 5.0
 RR_TARGET = 3.0
@@ -31,8 +32,11 @@ def simulate_trade(instrument: str, hit: dict) -> dict | None:
     direction = hit["direction"].upper()
     hit_date = hit["hit_date"]
 
-    until = (date.fromisoformat(hit_date) + timedelta(days=_FETCH_CALENDAR_DAYS)).isoformat()
-    daily = fetch_daily(instrument, hit_date, until)
+    until = pd.Timestamp(hit_date) + pd.Timedelta(days=_FETCH_CALENDAR_DAYS)
+    full = fetch_daily_oanda(instrument, count=5000)
+    if full.empty:
+        return None
+    daily = full[(full.index >= pd.Timestamp(hit_date)) & (full.index <= until)]
     if daily.empty or pd.Timestamp(hit_date) not in daily.index:
         return None
 

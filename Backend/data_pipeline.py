@@ -40,82 +40,76 @@ def fetch_live_prices(instruments: list) -> dict:
             out[pair] = {"bid": bid, "ask": ask, "mid": (bid + ask) / 2}
     return out
 
-def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
+# 3D-Anker: ein von TradingView verifizierter Block-START (6. Mai 2025 ist bei
+# EURUSD der Beginn des 3D-Blocks {6,7,8}). TradingView gruppiert je 3
+# AUFEINANDERFOLGENDE echte Handelstage und überspringt Feiertage — deshalb
+# zählen wir Kerzen-Positionen (nicht Kalender-Werktage, die durch Feiertage
+# über die Zeit gegen TV driften).
+GVA_3D_ANCHOR = pd.Timestamp('2025-05-06')
+
+
+def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
+    """Saubere Tageskerzen von OANDA (NY-Alignment 17 Uhr, ohne Wochenenden).
+    Index = normalisiertes Datum, chronologisch. Basis für Scanner UND Replay."""
     if not OANDA_API_KEY:
         print("FEHLER: OANDA_API_KEY fehlt in der .env Datei.")
         return pd.DataFrame()
 
     headers = {
         "Authorization": f"Bearer {OANDA_API_KEY}",
-        "Accept-Datetime-Format": "UNIX"
+        "Accept-Datetime-Format": "UNIX",
     }
-    
     oanda_instrument = instrument[:3] + "_" + instrument[3:] if "_" not in instrument else instrument
-    
     params = {
-        "granularity": "D",
-        "count": count,
-        "price": "M",
-        "dailyAlignment": 17,
-        "alignmentTimezone": "America/New_York"
+        "granularity": "D", "count": count, "price": "M",
+        "dailyAlignment": 17, "alignmentTimezone": "America/New_York",
     }
-    
     try:
-        response = requests.get(f"{OANDA_URL}/instruments/{oanda_instrument}/candles", headers=headers, params=params, timeout=10)
+        response = requests.get(f"{OANDA_URL}/instruments/{oanda_instrument}/candles",
+                                headers=headers, params=params, timeout=10)
         response.raise_for_status()
     except Exception as e:
         print(f"OANDA API Request Fehler bei {instrument}: {e}")
         return pd.DataFrame()
-        
-    data = response.json()
-    
+
     candles = []
-    for candle in data.get('candles', []):
+    for candle in response.json().get('candles', []):
         if candle['complete']:
-            # +12 Stunden zwingt den Start der NY-Session auf den korrekten echten Handelstag
+            # +12h zwingt den Start der NY-Session auf den echten Handelstag
             true_date = pd.to_datetime(float(candle['time']), unit='s') + pd.Timedelta(hours=12)
-            
             candles.append({
                 'time': true_date.normalize(),
-                'open': float(candle['mid']['o']),
-                'high': float(candle['mid']['h']),
-                'low': float(candle['mid']['l']),
-                'close': float(candle['mid']['c']),
-                'volume': int(candle['volume'])
+                'open': float(candle['mid']['o']), 'high': float(candle['mid']['h']),
+                'low': float(candle['mid']['l']), 'close': float(candle['mid']['c']),
+                'volume': int(candle['volume']),
             })
-            
     df = pd.DataFrame(candles)
     if df.empty:
         return df
-        
-    df.set_index('time', inplace=True)
-    
-    # 1. Striktes Entfernen von Wochenend-Artefakten
-    df = df[df.index.dayofweek < 5].copy()
-    
-    # 2. DIE BUSINESS-DAY MATRIX (Der TV-Klon)
-    # Dein bewiesener Anker: Dienstag, 21.04.2026.
-    anchor = np.datetime64('2026-04-21')
-    
-    # Wandle die Pandas-Daten in numpy-Tage um
-    dates = df.index.values.astype('datetime64[D]')
-    
-    # np.busday_count berechnet die EXAKTE Anzahl an Werktagen (Mo-Fr) 
-    # zwischen dem Anker und der aktuellen Kerze. 
-    # Durch // 3 entsteht das perfekte 3-Tages-Raster ohne Brüche.
-    df['block_id'] = np.busday_count(anchor, dates) // 3
-    
-    # 3. Aggregation des 3D-Blocks
+    df = df.set_index('time')
+    df = df[df.index.dayofweek < 5].copy()  # Wochenend-Artefakte raus
+    return df.sort_index()
+
+
+def resample_3d_bars(df_daily: pd.DataFrame, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> pd.DataFrame:
+    """3D-Kerzen wie TradingView: je 3 AUFEINANDERFOLGENDE echte Tageskerzen,
+    phasiert am Anker-Block-Start. Feiertage (fehlende Kerzen) verschieben die
+    Phase NICHT gegen TV, weil nach Kerzen-Position gruppiert wird."""
+    if df_daily.empty:
+        return df_daily
+    df = df_daily.sort_index().copy()
+    pos = np.arange(len(df))
+    anchor_pos = int(df.index.searchsorted(pd.Timestamp(anchor)))  # 1. Kerze am/nach Anker
+    df['block_id'] = (pos - anchor_pos) // 3  # floor-Division auch für negative Positionen
     df_3d = df.groupby('block_id').agg({
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum'
+        'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum',
     })
-    
-    # Das Datum des 3D-Blocks ist zwingend der erste Werktag dieses Blocks
     df_3d.index = df.groupby('block_id').apply(lambda x: x.index.min())
-    df_3d = df_3d.sort_index().dropna()
-    
-    return df_3d
+    return df_3d.sort_index().dropna()
+
+
+def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
+    df = fetch_daily_oanda(instrument, count)
+    if df.empty:
+        return df
+    return resample_3d_bars(df)
