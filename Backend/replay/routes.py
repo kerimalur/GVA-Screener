@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ml.db import select_all, insert, update
-from .fundamentals import ranking_series, ranking_snapshot
+from .fundamentals import ranking_series
 from .gva_history import find_hit, normalize_pair, reconstruct_hits
 from .trade_result import simulate_trade
 
@@ -30,9 +30,10 @@ def get_hits(
         hits = reconstruct_hits(pair, date_from, date_to)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    instrument = normalize_pair(pair)
+    # Bewusst OHNE Fundamentals/Ranking: das GVA-Replay prüft rein die
+    # Linien-Logik (Kerims Vorgabe) — und bleibt dadurch schnell.
     return {
-        "pair": instrument,
+        "pair": normalize_pair(pair),
         "from": date_from,
         "to": date_to,
         "count": len(hits),
@@ -42,9 +43,6 @@ def get_hits(
                 "level": h["level"],
                 "direction": h["direction"],
                 "line_formed_date": h["line_formed_date"],
-                "fundamental_snapshot": h["fundamental_snapshot"],
-                # as-of-Ranking (Zins+Saison-Baseline, Q-Stufen) der Hit-Woche
-                "ranking_snapshot": ranking_snapshot(instrument, h["hit_date"]),
             }
             for h in hits
         ],
@@ -77,19 +75,13 @@ def evaluate(req: EvaluateRequest):
     if not hit:
         raise HTTPException(status_code=404, detail="Hit nicht gefunden (Datum/Richtung prüfen)")
 
-    snap = hit.get("fundamental_snapshot") or {}
-    ranking = ranking_snapshot(instrument, req.hit_date)
+    # Replay ist rein technisch (nur GVA-Linien) — keine Fundamental-Felder.
     row = {
         "instrument": instrument,
         "hit_date": req.hit_date,
         "hit_level": hit["level"],
         "hit_direction": direction,
         "line_formed_date": hit["line_formed_date"],
-        "fundamental_direction": snap.get("direction"),
-        "fundamental_aligned_count": snap.get("aligned_count"),
-        "fundamental_factors": snap.get("factors"),
-        "ranking_bias": ranking["bias"] if ranking else None,
-        "ranking_detail": ranking,
         "session_id": req.session_id,
         "trade_taken": req.trade_taken,
         "skip_reason": req.skip_reason,

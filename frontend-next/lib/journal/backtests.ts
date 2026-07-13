@@ -427,12 +427,17 @@ export async function loadWeekRankings(
   return map;
 }
 
+/** Lokales Datum als YYYY-MM-DD — NIE toISOString (UTC-Kipp um Mitternacht). */
+export function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Montag (ISO) der Woche eines Datums — Schlüssel in der Rankings-Map. */
 export function mondayOf(dateIso: string): string {
   const d = new Date(dateIso + "T00:00:00");
   const day = d.getDay(); // 0 = So
   d.setDate(d.getDate() - ((day + 6) % 7));
-  return d.toISOString().slice(0, 10);
+  return localIso(d);
 }
 
 export function toTradeFundamental(

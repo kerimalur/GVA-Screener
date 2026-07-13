@@ -15,41 +15,11 @@ const API = (process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrend
   "",
 );
 
-interface Factor {
-  name: string;
-  dir: -1 | 0 | 1;
-  text: string;
-}
-
-interface Snapshot {
-  week_start: string;
-  direction: "LONG" | "SHORT" | null;
-  aligned_count: number;
-  factor_count: number;
-  factors: Factor[];
-  source: string;
-}
-
-interface RankingSide {
-  ccy: string;
-  score: number;
-  quintile: number;
-}
-
-interface RankingSnapshot {
-  week_start: string;
-  base: RankingSide;
-  quote: RankingSide;
-  bias: "long" | "short" | "neutral";
-}
-
 interface Hit {
   hit_date: string;
   level: number;
   direction: "SHORT" | "LONG";
   line_formed_date: string;
-  fundamental_snapshot: Snapshot | null;
-  ranking_snapshot: RankingSnapshot | null;
 }
 
 interface Session {
@@ -94,7 +64,6 @@ interface Stats {
   by_direction: Record<string, StatBucket>;
   by_pair: Record<string, StatBucket>;
   by_confluence: Record<string, StatBucket>;
-  by_ranking: Record<string, StatBucket>;
   by_year: Record<string, StatBucket>;
 }
 
@@ -479,7 +448,7 @@ export default function ReplayExplorer() {
             })}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {/* ── GVA-Hit ── */}
             <div className="rounded border border-border bg-surface2 p-3.5 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-faint">GVA-Hit</div>
@@ -502,112 +471,6 @@ export default function ReplayExplorer() {
                 Daily-Chart öffnet ohne Datums-Sprung — Datum <b className="font-mono">{hit.hit_date}</b> manuell
                 ansteuern, dann BOS / Fib / Volumen prüfen.
               </p>
-            </div>
-
-            {/* ── Fundamentals ── */}
-            <div className="rounded border border-border bg-surface2 p-3.5 space-y-2">
-              <div className="text-[10px] uppercase tracking-widest text-faint">
-                Fundamentals{hit.fundamental_snapshot ? ` (Woche ${hit.fundamental_snapshot.week_start})` : ""}
-              </div>
-              {hit.fundamental_snapshot ? (
-                <>
-                  <div className="text-[13px] font-bold font-mono">
-                    Verdict:{" "}
-                    <span
-                      className={
-                        hit.fundamental_snapshot.direction === "LONG"
-                          ? "text-up"
-                          : hit.fundamental_snapshot.direction === "SHORT"
-                            ? "text-down"
-                            : "text-muted"
-                      }
-                    >
-                      {hit.fundamental_snapshot.direction ?? "NEUTRAL"}
-                    </span>{" "}
-                    <span className="text-muted font-normal">
-                      ({hit.fundamental_snapshot.aligned_count}/{hit.fundamental_snapshot.factor_count} Faktoren)
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {hit.fundamental_snapshot.factors.map((f) => (
-                      <div key={f.name} className="text-[11px] leading-snug">
-                        <span className={`font-mono font-bold ${f.dir === 1 ? "text-up" : f.dir === -1 ? "text-down" : "text-faint"}`}>
-                          {f.dir === 1 ? "✓ LONG " : f.dir === -1 ? "✓ SHORT" : "✗ NEUTR."}
-                        </span>{" "}
-                        <span className="font-semibold">{f.name}</span>{" "}
-                        <span className="text-muted">{f.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className={`text-[11px] font-mono mt-1 ${
-                      hit.fundamental_snapshot.direction === hit.direction
-                        ? "text-up"
-                        : hit.fundamental_snapshot.direction === null
-                          ? "text-muted"
-                          : "text-down"
-                    }`}
-                  >
-                    {hit.fundamental_snapshot.direction === hit.direction
-                      ? "→ Fundamentals bestätigen die Hit-Richtung"
-                      : hit.fundamental_snapshot.direction === null
-                        ? "→ Fundamentals neutral"
-                        : "→ Fundamentals WIDERSPRECHEN der Hit-Richtung"}
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted text-[12px]">
-                  Kein Snapshot für diese Woche (außerhalb der 416-Wochen-Historie).
-                </p>
-              )}
-
-              {/* ── Währungs-Ranking as-of (Zins+Saison-Baseline, wie /ml/ranking) ── */}
-              <div className="border-t border-border/60 pt-2 mt-2 space-y-1.5">
-                <div className="text-[10px] uppercase tracking-widest text-faint">
-                  Währungs-Ranking damals{hit.ranking_snapshot ? ` (Woche ${hit.ranking_snapshot.week_start})` : ""}
-                </div>
-                {hit.ranking_snapshot ? (
-                  <>
-                    {[hit.ranking_snapshot.base, hit.ranking_snapshot.quote].map((s) => (
-                      <div key={s.ccy} className="text-[11px] font-mono flex items-center gap-2">
-                        <b className="w-9">{s.ccy}</b>
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            s.quintile === 5
-                              ? "bg-up/15 text-up"
-                              : s.quintile === 1
-                                ? "bg-down/15 text-down"
-                                : "bg-border/40 text-muted"
-                          }`}
-                        >
-                          Q{s.quintile}
-                        </span>
-                        <span className={s.score >= 0 ? "text-up" : "text-down"}>
-                          {s.score >= 0 ? "+" : ""}
-                          {s.score.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                    <div
-                      className={`text-[11px] font-mono ${
-                        hit.ranking_snapshot.bias === "neutral"
-                          ? "text-muted"
-                          : (hit.ranking_snapshot.bias === "long") === (hit.direction === "LONG")
-                            ? "text-up"
-                            : "text-down"
-                      }`}
-                    >
-                      {hit.ranking_snapshot.bias === "neutral"
-                        ? "→ Ranking neutral (kein Q5/Q1-Extrem)"
-                        : (hit.ranking_snapshot.bias === "long") === (hit.direction === "LONG")
-                          ? `→ RÜCKENWIND für ${hit.direction}`
-                          : `→ GEGENWIND (Ranking sagt ${hit.ranking_snapshot.bias.toUpperCase()})`}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-muted text-[11px]">Kein Ranking verfügbar (Datenlücke).</p>
-                )}
-              </div>
             </div>
 
             {/* ── Bewertung ── */}
@@ -694,7 +557,6 @@ export default function ReplayExplorer() {
             <StatTile label="Profit Factor" value={stats.total.profit_factor != null ? stats.total.profit_factor.toFixed(2) : "–"} cls={(stats.total.profit_factor ?? 0) >= 1 ? "text-up" : "text-down"} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-            <BreakdownTable title="Nach Ranking (A/B)" data={stats.by_ranking ?? {}} keyLabel="Ranking" />
             <BreakdownTable title="Nach Confluence" data={stats.by_confluence} keyLabel="Faktoren" />
             <BreakdownTable title="Nach Richtung" data={stats.by_direction} keyLabel="Richtung" />
             <BreakdownTable title="Nach Pair" data={stats.by_pair} keyLabel="Pair" />
@@ -706,8 +568,8 @@ export default function ReplayExplorer() {
       <p className="text-[11px] text-faint leading-relaxed border-t border-border/50 pt-3">
         Tastenkürzel: ← → blättern. Ergebnis-Simulation: Entry = Close am Hit-Tag, SL = Signal-Kerzen-Extrem ±5
         Pips, TP = 1:3 R:R, SL+TP am selben Tag → konservativ SL, Timeout nach 20 Handelstagen. Hits werden mit dem
-        identischen 3D-Raster wie der Live-Screener rekonstruiert (Anker 21.04.2026). Fundamental-Snapshots sind
-        as-of (kein Lookahead).
+        identischen 3D-Raster wie der Live-Screener rekonstruiert (Anker 21.04.2026). Rein technisch —
+        Fundamentals spielen hier bewusst keine Rolle.
       </p>
     </div>
   );

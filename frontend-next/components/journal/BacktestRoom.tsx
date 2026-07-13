@@ -11,6 +11,7 @@ import {
   computeStats,
   downscaleImage,
   loadWeekRankings,
+  localIso,
   mondayOf,
   toTradeFundamental,
   type BacktestSession,
@@ -26,7 +27,7 @@ function today(): string {
 function shiftDate(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localIso(d); // lokal formatiert — toISOString kippt in UTC-Vortag
 }
 
 interface Props {
@@ -355,7 +356,7 @@ export default function BacktestRoom({ session, onAddTrade, onDeleteTrade, onTog
 
         {/* Erfassungs-Formular */}
         <div className="bg-surface border border-border rounded-md p-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Field label="Paar">
               <Select
                 value={formData.pair}
@@ -368,36 +369,31 @@ export default function BacktestRoom({ session, onAddTrade, onDeleteTrade, onTog
                 ))}
               </Select>
             </Field>
-            <Field label="Datum" hint="◀ ▶ Tag · ▶▶ Woche">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, -1) }))}
-                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
-                  title="1 Tag zurück"
-                >
-                  <i className="ph-bold ph-caret-left" />
-                </button>
+            <div className="col-span-2">
+              <Label hint="◀ ▶ Tag · ▶▶ Woche">Datum</Label>
+              <div className="flex items-stretch gap-1.5">
                 <Input
                   type="date"
+                  className="flex-1 min-w-0"
                   value={formData.date}
                   onChange={(e) => setFormData((p) => ({ ...p, date: e.target.value }))}
                 />
-                <button
-                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, 1) }))}
-                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
-                  title="1 Tag vor"
-                >
-                  <i className="ph-bold ph-caret-right" />
-                </button>
-                <button
-                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, 7) }))}
-                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
-                  title="1 Woche vor"
-                >
-                  <i className="ph-bold ph-caret-double-right" />
-                </button>
+                {([
+                  { d: -1, icon: "ph-caret-left", title: "1 Tag zurück" },
+                  { d: 1, icon: "ph-caret-right", title: "1 Tag vor" },
+                  { d: 7, icon: "ph-caret-double-right", title: "1 Woche vor" },
+                ] as const).map((b) => (
+                  <button
+                    key={b.d}
+                    onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, b.d) }))}
+                    className="w-9 shrink-0 rounded-md border border-border2 text-muted hover:text-text hover:border-accent/50 transition-colors flex items-center justify-center"
+                    title={b.title}
+                  >
+                    <i className={`ph-bold ${b.icon}`} />
+                  </button>
+                ))}
               </div>
-            </Field>
+            </div>
             <div>
               <Label hint="L / S">Richtung</Label>
               <div className="flex gap-1.5">

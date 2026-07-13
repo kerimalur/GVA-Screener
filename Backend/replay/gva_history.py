@@ -168,32 +168,11 @@ def refine_hit_day(hit: dict, daily: pd.DataFrame) -> str:
     return hit["hit_block_date"]
 
 
-def monday_of(day_iso: str) -> str:
-    d = date.fromisoformat(day_iso)
-    return (d - timedelta(days=d.weekday())).isoformat()
-
-
-def fetch_snapshots(instrument: str, mondays: list[str]) -> dict[str, dict]:
-    """weekly_outlook_snapshots der betroffenen Wochen: week_start -> Zeile."""
-    if not mondays:
-        return {}
-    rows = select_all(
-        "weekly_outlook_snapshots",
-        {
-            "select": "week_start,direction,aligned_count,factor_count,factors,source",
-            "instrument": f"eq.{instrument}",
-            "week_start": [f"gte.{min(mondays)}", f"lte.{max(mondays)}"],
-            "order": "week_start.asc",
-        },
-    )
-    return {r["week_start"]: r for r in rows}
-
-
 def reconstruct_hits(
     pair: str, date_from: str, date_to: str, warmup_days: int = WARMUP_DAYS
 ) -> list[dict]:
-    """Alle GVA-Hits eines Pairs im Zeitraum, chronologisch, inkl.
-    Fundamental-Snapshot der jeweiligen Woche (as-of, kein Lookahead)."""
+    """Alle GVA-Hits eines Pairs im Zeitraum, chronologisch — rein technisch
+    (nur Linien-Logik, bewusst ohne Fundamentals)."""
     instrument = normalize_pair(pair)
     warmup_start = (date.fromisoformat(date_from) - timedelta(days=warmup_days)).isoformat()
 
@@ -210,28 +189,8 @@ def reconstruct_hits(
         hit_day = refine_hit_day(h, daily)
         if not (date_from <= hit_day <= date_to):
             continue
-        hits.append({**h, "hit_date": hit_day})
+        hits.append({**h, "hit_date": hit_day, "instrument": instrument})
     hits.sort(key=lambda h: h["hit_date"])
-
-    # Fundamental-Snapshots der betroffenen Wochen dranhängen
-    mondays = sorted({monday_of(h["hit_date"]) for h in hits})
-    snaps = fetch_snapshots(instrument, mondays)
-    for h in hits:
-        snap = snaps.get(monday_of(h["hit_date"]))
-        h["fundamental_snapshot"] = (
-            {
-                "week_start": snap["week_start"],
-                "direction": snap["direction"],
-                "aligned_count": snap["aligned_count"],
-                "factor_count": snap["factor_count"],
-                "factors": snap["factors"],
-                "source": snap["source"],
-            }
-            if snap
-            else None
-        )
-        h["instrument"] = instrument
-
     return hits
 
 
