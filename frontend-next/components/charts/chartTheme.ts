@@ -4,29 +4,29 @@
 export const chart = {
   grid: "rgba(255,255,255,0.05)",
   axis: "rgba(255,255,255,0.10)",
-  text: "#8d94a3",   // --color-muted
-  faint: "#565d6b",  // --color-faint
-  up: "#3ddc97",     // --color-up
-  down: "#ef6461",   // --color-down
-  accent: "#6c8cff", // --color-accent
+  text: "#a09f98",   // --color-muted
+  faint: "#6e6d66",  // --color-faint
+  up: "#46d275",     // --color-up
+  down: "#f05b52",   // --color-down
+  accent: "#e8e6de", // --color-accent (warmes Weiß — kein Blau in der Palette)
   warn: "#f5a623",   // --color-warn
-  neutral: "#565d6b",
-  surface: "#131519", // --color-surface
-  border: "rgba(255,255,255,0.07)",
-  // Serien-Palette: Akzent + abgestufte Grautöne + semantische Farben —
-  // bewusst reduziert (Terminal-Stil), keine bunte Default-Palette.
-  // dataviz-Validator (dark, Surface #131519): CVD-Separation 18.9 PASS,
-  // Kontrast >=3:1 PASS; Grau-Serien sind zusätzlich per Legende/Label benannt.
-  palette: ["#6c8cff", "#c8cdd8", "#8d94a3", "#5d6472", "#3ddc97", "#ef6461", "#f5a623"],
+  neutral: "#6e6d66",
+  surface: "#21211f", // --color-surface
+  border: "rgba(255,255,255,0.08)",
+  // Serien-Palette: Weiß + Grau-Abstufungen + semantische Farben, verschränkt
+  // angeordnet (ähnliche Töne nie benachbart). dataviz-Validator (dark,
+  // Surface #21211f): CVD-Separation 20.0 PASS, Kontrast >=3:1 PASS;
+  // Serien sind zusätzlich per Legende/Label benannt.
+  palette: ["#e8e6de", "#46d275", "#b3b2ab", "#f05b52", "#807f78", "#f5a623", "#6e6d66"],
 } as const;
 
 export const tooltipStyle = {
-  backgroundColor: "#191c22", // --color-surface2
-  border: "1px solid rgba(255,255,255,0.14)", // --color-border2
+  backgroundColor: "#262523", // --color-surface2
+  border: "1px solid rgba(255,255,255,0.16)", // --color-border2
   borderRadius: 8,
   fontSize: 12,
   fontFamily: "var(--font-mono)",
-  color: "#f2f3f5", // --color-text
+  color: "#f1f0ec", // --color-text
 } as const;
 
 export function fmtNumber(v: number, digits = 2): string {

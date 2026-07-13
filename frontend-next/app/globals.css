@@ -1,40 +1,42 @@
 @import "tailwindcss";
 
 @theme {
-  /* === FX Terminal Design Tokens (exakt aus HTML-Mockup) === */
-  --color-bg:       #0a0b0e;
-  --color-sidebar:  #0c0d11;
-  --color-surface:  #131519;
-  --color-surface2: #191c22;
-  --color-border:   rgba(255,255,255,0.07);
-  --color-border2:  rgba(255,255,255,0.14);
+  /* === FX Terminal Design Tokens — warme Anthrazit/Weiß/Grau-Welt
+     (Referenz-Screenshot Macro Terminal). Kein Blau; Grün/Rot sind die
+     einzigen semantischen Farben, Akzent = warmes Weiß. === */
+  --color-bg:       #1c1c1a;
+  --color-sidebar:  #141412;
+  --color-surface:  #21211f;
+  --color-surface2: #262523;
+  --color-border:   rgba(255,255,255,0.08);
+  --color-border2:  rgba(255,255,255,0.16);
 
-  --color-text:     #f2f3f5;
-  --color-muted:    #8d94a3;
-  --color-faint:    #565d6b;
+  --color-text:     #f1f0ec;
+  --color-muted:    #a09f98;
+  --color-faint:    #6e6d66;
 
-  --color-accent:        #6c8cff;
-  --color-accent-dim:    rgba(108,140,255,0.12);
-  --color-up:            #3ddc97;
-  --color-up-dim:        rgba(61,220,151,0.12);
-  --color-down:          #ef6461;
-  --color-down-dim:      rgba(239,100,97,0.12);
+  --color-accent:        #e8e6de;
+  --color-accent-dim:    rgba(232,230,222,0.10);
+  --color-up:            #46d275;
+  --color-up-dim:        rgba(70,210,117,0.12);
+  --color-down:          #f05b52;
+  --color-down-dim:      rgba(240,91,82,0.12);
   --color-warn:          #f5a623;
   --color-warn-dim:      rgba(245,166,35,0.12);
-  --color-neutral:       #565d6b;
-  --color-neutral-dim:   rgba(86,93,107,0.18);
+  --color-neutral:       #6e6d66;
+  --color-neutral-dim:   rgba(110,109,102,0.18);
 
-  /* Regime-Tags (farbiger Text + Dim-Hintergrund), aus derselben Palette abgeleitet */
-  --color-regime-goldilocks:       #3ddc97;
-  --color-regime-goldilocks-dim:   rgba(61,220,151,0.12);
-  --color-regime-stagflation:      #ef6461;
-  --color-regime-stagflation-dim:  rgba(239,100,97,0.12);
-  --color-regime-reflation:        #f08c4a;
-  --color-regime-reflation-dim:    rgba(240,140,74,0.12);
+  /* Regime-Tags: farbiger Text + Rand (Outline-Chips) */
+  --color-regime-goldilocks:       #46d275;
+  --color-regime-goldilocks-dim:   rgba(70,210,117,0.12);
+  --color-regime-stagflation:      #f05b52;
+  --color-regime-stagflation-dim:  rgba(240,91,82,0.12);
+  --color-regime-reflation:        #cfcec4;
+  --color-regime-reflation-dim:    rgba(207,206,196,0.12);
   --color-regime-overheating:      #f5a623;
   --color-regime-overheating-dim:  rgba(245,166,35,0.12);
-  --color-regime-disinflation:     #6c8cff;
-  --color-regime-disinflation-dim: rgba(108,140,255,0.12);
+  --color-regime-disinflation:     #7ccf9e;
+  --color-regime-disinflation-dim: rgba(124,207,158,0.12);
 
   --radius-card: 12px;
   --radius-tag: 4px;
