@@ -20,8 +20,18 @@ export interface EngineStats {
 export interface PairIdea {
   pair: string; // Anzeige, z.B. "AUD/USD"
   direction: "long" | "short";
-  tier: "best" | "gut";
   reason: string; // z.B. "AUD Q5 × USD Q1"
+}
+
+export interface PairGroup {
+  ccy: string; // treibende Extremwährung
+  label: string; // z.B. "AUD stark (Q5)"
+  ideas: PairIdea[]; // erst CCY/xxx, dann xxx/CCY
+}
+
+export interface PairIdeas {
+  best: PairIdea[]; // Q5 × Q1 — beide Seiten extrem
+  groups: PairGroup[]; // je Extremwährung: Rückenwind gegen neutrale
 }
 
 export interface RankingData {
@@ -29,37 +39,59 @@ export interface RankingData {
   horizon: number | null;
   champion: RankingRow[];
   baseline: RankingRow[];
-  pairIdeas: PairIdea[];
+  pairIdeas: PairIdeas;
   liveHitrate: Record<string, { hits: number; total: number }>;
   stats: EngineStats;
 }
 
 /** Pairs der Woche aus Q5 (long) × Q1 (short) der Champion-Zeilen.
- *  "best" = beide Seiten extrem; "gut" = eine Seite extrem, andere neutral. */
-export function derivePairIdeas(rows: RankingRow[]): PairIdea[] {
+ *  best = beide Seiten extrem. groups = je Extremwährung ein Block
+ *  (Q5-Währungen nach Score absteigend zuerst, dann Q1 aufsteigend);
+ *  innerhalb des Blocks erst CCY als Basis, dann CCY als Quote. */
+export function derivePairIdeas(rows: RankingRow[]): PairIdeas {
   const q5 = new Set(rows.filter((r) => r.confidence_quintile === 5).map((r) => r.ccy));
   const q1 = new Set(rows.filter((r) => r.confidence_quintile === 1).map((r) => r.ccy));
-  const ideas: PairIdea[] = [];
+  const isExtreme = (c: string) => q5.has(c) || q1.has(c);
+
+  const best: PairIdea[] = [];
   for (const inst of FX_INSTRUMENTS) {
     const b = inst.baseCcy!, q = inst.quoteCcy!;
-    const bLong = q5.has(b), bShort = q1.has(b);
-    const qLong = q5.has(q), qShort = q1.has(q);
-    if ((bLong && qLong) || (bShort && qShort)) continue; // beide Seiten gleich extrem → kein Signal
-    if (bLong && qShort) {
-      ideas.push({ pair: inst.displayName, direction: "long", tier: "best", reason: `${b} Q5 × ${q} Q1` });
-    } else if (bShort && qLong) {
-      ideas.push({ pair: inst.displayName, direction: "short", tier: "best", reason: `${b} Q1 × ${q} Q5` });
-    } else if (bLong) {
-      ideas.push({ pair: inst.displayName, direction: "long", tier: "gut", reason: `${b} Q5` });
-    } else if (qShort) {
-      ideas.push({ pair: inst.displayName, direction: "long", tier: "gut", reason: `${q} Q1` });
-    } else if (bShort) {
-      ideas.push({ pair: inst.displayName, direction: "short", tier: "gut", reason: `${b} Q1` });
-    } else if (qLong) {
-      ideas.push({ pair: inst.displayName, direction: "short", tier: "gut", reason: `${q} Q5` });
+    if (q5.has(b) && q1.has(q)) {
+      best.push({ pair: inst.displayName, direction: "long", reason: `${b} Q5 × ${q} Q1` });
+    } else if (q1.has(b) && q5.has(q)) {
+      best.push({ pair: inst.displayName, direction: "short", reason: `${b} Q1 × ${q} Q5` });
     }
   }
-  return ideas.sort((a, b) => (a.tier === b.tier ? a.pair.localeCompare(b.pair) : a.tier === "best" ? -1 : 1));
+
+  // Gruppen-Reihenfolge: Q5 stark → schwach, danach Q1 schwach → stark
+  const ordered = [
+    ...rows.filter((r) => q5.has(r.ccy)).sort((a, b) => b.score - a.score),
+    ...rows.filter((r) => q1.has(r.ccy)).sort((a, b) => a.score - b.score),
+  ];
+
+  const groups: PairGroup[] = ordered.map((r) => {
+    const ccy = r.ccy;
+    const long = q5.has(ccy); // Q5 → Währung stark → long-Seite
+    const asBase: PairIdea[] = [];
+    const asQuote: PairIdea[] = [];
+    for (const inst of FX_INSTRUMENTS) {
+      const b = inst.baseCcy!, q = inst.quoteCcy!;
+      if (b === ccy && !isExtreme(q)) {
+        // CCY/xxx: CCY stark → Paar long, CCY schwach → Paar short
+        asBase.push({ pair: inst.displayName, direction: long ? "long" : "short", reason: `${ccy} ${long ? "Q5" : "Q1"}` });
+      } else if (q === ccy && !isExtreme(b)) {
+        // xxx/CCY: CCY stark → Paar short, CCY schwach → Paar long
+        asQuote.push({ pair: inst.displayName, direction: long ? "short" : "long", reason: `${ccy} ${long ? "Q5" : "Q1"}` });
+      }
+    }
+    return {
+      ccy,
+      label: `${ccy} ${long ? "stark (Q5)" : "schwach (Q1)"}`,
+      ideas: [...asBase, ...asQuote],
+    };
+  });
+
+  return { best, groups };
 }
 
 export async function loadRankingData(): Promise<RankingData> {

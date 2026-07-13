@@ -1,5 +1,5 @@
 import Panel from "@/components/layout/Panel";
-import { loadRankingData, type PairIdea, type RankingRow } from "@/lib/ml/ranking";
+import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
 
 export const dynamic = "force-dynamic";
 
@@ -69,10 +69,8 @@ function RankingTable({ rows }: { rows: RankingRow[] }) {
   );
 }
 
-function PairList({ ideas }: { ideas: PairIdea[] }) {
-  const best = ideas.filter((i) => i.tier === "best");
-  const gut = ideas.filter((i) => i.tier === "gut");
-  const Row = ({ i }: { i: PairIdea }) => (
+function PairRow({ i }: { i: PairIdea }) {
+  return (
     <div className="flex items-center gap-3 py-1.5 border-t border-border/40 first:border-t-0">
       <span className="font-mono font-bold w-24">{i.pair}</span>
       <span
@@ -85,23 +83,29 @@ function PairList({ ideas }: { ideas: PairIdea[] }) {
       <span className="text-xs text-muted font-mono">{i.reason}</span>
     </div>
   );
+}
+
+function PairList({ ideas }: { ideas: PairIdeas }) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="space-y-6">
       <div>
         <div className="text-xs text-muted mb-2 font-bold">
-          Beste Konstellation — beide Seiten extrem
+          Beste Konstellation — beide Seiten extrem (Q5 × Q1)
         </div>
-        {best.length ? best.map((i) => <Row key={i.pair} i={i} />) : (
+        {ideas.best.length ? ideas.best.map((i) => <PairRow key={i.pair} i={i} />) : (
           <p className="text-xs text-muted">Diese Woche keine Q5×Q1-Paarung.</p>
         )}
       </div>
-      <div>
-        <div className="text-xs text-muted mb-2 font-bold">
-          Rückenwind — eine Seite extrem, andere neutral
-        </div>
-        {gut.length ? gut.map((i) => <Row key={i.pair} i={i} />) : (
-          <p className="text-xs text-muted">–</p>
-        )}
+      <div className="grid md:grid-cols-3 gap-6">
+        {ideas.groups.map((g) => (
+          <div key={g.ccy}>
+            <div className="text-xs mb-2 font-bold">
+              {g.label}
+              <span className="text-muted font-normal"> — gegen neutrale Währungen</span>
+            </div>
+            {g.ideas.map((i) => <PairRow key={i.pair} i={i} />)}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -183,7 +187,9 @@ export default async function Page() {
         subtitle="Automatisch aus Q5 (long) × Q1 (short) abgeleitet. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
       >
         <div className="p-5">
-          {d.pairIdeas.length ? <PairList ideas={d.pairIdeas} /> : (
+          {d.pairIdeas.best.length || d.pairIdeas.groups.length ? (
+            <PairList ideas={d.pairIdeas} />
+          ) : (
             <p className="text-sm text-muted">Diese Woche keine Q5/Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.</p>
           )}
         </div>
