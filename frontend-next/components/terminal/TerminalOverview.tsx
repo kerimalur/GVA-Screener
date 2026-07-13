@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import CurrencyModal from "./CurrencyModal";
-import { TerminalCard, BiasScore } from "@/components/ui/terminal";
+import { TerminalCard, BiasScore, DirectionTag, RegimeTag, Metric } from "@/components/ui/terminal";
 import { SUBSCORE_ORDER } from "@/lib/calc/currencyScore";
 import type { TerminalCurrency } from "@/lib/data/terminal";
 
@@ -25,13 +25,11 @@ function CurrencyBox({
   compareSlot: 1 | 2 | null;
   compareMode: boolean;
 }) {
-  const dir = c.score.direction;
-  const border =
-    dir === "LONG" ? "border-up/50" : dir === "SHORT" ? "border-down/50" : "";
+  const fmtPct = (v: number | null, digits = 2) => (v === null ? "–" : `${v.toFixed(digits)}%`);
   return (
     <TerminalCard
       onClick={onClick}
-      className={`relative space-y-2.5 ${border} ${
+      className={`relative space-y-3 ${
         compareSlot !== null ? "ring-2 ring-accent border-accent" : ""
       } ${compareMode && compareSlot === null ? "opacity-90" : ""}`}
     >
@@ -40,14 +38,36 @@ function CurrencyBox({
           Pair {compareSlot}
         </span>
       )}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg leading-none">{c.flag}</span>
-          <span className="font-mono font-black text-[15px]">{c.ccy}</span>
-        </div>
-        <BiasScore value={c.score.total} threshold={0.15} />
+
+      {/* Kürzel + CCY */}
+      <div className="flex items-baseline gap-1.5 font-mono">
+        <span className="text-[11px] font-bold text-faint uppercase">{c.iso}</span>
+        <span className="font-black text-[15px] tracking-wide">{c.ccy}</span>
       </div>
-      <div className="flex items-center gap-2.5 pt-1.5 border-t border-border/60">
+
+      {/* dominante Bias-Zahl (kanonischer Score ×100) */}
+      <BiasScore
+        value={c.score.total === null ? null : c.score.total * 100}
+        digits={0}
+        threshold={15}
+        className="text-4xl"
+      />
+
+      {/* Regime + Richtung */}
+      <div className="flex items-center gap-1.5">
+        {c.regime && <RegimeTag regime={c.regime} />}
+        <DirectionTag direction={c.score.direction} />
+      </div>
+
+      {/* Kennzahlen */}
+      <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-border/60">
+        <Metric label="Rate">{fmtPct(c.rates.policyRate)}</Metric>
+        <Metric label="CPI YoY">{fmtPct(c.cpiYoY, 1)}</Metric>
+        <Metric label="10Y">{fmtPct(c.rates.y10)}</Metric>
+      </div>
+
+      {/* Sub-Score-Richtungen (Konfluenz auf einen Blick) */}
+      <div className="flex items-center gap-2.5">
         {SUBSCORE_ORDER.map(({ key, short }) => {
           const sub = c.score.subs.find((s) => s.key === key)!;
           return (
@@ -200,9 +220,9 @@ export default function TerminalOverview({ currencies }: { currencies: TerminalC
       />
 
       <p className="text-[10px] text-faint leading-relaxed">
-        Kanonischer Bias-Score −1…+1 = Ø der verfügbaren Sub-Scores (C = COT-Flow · Z = Zinsen/CB ·
-        S = Saisonalität · R = Retail konträr). LONG ≥ +0.15 · SHORT ≤ −0.15. Eine Bias-Logik für
-        die ganze App — Details per Klick.
+        Kanonischer Bias-Score −100…+100 = Ø der verfügbaren Sub-Scores (C = COT-Flow · Z = Zinsen/CB ·
+        S = Saisonalität · R = Retail konträr). LONG ≥ +15 · SHORT ≤ −15. Regime-Tag = Anzeige
+        (CLI-Wachstum × Inflation vs. Ziel), fließt nicht in den Score ein. Details per Klick.
       </p>
 
       {open && <CurrencyModal currency={open} onClose={() => setOpenCcy(null)} />}

@@ -19,9 +19,11 @@ import type { SubScore } from "@/lib/calc/currencyScore";
  * Aufklappen (lazy mount), über die bestehenden Daten-APIs.
  */
 
-function fmtScore(v: number | null, digits = 2): string {
+/** Sub-Score-Anzeige ganzzahlig auf −100…+100 (wie der Total-Score). */
+function fmtScore(v: number | null): string {
   if (v === null) return "–";
-  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}`;
+  const scaled = v * 100;
+  return `${scaled > 0 ? "+" : ""}${scaled.toFixed(0)}`;
 }
 
 function scoreCls(v: number | null): string {

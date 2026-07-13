@@ -1,5 +1,6 @@
 import Panel from "@/components/layout/Panel";
 import TerminalOverview from "@/components/terminal/TerminalOverview";
+import { TerminalHeader } from "@/components/ui/terminal";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadTerminalData } from "@/lib/data/terminal";
@@ -34,9 +35,9 @@ export default async function Page() {
 
   return (
     <div className="space-y-5 max-w-[1500px] mx-auto">
-      <Panel
-        title="Macro Terminal — G8 Currency Bias"
-        subtitle={`Die eine Bias-Wahrheit: COT · Zinsen · Saisonalität · Retail je Währung${
+      <TerminalHeader
+        title="Macro Terminal"
+        subtitle={`G8 Currency Bias — COT · Zinsen · Saisonalität · Retail je Währung${
           data.latestCotDate
             ? ` · COT-Report ${new Date(data.latestCotDate).toLocaleDateString("de-DE")}`
             : ""
@@ -45,9 +46,8 @@ export default async function Page() {
             ? ` · Sentiment ${new Date(data.sentimentAge).toLocaleDateString("de-DE")}`
             : ""
         }`}
-      >
-        <TerminalOverview currencies={data.currencies} />
-      </Panel>
+      />
+      <TerminalOverview currencies={data.currencies} />
     </div>
   );
 }

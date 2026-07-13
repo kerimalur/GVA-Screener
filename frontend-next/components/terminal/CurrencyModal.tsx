@@ -35,9 +35,15 @@ export default function CurrencyModal({
       <div className="w-full max-w-3xl bg-surface border border-border2 rounded-xl shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 bg-surface border-b border-border rounded-t-xl">
           <div className="flex items-center gap-2.5">
-            <span className="text-xl leading-none">{currency.flag}</span>
+            <span className="font-mono text-[11px] font-bold text-faint uppercase">{currency.iso}</span>
             <span className="font-mono font-black text-[16px]">{currency.ccy}</span>
-            <BiasScore value={currency.score.total} threshold={0.15} size="sm" className="text-[16px]" />
+            <BiasScore
+              value={currency.score.total === null ? null : currency.score.total * 100}
+              digits={0}
+              threshold={15}
+              size="sm"
+              className="text-[16px]"
+            />
             <DirectionTag direction={currency.score.direction} />
           </div>
           <button

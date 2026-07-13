@@ -99,9 +99,15 @@ export default async function Page({
   const head = (c: NonNullable<typeof ca>, slot: string) => (
     <div className="flex items-center gap-2.5">
       <span className="text-[10px] font-black uppercase tracking-widest text-faint">{slot}</span>
-      <span className="text-xl leading-none">{c.flag}</span>
+      <span className="font-mono text-[11px] font-bold text-faint uppercase">{c.iso}</span>
       <span className="font-mono font-black text-[16px]">{c.ccy}</span>
-      <BiasScore value={c.score.total} threshold={0.15} size="sm" className="text-[16px]" />
+      <BiasScore
+        value={c.score.total === null ? null : c.score.total * 100}
+        digits={0}
+        threshold={15}
+        size="sm"
+        className="text-[16px]"
+      />
       <DirectionTag direction={c.score.direction} />
     </div>
   );

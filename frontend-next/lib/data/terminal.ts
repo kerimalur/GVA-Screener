@@ -16,6 +16,7 @@ import {
   type CotDivergence,
 } from "@/lib/calc/currencyScore";
 import { MONTH_LABELS, type MonthlyStat } from "@/lib/calc/seasonality";
+import { yoyFromIndex } from "@/lib/calc/seriesMath";
 import { G8_CURRENCIES, pairsForCurrency, fromOanda, type G8Currency } from "@/lib/constants/instruments";
 import { CONTRACT_BY_CCY } from "@/lib/constants/cftcContracts";
 import { seriesFor } from "@/lib/constants/fredSeries";
@@ -76,10 +77,27 @@ export interface TerminalIntermarket {
   usdImpact: Array<{ pair: string; ret1M: number | null }> | null;
 }
 
+export type Regime =
+  | "GOLDILOCKS"
+  | "REFLATION"
+  | "STAGFLATION"
+  | "OVERHEATING"
+  | "DISINFLATION";
+
 export interface TerminalCurrency {
   ccy: G8Currency;
   flag: string;
+  /** Länderkürzel für die Karten (US, EU, GB …) */
+  iso: string;
   score: CurrencyScore;
+  /** CPI YoY % (reine Anzeige, aus FRED-Index selbst gerechnet) */
+  cpiYoY: number | null;
+  /**
+   * Fundamentales Regime (reine ANZEIGE, kein Score-Beitrag):
+   * Wachstum aus OECD-CLI-Niveau, Inflation aus CPI YoY vs. CB-Ziel —
+   * gleiche Schwellen wie das frühere FRED-Terminal.
+   */
+  regime: Regime | null;
   cot: TerminalCot;
   rates: TerminalRates;
   season: TerminalSeason;
@@ -99,6 +117,27 @@ const COMMODITY_BY_CCY: Partial<Record<G8Currency, { label: string; instrument: 
   CAD: { label: "WTI Öl ↔ USD/CAD", instrument: "WTICO_USD", pairInstrument: "USD_CAD" },
   NZD: { label: "Kupfer ↔ NZD/USD", instrument: "XCU_USD", pairInstrument: "NZD_USD" },
 };
+
+const ISO_BY_CCY: Record<string, string> = {
+  USD: "US", EUR: "EU", GBP: "GB", JPY: "JP", CHF: "CH", AUD: "AU", CAD: "CA", NZD: "NZ",
+};
+
+/** Inflationsziel der Zentralbank (Midpoint) — nur für das Anzeige-Regime. */
+const CPI_TARGET: Record<string, number> = {
+  USD: 2, EUR: 2, GBP: 2, JPY: 0, CHF: 2, AUD: 2.5, CAD: 2, NZD: 2,
+};
+
+/** Regime-Klassifikation (Anzeige): Schwellen wie das frühere FRED-Terminal. */
+function classifyRegime(cliLevel: number | null, cpiYoY: number | null, target: number): Regime | null {
+  if (cliLevel === null || cpiYoY === null) return null;
+  const growth = cliLevel > 100.2 ? 1 : cliLevel < 99.8 ? -1 : 0;
+  const inflation = cpiYoY > target ? 1 : -1;
+  if (growth === 1 && inflation <= 0) return "GOLDILOCKS";
+  if (growth === 1 && inflation === 1) return "OVERHEATING";
+  if (growth === -1 && inflation === 1) return "STAGFLATION";
+  if (growth === -1 && inflation <= 0) return "DISINFLATION";
+  return "REFLATION";
+}
 
 function latest(series: SeriesPoint[] | undefined): number | null {
   return series && series.length > 0 ? series[series.length - 1].value : null;
@@ -135,6 +174,12 @@ export async function loadTerminalData(db: SupabaseClient): Promise<TerminalData
   const yieldIds = G8_CURRENCIES.map((c) => seriesFor(c, "yield_10y")?.id).filter(
     (x): x is string => Boolean(x),
   );
+  const cpiIds = G8_CURRENCIES.map((c) => seriesFor(c, "cpi")?.id).filter(
+    (x): x is string => Boolean(x),
+  );
+  const cliIds = G8_CURRENCIES.map((c) => seriesFor(c, "cli")?.id).filter(
+    (x): x is string => Boolean(x),
+  );
   const cotCodes = G8_CURRENCIES.map((c) => CONTRACT_BY_CCY.get(c)?.code).filter(
     (x): x is string => Boolean(x),
   );
@@ -151,7 +196,7 @@ export async function loadTerminalData(db: SupabaseClient): Promise<TerminalData
     meetingsRes,
     intermarket,
   ] = await Promise.all([
-    getFredBatch(db, [...policyIds, ...yieldIds], fredCutoff.toISOString().slice(0, 10)),
+    getFredBatch(db, [...policyIds, ...yieldIds, ...cpiIds, ...cliIds], fredCutoff.toISOString().slice(0, 10)),
     getCotSeriesBatch(db, cotCodes),
     getTffSeriesBatch(db, cotCodes),
     getLatestReports(db),
@@ -173,11 +218,22 @@ export async function loadTerminalData(db: SupabaseClient): Promise<TerminalData
 
   const policyByCcy = new Map<string, SeriesPoint[]>();
   const yield10ByCcy = new Map<string, SeriesPoint[]>();
+  const cpiYoYByCcy = new Map<string, number | null>();
+  const cliByCcy = new Map<string, number | null>();
   for (const ccy of G8_CURRENCIES) {
     const pid = seriesFor(ccy, "policy_rate")?.id;
     const yid = seriesFor(ccy, "yield_10y")?.id;
     if (pid) policyByCcy.set(ccy, rateSeries.get(pid) ?? []);
     if (yid) yield10ByCcy.set(ccy, rateSeries.get(yid) ?? []);
+
+    // CPI-Index → YoY % (Quartalsserien: 4 Lags, sonst 12) — reine Anzeige
+    const cpiDef = seriesFor(ccy, "cpi");
+    const cpiIndex = cpiDef ? (rateSeries.get(cpiDef.id) ?? []) : [];
+    const cpiYoY = cpiIndex.length > 0 ? yoyFromIndex(cpiIndex, cpiDef?.id.includes("Q") ? 4 : 12) : [];
+    cpiYoYByCcy.set(ccy, latest(cpiYoY));
+
+    const cliDef = seriesFor(ccy, "cli");
+    cliByCcy.set(ccy, cliDef ? latest(rateSeries.get(cliDef.id)) : null);
   }
 
   // Sentiment: letzter Snapshot je Pair
@@ -289,10 +345,15 @@ export async function loadTerminalData(db: SupabaseClient): Promise<TerminalData
       MONTH_LABELS[currentMonth - 1],
     );
 
+    const cpiYoY = cpiYoYByCcy.get(ccy) ?? null;
+
     return {
       ccy,
       flag: CCY_FLAGS[ccy] ?? "🏳️",
+      iso: ISO_BY_CCY[ccy] ?? ccy.slice(0, 2),
       score,
+      cpiYoY,
+      regime: classifyRegime(cliByCcy.get(ccy) ?? null, cpiYoY, CPI_TARGET[ccy] ?? 2),
       cot: {
         legacyLatest: legacySnapshot?.latest ?? null,
         legacyPrev: legacySnapshot?.prev ?? null,
