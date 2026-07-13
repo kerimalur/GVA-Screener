@@ -413,18 +413,49 @@ export interface WeekRanking {
   bias: "long" | "short" | "neutral";
 }
 
-/** Alle Wochen-Rankings eines Pairs im Zeitraum vorab laden (ein Request). */
+const RANKINGS_CACHE_MS = 24 * 60 * 60 * 1000; // 24h — Render-Kaltstart nur 1×/Tag
+
+/** Alle Wochen-Rankings eines Pairs im Zeitraum vorab laden (ein Request).
+ *  24h-Cache in localStorage: einmal geladen bleibt die Session offline-schnell. */
 export async function loadWeekRankings(
   pair: string,
   from: string,
   to: string,
 ): Promise<Map<string, WeekRanking>> {
+  const cacheKey = `bt-rankings-${pair}-${from}-${to}`;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const { fetchedAt, rankings } = JSON.parse(raw) as {
+        fetchedAt: number;
+        rankings: WeekRanking[];
+      };
+      if (Date.now() - fetchedAt < RANKINGS_CACHE_MS && Array.isArray(rankings)) {
+        return new Map(rankings.map((r) => [r.week_start, r]));
+      }
+      localStorage.removeItem(cacheKey); // abgelaufen → raus aus dem Cache
+    }
+  } catch {
+    // defekter Cache-Eintrag → normal fetchen
+  }
+
   const res = await fetch(`${GVA_API}/replay/rankings?pair=${pair}&from=${from}&to=${to}`);
   if (!res.ok) throw new Error(`Rankings HTTP ${res.status}`);
   const json = await res.json();
-  const map = new Map<string, WeekRanking>();
-  for (const r of json.rankings as WeekRanking[]) map.set(r.week_start, r);
-  return map;
+  const rankings = json.rankings as WeekRanking[];
+  try {
+    // veraltete Einträge desselben Pairs aufräumen (Key enthält das Bis-Datum)
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(`bt-rankings-${pair}-`) && k !== cacheKey) {
+        localStorage.removeItem(k);
+      }
+    }
+    localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), rankings }));
+  } catch {
+    // localStorage voll/gesperrt → Cache überspringen, funktioniert trotzdem
+  }
+  return new Map(rankings.map((r) => [r.week_start, r]));
 }
 
 /** Lokales Datum als YYYY-MM-DD — NIE toISOString (UTC-Kipp um Mitternacht). */
