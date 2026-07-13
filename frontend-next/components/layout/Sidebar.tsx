@@ -83,28 +83,16 @@ export default function Sidebar() {
   const initial = userName.charAt(0).toUpperCase();
 
   return (
-    <aside
-      className="shrink-0 flex flex-col h-screen sticky top-0"
-      style={{
-        width: "248px",
-        minWidth: "248px",
-        background: "var(--color-sidebar)",
-        borderRight: "1px solid var(--color-border)",
-      }}
-    >
+    <aside className="shrink-0 flex flex-col h-screen sticky top-0 w-[248px] min-w-[248px] bg-sidebar border-r border-border">
       {/* Logo */}
-      <div style={{ padding: "22px 14px 0 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "11px", padding: "6px 10px 24px 10px" }}>
-          <div style={{
-            width: "28px", height: "28px", borderRadius: "8px",
-            background: "linear-gradient(135deg, #6c8cff, #a6b8ff)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <div style={{ width: "10px", height: "10px", background: "#0a0b0e", borderRadius: "3px", transform: "rotate(45deg)" }} />
+      <div className="pt-[22px] px-3.5">
+        <div className="flex items-center gap-[11px] px-2.5 pt-1.5 pb-6">
+          <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-linear-135 from-accent to-accent/60">
+            <div className="w-2.5 h-2.5 rounded-[3px] rotate-45 bg-bg" />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", lineHeight: "1.15" }}>
-            <div style={{ fontSize: "14.5px", fontWeight: 800, letterSpacing: "-0.2px" }}>FX Terminal</div>
-            <div style={{ fontSize: "9px", fontWeight: 600, letterSpacing: "1.2px", color: "var(--color-faint)", textTransform: "uppercase" }}>
+          <div className="flex flex-col leading-[1.15]">
+            <div className="text-[14.5px] font-extrabold tracking-tight">FX Terminal</div>
+            <div className="text-[9px] font-semibold tracking-[1.2px] text-faint uppercase">
               Swing-Trading Suite
             </div>
           </div>
@@ -112,188 +100,102 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", padding: "0 14px" }}>
+      <nav className="flex-1 overflow-y-auto flex flex-col px-3.5">
         {NAV_GROUPS.map((group, gi) => {
           const hasActiveItem = group.items.some(
             (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
           );
           // Aktive Route in zugeklappter Gruppe → trotzdem aufklappen
           const isOpen = !group.collapsible || openGroups[group.title] === true || hasActiveItem;
+          const groupHead =
+            "w-full flex items-center justify-between text-[10px] font-bold tracking-[1.3px] text-faint px-2.5 pb-2 uppercase";
 
           return (
-          <div
-            key={group.title}
-            data-tour-group={group.title}
-            style={{
-              borderTop: gi > 0 ? "1px solid var(--color-border)" : "none",
-              padding: gi > 0 ? "16px 0 18px 0" : "0 0 18px 0",
-            }}
-          >
-            {group.collapsible ? (
-              <button
-                onClick={() => toggleGroup(group.title)}
-                style={{
-                  width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
-                  color: "var(--color-faint)", padding: "0 10px 8px 10px",
-                  textTransform: "uppercase",
-                  background: "transparent", border: "none", cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <span>{group.title}</span>
-                <i
-                  className="ph-bold ph-caret-down"
-                  style={{
-                    fontSize: "11px",
-                    transform: isOpen ? "rotate(180deg)" : "none",
-                    transition: "transform 150ms",
-                  }}
-                />
-              </button>
-            ) : (
-              <div style={{
-                fontSize: "10px", fontWeight: 700, letterSpacing: "1.3px",
-                color: "var(--color-faint)", padding: "0 10px 8px 10px",
-                textTransform: "uppercase",
-              }}>
-                {group.title}
-              </div>
-            )}
-            <div style={{ display: isOpen ? "flex" : "none", flexDirection: "column", gap: "1px" }}>
-              {group.items.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                const locked = item.requiresAdmin && !isAdmin;
+            <div
+              key={group.title}
+              data-tour-group={group.title}
+              className={gi > 0 ? "border-t border-border pt-4 pb-[18px]" : "pb-[18px]"}
+            >
+              {group.collapsible ? (
+                <button onClick={() => toggleGroup(group.title)} className={`${groupHead} cursor-pointer`}>
+                  <span>{group.title}</span>
+                  <i
+                    className={`ph-bold ph-caret-down text-[11px] transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              ) : (
+                <div className={groupHead}>{group.title}</div>
+              )}
+              <div className={`${isOpen ? "flex" : "hidden"} flex-col gap-px`}>
+                {group.items.map((item) => {
+                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  const locked = item.requiresAdmin && !isAdmin;
 
-                if (locked) {
+                  if (locked) {
+                    return (
+                      <div
+                        key={item.href}
+                        data-tour={item.href}
+                        title="Nur für Admins verfügbar"
+                        className="px-2.5 py-2 rounded-lg text-[13.5px] font-medium text-faint cursor-not-allowed flex items-center justify-between opacity-50"
+                      >
+                        <span>{item.label}</span>
+                        <i className="ph-bold ph-lock-simple text-[11px]" />
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div
+                    <Link
                       key={item.href}
+                      href={item.href}
                       data-tour={item.href}
-                      title="Nur für Admins verfügbar"
-                      style={{
-                        padding: "8px 10px", borderRadius: "8px",
-                        fontSize: "13.5px", fontWeight: 500,
-                        color: "var(--color-faint)", cursor: "not-allowed",
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        opacity: 0.5,
-                      }}
+                      className={`py-2 rounded-lg text-[13.5px] flex items-center justify-between transition-colors duration-100 ${
+                        active
+                          ? "pl-3 pr-2.5 -ml-0.5 font-semibold text-text bg-surface2 border-l-2 border-accent"
+                          : "px-2.5 font-medium text-muted hover:bg-surface2 hover:text-text"
+                      }`}
                     >
                       <span>{item.label}</span>
-                      <i className="ph-bold ph-lock-simple" style={{ fontSize: "11px" }} />
-                    </div>
+                      {item.href === "/scanner/signale" && <SignalsBadge />}
+                    </Link>
                   );
-                }
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    data-tour={item.href}
-                    style={{
-                      padding: active ? "8px 10px 8px 12px" : "8px 10px",
-                      borderRadius: "8px",
-                      fontSize: "13.5px",
-                      fontWeight: active ? 600 : 500,
-                      color: active ? "var(--color-text)" : "var(--color-muted)",
-                      background: active ? "var(--color-surface2)" : "transparent",
-                      borderLeft: active ? "2px solid var(--color-accent)" : "none",
-                      marginLeft: active ? "-2px" : "0",
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      textDecoration: "none",
-                      transition: "background 120ms, color 120ms",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!active) {
-                        (e.currentTarget as HTMLElement).style.background = "var(--color-surface2)";
-                        (e.currentTarget as HTMLElement).style.color = "var(--color-text)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) {
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                        (e.currentTarget as HTMLElement).style.color = "var(--color-muted)";
-                      }
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    {item.href === "/scanner/signale" && <SignalsBadge />}
-                  </Link>
-                );
-              })}
+                })}
+              </div>
             </div>
-          </div>
           );
         })}
       </nav>
 
       {/* User + Logout */}
-      <div style={{
-        borderTop: "1px solid var(--color-border)",
-        padding: "12px 14px",
-      }}>
-        {/* User Info */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+      <div className="border-t border-border px-3.5 py-3">
+        <div className="flex items-center gap-2.5 mb-2">
           {userAvatar ? (
-            <img src={userAvatar} alt={userName} style={{ width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0 }} />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={userAvatar} alt={userName} className="w-[30px] h-[30px] rounded-full shrink-0" />
           ) : (
-            <div style={{
-              width: "30px", height: "30px", borderRadius: "50%",
-              background: "linear-gradient(135deg,#3a3f4c,#22252c)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "12.5px", fontWeight: 700, color: "var(--color-text)",
-              border: "1px solid var(--color-border2)", flexShrink: 0,
-            }}>
+            <div className="w-[30px] h-[30px] rounded-full shrink-0 flex items-center justify-center text-[12.5px] font-bold text-text border border-border2 bg-surface2">
               {initial}
             </div>
           )}
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {userName}
-            </div>
-            <div style={{ fontSize: "11px", color: "var(--color-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {userEmail}
-            </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-text truncate">{userName}</div>
+            <div className="text-[11px] text-faint truncate">{userEmail}</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-up)", display: "inline-block" }} />
-            <span style={{ fontSize: "10px", color: "var(--color-faint)", fontWeight: 600 }}>
-              {isAdmin ? "Admin" : "Aktiv"}
-            </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-up inline-block" />
+            <span className="text-[10px] text-faint font-semibold">{isAdmin ? "Admin" : "Aktiv"}</span>
           </div>
         </div>
 
-        {/* Logout Button */}
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: "7px",
-            padding: "7px 10px",
-            borderRadius: "8px",
-            fontSize: "12.5px",
-            fontWeight: 500,
-            color: "var(--color-faint)",
-            background: "transparent",
-            border: "none",
-            cursor: signingOut ? "not-allowed" : "pointer",
-            transition: "background 120ms, color 120ms",
-            textAlign: "left",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(239,100,97,0.08)";
-            (e.currentTarget as HTMLElement).style.color = "var(--color-down)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-            (e.currentTarget as HTMLElement).style.color = "var(--color-faint)";
-          }}
+          className={`w-full flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[12.5px] font-medium text-left text-faint transition-colors duration-100 hover:bg-down-dim hover:text-down ${
+            signingOut ? "cursor-not-allowed" : "cursor-pointer"
+          }`}
         >
-          <i className="ph-bold ph-sign-out" style={{ fontSize: "13px" }} />
+          <i className="ph-bold ph-sign-out text-[13px]" />
           {signingOut ? "Abmelden…" : "Abmelden"}
         </button>
       </div>

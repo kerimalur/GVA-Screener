@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Panel from "@/components/layout/Panel";
 
 interface DataJob {
   key: string;
@@ -12,11 +13,11 @@ interface DataJob {
   detail: Record<string, unknown> | null;
 }
 
-const JOB_STATUS: Record<string, { label: string; color: string }> = {
-  ok:       { label: "OK",            color: "#3FB950" },
-  error:    { label: "Fehler",        color: "#F85149" },
-  skipped:  { label: "Uebersprungen", color: "#D8A430" },
-  deferred: { label: "Verzoegert",    color: "#D8A430" },
+const JOB_STATUS: Record<string, { label: string; cls: string }> = {
+  ok:       { label: "OK",            cls: "bg-up text-up" },
+  error:    { label: "Fehler",        cls: "bg-down text-down" },
+  skipped:  { label: "Uebersprungen", cls: "bg-warn text-warn" },
+  deferred: { label: "Verzoegert",    cls: "bg-warn text-warn" },
 };
 
 const fmtRelative = (iso: string) => {
@@ -59,94 +60,78 @@ export default function EinstellungenPage() {
       .catch(() => setDataLoading(false));
   }, []);
 
-  const mono = "'Geist Mono', monospace";
-  const card: React.CSSProperties = {
-    background: "#0E131A",
-    border: "1px solid #1A222D",
-    borderRadius: 12,
-    padding: "22px 26px",
-    marginBottom: 16,
-  };
-  const sectionLabel: React.CSSProperties = {
-    fontFamily: mono,
-    fontSize: 9.5,
-    letterSpacing: "0.18em",
-    color: "#566273",
-    textTransform: "uppercase",
-    marginBottom: 16,
-  };
-
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
-
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.2em", color: "#58A6FF", textTransform: "uppercase" as const, marginBottom: 8 }}>
-          Einstellungen
-        </div>
-        <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: "#F4F8FC", margin: 0 }}>
-          Konto &amp; Daten
-        </h1>
-      </div>
-
-      <div style={card}>
-        <div style={sectionLabel}>Konto</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(88,166,255,.15)", border: "1px solid rgba(88,166,255,.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span style={{ color: "#58A6FF", fontWeight: 700, fontSize: 14 }}>{email.charAt(0).toUpperCase()}</span>
+    <div className="max-w-[640px] mx-auto space-y-4">
+      <Panel title="Konto" subtitle="Login & Rolle">
+        <div className="flex items-center gap-3">
+          <div className="w-[38px] h-[38px] rounded-full shrink-0 flex items-center justify-center bg-accent-dim border border-accent/30">
+            <span className="text-accent font-bold text-[14px]">{email.charAt(0).toUpperCase()}</span>
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 14, color: "#E7EDF5", fontWeight: 500 }}>{email || "---"}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[14px] font-medium">{email || "---"}</div>
               {isAdmin && (
-                <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", padding: "2px 7px", borderRadius: 5, background: "rgba(216,164,48,.15)", color: "#D8A430", border: "1px solid rgba(216,164,48,.3)", textTransform: "uppercase" as const }}>
+                <span className="inline-block px-1.5 py-0.5 rounded-(--radius-tag) border text-[10px] font-black font-mono uppercase tracking-wider bg-warn-dim text-warn border-warn/30">
                   Admin
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 11.5, color: "#566273", marginTop: 2 }}>Google / GitHub Login</div>
+            <div className="text-[11.5px] text-faint mt-0.5">Google / GitHub Login</div>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      <div style={{ ...card, marginBottom: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={sectionLabel}>Daten</div>
-          {nextRun && !dataLoading && (
-            <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>
-              Naechster Lauf: {new Date(nextRun).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr
+      <Panel
+        title="Daten"
+        subtitle="Cron-Jobs & Frische der Quellen"
+        actions={
+          nextRun && !dataLoading ? (
+            <span className="font-mono text-[10px] text-faint">
+              Naechster Lauf:{" "}
+              {new Date(nextRun).toLocaleTimeString("de-CH", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Europe/Zurich",
+              })}{" "}
+              Uhr
             </span>
-          )}
-        </div>
+          ) : undefined
+        }
+      >
         {dataLoading ? (
-          <div style={{ fontSize: 13, color: "#566273" }}>Laedt...</div>
+          <div className="text-[13px] text-faint">Laedt...</div>
         ) : jobs.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#566273" }}>Noch keine Daten geladen.</div>
+          <div className="text-[13px] text-faint">Noch keine Daten geladen.</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column" as const, gap: 0 }}>
+          <div className="flex flex-col">
             {jobs.map((job, i) => {
               const st = job.status ? JOB_STATUS[job.status] : null;
+              const [dotCls, textCls] = st ? st.cls.split(" ") : ["bg-faint", "text-faint"];
               return (
-                <div key={job.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: i < jobs.length - 1 ? "1px solid #161D27" : "none" }}>
+                <div
+                  key={job.key}
+                  className={`flex items-center justify-between py-3 ${
+                    i < jobs.length - 1 ? "border-b border-border/60" : ""
+                  }`}
+                >
                   <div>
-                    <div style={{ fontSize: 13.5, color: "#C7D1DD", fontWeight: 500 }}>{job.label}</div>
-                    <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{job.freq}</div>
+                    <div className="text-[13.5px] font-medium">{job.label}</div>
+                    <div className="font-mono text-[10px] text-faint mt-0.5">{job.freq}</div>
                     {job.since && (
-                      <div style={{ fontFamily: mono, fontSize: 10, color: "#3A4A5C", marginTop: 2 }}>
-                        seit {fmtSince(job.since)}
-                      </div>
+                      <div className="font-mono text-[10px] text-faint/70 mt-0.5">seit {fmtSince(job.since)}</div>
                     )}
                   </div>
-                  <div style={{ textAlign: "right" as const, flexShrink: 0 }}>
+                  <div className="text-right shrink-0">
                     {job.lastRun ? (
                       <>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: st?.color ?? "#566273", display: "inline-block" }} />
-                          <span style={{ fontFamily: mono, fontSize: 10.5, color: st?.color ?? "#566273" }}>{st?.label ?? "---"}</span>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <span className={`w-1.5 h-1.5 rounded-full inline-block ${dotCls}`} />
+                          <span className={`font-mono text-[10.5px] ${textCls}`}>{st?.label ?? "---"}</span>
                         </div>
-                        <div style={{ fontFamily: mono, fontSize: 10, color: "#566273", marginTop: 3 }}>{fmtRelative(job.lastRun)}</div>
+                        <div className="font-mono text-[10px] text-faint mt-0.5">{fmtRelative(job.lastRun)}</div>
                       </>
                     ) : (
-                      <span style={{ fontFamily: mono, fontSize: 10.5, color: "#566273" }}>Noch nicht geladen</span>
+                      <span className="font-mono text-[10.5px] text-faint">Noch nicht geladen</span>
                     )}
                   </div>
                 </div>
@@ -154,12 +139,13 @@ export default function EinstellungenPage() {
             })}
           </div>
         )}
-        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #161D27", display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3FB950", display: "inline-block" }} />
-          <span style={{ fontFamily: mono, fontSize: 10, color: "#566273" }}>Automatisch taeglich um 06:30 Uhr (Schweizer Zeit)</span>
+        <div className="mt-4 pt-3.5 border-t border-border flex items-center gap-[7px]">
+          <span className="w-[5px] h-[5px] rounded-full bg-up inline-block" />
+          <span className="font-mono text-[10px] text-faint">
+            Automatisch taeglich um 06:30 Uhr (Schweizer Zeit)
+          </span>
         </div>
-      </div>
-
+      </Panel>
     </div>
   );
 }

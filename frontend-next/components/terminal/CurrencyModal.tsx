@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import CurrencyDetailSections from "./CurrencyDetailSections";
+import { BiasScore, DirectionTag } from "@/components/ui/terminal";
 import type { TerminalCurrency } from "@/lib/data/terminal";
 
 /** Detail-Popup einer Währung: 4 Sub-Scores + Intermarket-Panel. */
@@ -24,14 +25,6 @@ export default function CurrencyModal({
     };
   }, [onClose]);
 
-  const total = currency.score.total;
-  const dirCls =
-    currency.score.direction === "LONG"
-      ? "text-up"
-      : currency.score.direction === "SHORT"
-        ? "text-down"
-        : "text-muted";
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4 md:p-8"
@@ -44,18 +37,8 @@ export default function CurrencyModal({
           <div className="flex items-center gap-2.5">
             <span className="text-xl leading-none">{currency.flag}</span>
             <span className="font-mono font-black text-[16px]">{currency.ccy}</span>
-            <span className={`font-mono font-black text-[16px] ${dirCls}`}>
-              {total !== null ? `${total > 0 ? "+" : ""}${total.toFixed(2)}` : "–"}
-            </span>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
-              currency.score.direction === "LONG"
-                ? "border-up/40 text-up bg-up/10"
-                : currency.score.direction === "SHORT"
-                  ? "border-down/40 text-down bg-down/10"
-                  : "border-border text-muted"
-            }`}>
-              {currency.score.direction}
-            </span>
+            <BiasScore value={currency.score.total} threshold={0.15} size="sm" className="text-[16px]" />
+            <DirectionTag direction={currency.score.direction} />
           </div>
           <button
             onClick={onClose}

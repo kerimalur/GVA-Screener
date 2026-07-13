@@ -79,7 +79,7 @@ function verdictOf(s: Report["summary"] | undefined): { text: string; cls: strin
   if (isSignificant(s.oos_acc, s.oos_n)) {
     return {
       text: `Schwache Gesamt-Edge: ${(s.oos_acc * 100).toFixed(1)} % (n=${s.oos_n.toLocaleString("de-CH")}).`,
-      cls: "border-[#D8A430]/30 bg-[#D8A430]/5 text-[#D8A430]",
+      cls: "border-warn/30 bg-warn-dim text-warn",
     };
   }
   return {

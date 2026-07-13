@@ -72,7 +72,7 @@ function LoginContent() {
 
   return (
     <div
-      className="min-h-screen flex flex-col bg-[#0b0f14] text-[#c9d3df]"
+      className="min-h-screen flex flex-col bg-bg text-text"
       style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
     >
       {/* Zentrierter Login-Block */}
@@ -81,23 +81,23 @@ function LoginContent() {
 
           {/* Logo */}
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#58a6ff]/10 border border-[#58a6ff]/20 mb-4">
-              <span className="text-[#58a6ff] font-bold text-lg">FX</span>
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent-dim border border-accent/30 mb-4">
+              <span className="text-accent font-bold text-lg">FX</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-white">FX Terminal</h1>
-            <p className="text-sm text-[#5f6b7a] mt-2">
+            <p className="text-sm text-muted mt-2">
               Melde dich an um Zugang zu erhalten
             </p>
           </div>
 
           {/* Card */}
-          <div className="bg-[#10151c] border border-[#232c38] rounded-2xl p-8">
+          <div className="bg-surface border border-border rounded-2xl p-8">
 
             {/* Google Button */}
             <button
               onClick={() => handleOAuth("google")}
               disabled={loading !== null}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white text-[#1a1a1a] font-semibold text-sm hover:bg-[#f0f0f0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white text-black font-semibold text-sm hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading === "google" ? (
                 <span className="flex items-center gap-2">
@@ -122,16 +122,16 @@ function LoginContent() {
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-[#232c38]" />
-              <span className="text-[11px] text-[#3d4a5a] uppercase tracking-wider">oder</span>
-              <div className="flex-1 h-px bg-[#232c38]" />
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[11px] text-faint uppercase tracking-wider">oder</span>
+              <div className="flex-1 h-px bg-border" />
             </div>
 
             {/* GitHub Button */}
             <button
               onClick={() => handleOAuth("github")}
               disabled={loading !== null}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-[#161b22] border border-[#30363d] text-white font-semibold text-sm hover:bg-[#21262d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-surface2 border border-border2 text-white font-semibold text-sm hover:bg-surface2/70 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading === "github" ? (
                 <span className="flex items-center gap-2">
@@ -153,9 +153,9 @@ function LoginContent() {
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-[#232c38]" />
-              <span className="text-[11px] text-[#3d4a5a] uppercase tracking-wider">oder mit E-Mail</span>
-              <div className="flex-1 h-px bg-[#232c38]" />
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[11px] text-faint uppercase tracking-wider">oder mit E-Mail</span>
+              <div className="flex-1 h-px bg-border" />
             </div>
 
             {/* E-Mail/Passwort-Formular */}
@@ -167,7 +167,7 @@ function LoginContent() {
                 placeholder="E-Mail-Adresse"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-[#0b0f14] border border-[#232c38] text-sm text-white placeholder:text-[#5f6b7a] outline-none focus:border-[#58a6ff] transition-colors"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-bg border border-border2 text-sm text-white placeholder:text-muted outline-none focus:border-accent transition-colors"
               />
               <input
                 type="password"
@@ -177,12 +177,12 @@ function LoginContent() {
                 placeholder="Passwort"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-[#0b0f14] border border-[#232c38] text-sm text-white placeholder:text-[#5f6b7a] outline-none focus:border-[#58a6ff] transition-colors"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-bg border border-border2 text-sm text-white placeholder:text-muted outline-none focus:border-accent transition-colors"
               />
               <button
                 type="submit"
                 disabled={loading !== null}
-                className="w-full py-3 px-4 rounded-xl bg-[#58a6ff] text-[#08111e] font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 rounded-xl bg-accent text-bg font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading === "password"
                   ? "Einen Moment…"
@@ -192,7 +192,7 @@ function LoginContent() {
               </button>
             </form>
 
-            <p className="text-xs text-[#5f6b7a] text-center mt-4">
+            <p className="text-xs text-muted text-center mt-4">
               {mode === "signup" ? "Schon ein Konto?" : "Noch kein Konto?"}{" "}
               <button
                 type="button"
@@ -201,17 +201,17 @@ function LoginContent() {
                   setError("");
                   setInfo("");
                 }}
-                className="text-[#58a6ff] hover:underline font-medium"
+                className="text-accent hover:underline font-medium"
               >
                 {mode === "signup" ? "Anmelden" : "Registrieren"}
               </button>
             </p>
 
             {info && (
-              <p className="mt-4 text-xs text-[#3fb950] text-center">{info}</p>
+              <p className="mt-4 text-xs text-up text-center">{info}</p>
             )}
             {error && (
-              <p className="mt-4 text-xs text-[#f85149] text-center">{error}</p>
+              <p className="mt-4 text-xs text-down text-center">{error}</p>
             )}
           </div>
 
@@ -223,7 +223,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0b0f14]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-bg" />}>
       <LoginContent />
     </Suspense>
   );

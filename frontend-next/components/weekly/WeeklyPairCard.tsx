@@ -1,5 +1,6 @@
 import type { WeeklyPairCard as CardData } from "@/lib/data/weekly";
 import { flowLabel } from "@/lib/calc/cotDelta";
+import { TerminalCard, DirectionTag } from "@/components/ui/terminal";
 import OutlookPrefillButton from "./OutlookPrefillButton";
 
 function fmtSigned(v: number | null | undefined, digits = 1, suffix = ""): string {
@@ -21,20 +22,6 @@ function isoWeek(dateStr: string): number {
 function flowCls(v: number | null | undefined): string {
   if (v === null || v === undefined) return "text-faint";
   return v > 0 ? "text-up" : v < 0 ? "text-down" : "text-muted";
-}
-
-function DirBadge({ direction }: { direction: "LONG" | "SHORT" | null }) {
-  if (!direction)
-    return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-border text-muted">
-        NEUTRAL
-      </span>
-    );
-  const cls =
-    direction === "LONG"
-      ? "border-up text-up bg-up/10"
-      : "border-down text-down bg-down/10";
-  return <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${cls}`}>{direction}</span>;
 }
 
 function FlowRow({ ccy, flow, percentile }: {
@@ -66,14 +53,14 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
   const journalSymbol = card.instrument.replace("_", "");
 
   return (
-    <div className="bg-surface2 border border-border rounded-lg p-3.5 space-y-2.5 flex flex-col">
+    <TerminalCard className="space-y-2.5 flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2">
         <span className="font-bold text-[14px]">{card.displayName}</span>
-        <DirBadge direction={card.verdict.direction} />
+        <DirectionTag direction={card.verdict.direction ?? "NEUTRAL"} />
         {card.inPlay.length > 0 && (
           <span
-            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warn/15 text-warn border border-warn/50"
+            className="px-1.5 py-0.5 rounded-(--radius-tag) text-[9px] font-bold font-mono bg-warn-dim text-warn border border-warn/50"
             title="Drift-Event (CPI/NFP/Zinsentscheid) in den letzten 7 Tagen"
           >
             ⚡ IN PLAY: {card.inPlay.join("+")}
@@ -172,6 +159,6 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
           }}
         />
       </div>
-    </div>
+    </TerminalCard>
   );
 }

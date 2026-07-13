@@ -10,36 +10,20 @@ export default function TopBar() {
   const title = PAGE_TITLES[pathname] ?? "FX Terminal";
 
   return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "22px 40px",
-        borderBottom: "1px solid var(--color-border)",
-        position: "sticky",
-        top: 0,
-        background: "rgba(10,11,14,0.85)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        zIndex: 20,
-      }}
-    >
-      <h1 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.3px" }}>
-        {title}
-      </h1>
+    <header className="flex items-center justify-between px-10 py-[22px] border-b border-border sticky top-0 z-20 bg-bg/85 backdrop-blur-[10px]">
+      <h1 className="text-xl font-extrabold tracking-tight">{title}</h1>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+      <div className="flex items-center gap-4">
         <Suspense fallback={null}>
           <PairSearchBar />
         </Suspense>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "12.5px", color: "var(--color-faint)", fontWeight: 500 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-up)", display: "inline-block" }} />
+        <div className="flex items-center gap-4 text-[12.5px] font-medium text-faint">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-up" />
             Live
           </div>
-          <div suppressHydrationWarning>
+          <div suppressHydrationWarning className="font-mono">
             {new Date().toLocaleDateString("de-DE", {
               weekday: "short",
               day: "2-digit",

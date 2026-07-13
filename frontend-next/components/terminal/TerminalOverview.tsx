@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import CurrencyModal from "./CurrencyModal";
+import { TerminalCard, BiasScore } from "@/components/ui/terminal";
 import { SUBSCORE_ORDER } from "@/lib/calc/currencyScore";
 import type { TerminalCurrency } from "@/lib/data/terminal";
 
@@ -11,11 +12,6 @@ import type { TerminalCurrency } from "@/lib/data/terminal";
  * nach dem kanonischen Bias-Score. Klick → Detail-Modal (Modus B).
  * „Vergleichen" → zwei Boxen wählen → Vergleichsseite (Modus C).
  */
-
-function fmtTotal(v: number | null): string {
-  if (v === null) return "–";
-  return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
-}
 
 function CurrencyBox({
   c,
@@ -31,17 +27,16 @@ function CurrencyBox({
 }) {
   const dir = c.score.direction;
   const border =
-    dir === "LONG" ? "border-up/50" : dir === "SHORT" ? "border-down/50" : "border-border";
-  const totalCls = dir === "LONG" ? "text-up" : dir === "SHORT" ? "text-down" : "text-muted";
+    dir === "LONG" ? "border-up/50" : dir === "SHORT" ? "border-down/50" : "";
   return (
-    <button
+    <TerminalCard
       onClick={onClick}
-      className={`relative text-left rounded-lg border bg-surface2 p-3.5 space-y-2.5 transition-all cursor-pointer hover:border-accent/70 ${border} ${
+      className={`relative space-y-2.5 ${border} ${
         compareSlot !== null ? "ring-2 ring-accent border-accent" : ""
       } ${compareMode && compareSlot === null ? "opacity-90" : ""}`}
     >
       {compareSlot !== null && (
-        <span className="absolute -top-2 -right-2 bg-accent text-black text-[10px] font-black px-1.5 py-0.5 rounded">
+        <span className="absolute -top-2 -right-2 bg-accent text-bg text-[10px] font-black px-1.5 py-0.5 rounded-(--radius-tag)">
           Pair {compareSlot}
         </span>
       )}
@@ -50,7 +45,7 @@ function CurrencyBox({
           <span className="text-lg leading-none">{c.flag}</span>
           <span className="font-mono font-black text-[15px]">{c.ccy}</span>
         </div>
-        <span className={`text-xl font-black font-mono ${totalCls}`}>{fmtTotal(c.score.total)}</span>
+        <BiasScore value={c.score.total} threshold={0.15} />
       </div>
       <div className="flex items-center gap-2.5 pt-1.5 border-t border-border/60">
         {SUBSCORE_ORDER.map(({ key, short }) => {
@@ -69,7 +64,7 @@ function CurrencyBox({
           );
         })}
       </div>
-    </button>
+    </TerminalCard>
   );
 }
 

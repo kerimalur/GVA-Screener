@@ -197,7 +197,7 @@ export default function CalendarView() {
               <div style={{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid var(--color-border)",display:"flex",alignItems:"center",gap:"8px"}}>
                 <label style={{display:"flex",alignItems:"center",gap:"8px",fontSize:"12.5px",fontWeight:600,color:"var(--color-muted)",cursor:"pointer"}}>
                   <span style={{width:"16px",height:"16px",borderRadius:"5px",background:showWeekends?"var(--color-accent)":"var(--color-surface2)",border:`1px solid ${showWeekends?"var(--color-accent)":"var(--color-border2)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>setShowWeekends(!showWeekends)}>
-                    {showWeekends&&<span style={{color:"#0a0b0e",fontSize:"10px",fontWeight:700}}>✓</span>}
+                    {showWeekends&&<span style={{color:"var(--color-bg)",fontSize:"10px",fontWeight:700}}>✓</span>}
                   </span>
                   Sa / So anzeigen
                 </label>

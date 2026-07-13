@@ -72,21 +72,14 @@ export default function PairSearchBar() {
   const activePair = searchParams.get("pair");
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
+    <div ref={containerRef} className="relative">
       {/* Input */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        background: "var(--color-surface)",
-        border: `1px solid ${focused ? "var(--color-accent)" : "var(--color-border2)"}`,
-        borderRadius: "10px",
-        padding: "0 12px",
-        height: "36px",
-        width: "200px",
-        transition: "border-color 120ms",
-      }}>
-        <i className="ph-bold ph-magnifying-glass" style={{ fontSize: "13px", color: "var(--color-faint)", flexShrink: 0 }} />
+      <div
+        className={`flex items-center gap-2 bg-surface border rounded-[10px] px-3 h-9 w-[200px] transition-colors duration-100 ${
+          focused ? "border-accent" : "border-border2"
+        }`}
+      >
+        <i className="ph-bold ph-magnifying-glass text-[13px] text-faint shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -99,62 +92,29 @@ export default function PairSearchBar() {
             if (e.key === "Enter" && filtered.length > 0) select(filtered[0]);
             if (e.key === "Escape") { setOpen(false); inputRef.current?.blur(); }
           }}
-          style={{
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            fontSize: "13px",
-            fontWeight: 600,
-            fontFamily: "'JetBrains Mono', monospace",
-            color: activePair ? "var(--color-accent)" : "var(--color-text)",
-            letterSpacing: "0.3px",
-          }}
+          className={`flex-1 bg-transparent border-none outline-none text-[13px] font-semibold font-mono tracking-[0.3px] ${
+            activePair ? "text-accent" : "text-text"
+          }`}
         />
         {query && (
-          <button onClick={clear} style={{ color: "var(--color-faint)", background: "transparent", border: "none", cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+          <button onClick={clear} className="text-faint text-[14px] leading-none p-0 shrink-0 cursor-pointer">
+            ×
+          </button>
         )}
       </div>
 
       {/* Dropdown */}
       {open && filtered.length > 0 && (
-        <div style={{
-          position: "absolute",
-          top: "calc(100% + 6px)",
-          left: 0,
-          right: 0,
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-border2)",
-          borderRadius: "12px",
-          overflow: "hidden",
-          zIndex: 100,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-          maxHeight: "260px",
-          overflowY: "auto",
-        }}>
+        <div className="absolute top-[calc(100%+6px)] left-0 right-0 bg-surface border border-border2 rounded-(--radius-card) overflow-hidden overflow-y-auto z-100 max-h-[260px] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
           {filtered.slice(0, 28).map((pair) => (
             <button
               key={pair}
               onMouseDown={(e) => { e.preventDefault(); select(pair); }}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "8px 14px",
-                fontSize: "13px",
-                fontWeight: 600,
-                fontFamily: "'JetBrains Mono', monospace",
-                letterSpacing: "0.3px",
-                color: pair === activePair ? "var(--color-accent)" : "var(--color-text)",
-                background: pair === activePair ? "var(--color-accent-dim)" : "transparent",
-                border: "none",
-                cursor: "pointer",
-                transition: "background 80ms",
-              }}
-              onMouseEnter={(e) => { if (pair !== activePair) (e.currentTarget as HTMLElement).style.background = "var(--color-surface2)"; }}
-              onMouseLeave={(e) => { if (pair !== activePair) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              className={`block w-full text-left px-3.5 py-2 text-[13px] font-semibold font-mono tracking-[0.3px] cursor-pointer transition-colors duration-75 ${
+                pair === activePair ? "text-accent bg-accent-dim" : "text-text hover:bg-surface2"
+              }`}
             >
-              {pair.slice(0,3)}/{pair.slice(3)}
+              {pair.slice(0, 3)}/{pair.slice(3)}
             </button>
           ))}
         </div>

@@ -1,27 +1,32 @@
-// Zentrale Chart-Farben/-Konstanten (deckungsgleich mit globals.css @theme)
+// Zentrale Chart-Farben — Single Source: identische Werte wie globals.css @theme.
+// Recharts braucht konkrete Farbstrings (SVG-Attribute), daher hier gespiegelt;
+// Änderungen IMMER in beiden Dateien nachziehen.
 export const chart = {
-  grid: "#1e2530",
-  axis: "#30363d",
-  text: "#8b949e",
-  faint: "#484f58",
-  up: "#3fb950",
-  down: "#f85149",
-  accent: "#58a6ff",
-  warn: "#d29922",
-  neutral: "#6e7681",
-  surface: "#161b22",
-  border: "#21262d",
-  // Serien-Palette für Multi-Line-Charts
-  palette: ["#58a6ff", "#3fb950", "#f85149", "#d29922", "#bc8cff", "#39c5cf", "#ff7b72", "#7ee787"],
+  grid: "rgba(255,255,255,0.05)",
+  axis: "rgba(255,255,255,0.10)",
+  text: "#8d94a3",   // --color-muted
+  faint: "#565d6b",  // --color-faint
+  up: "#3ddc97",     // --color-up
+  down: "#ef6461",   // --color-down
+  accent: "#6c8cff", // --color-accent
+  warn: "#f5a623",   // --color-warn
+  neutral: "#565d6b",
+  surface: "#131519", // --color-surface
+  border: "rgba(255,255,255,0.07)",
+  // Serien-Palette: Akzent + abgestufte Grautöne + semantische Farben —
+  // bewusst reduziert (Terminal-Stil), keine bunte Default-Palette.
+  // dataviz-Validator (dark, Surface #131519): CVD-Separation 18.9 PASS,
+  // Kontrast >=3:1 PASS; Grau-Serien sind zusätzlich per Legende/Label benannt.
+  palette: ["#6c8cff", "#c8cdd8", "#8d94a3", "#5d6472", "#3ddc97", "#ef6461", "#f5a623"],
 } as const;
 
 export const tooltipStyle = {
-  backgroundColor: "#161b22",
-  border: "1px solid #30363d",
-  borderRadius: 4,
+  backgroundColor: "#191c22", // --color-surface2
+  border: "1px solid rgba(255,255,255,0.14)", // --color-border2
+  borderRadius: 8,
   fontSize: 12,
   fontFamily: "var(--font-mono)",
-  color: "#e6edf3",
+  color: "#f2f3f5", // --color-text
 } as const;
 
 export function fmtNumber(v: number, digits = 2): string {

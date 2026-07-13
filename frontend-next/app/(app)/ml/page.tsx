@@ -20,7 +20,7 @@ const getBacktest = unstable_cache(
 
 const STATUS_UI: Record<HealthStatus, { label: string; cls: string }> = {
   ok:    { label: "OK",     cls: "bg-up/15 text-up" },
-  warn:  { label: "Veraltet", cls: "bg-[#D8A430]/15 text-[#D8A430]" },
+  warn:  { label: "Veraltet", cls: "bg-warn-dim text-warn" },
   fehlt: { label: "Fehlt",  cls: "bg-down/15 text-down" },
 };
 
@@ -99,7 +99,7 @@ export default async function Page() {
         <div className={`mt-4 rounded border p-3 text-[13px] ${
           allSourcesOk && snapshotsReady
             ? "border-up/30 bg-up/5 text-up"
-            : "border-[#D8A430]/30 bg-[#D8A430]/5 text-[#D8A430]"
+            : "border-warn/30 bg-warn-dim text-warn"
         }`}>
           {allSourcesOk && snapshotsReady ? (
             <>Alle Datenquellen aktuell, Snapshot-Historie vollständig — Backtest kann gebaut werden.</>

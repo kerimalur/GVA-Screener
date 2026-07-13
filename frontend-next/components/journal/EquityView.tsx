@@ -94,7 +94,7 @@ export default function EquityView() {
               border: `1px solid ${showDrawdown ? "var(--color-accent)" : "var(--color-border2)"}`,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }} onClick={() => setShowDrawdown(!showDrawdown)}>
-              {showDrawdown && <span style={{ color: "#0a0b0e", fontSize: "10px", fontWeight: 700 }}>✓</span>}
+              {showDrawdown && <span style={{ color: "var(--color-bg)", fontSize: "10px", fontWeight: 700 }}>✓</span>}
             </span>
             Drawdown anzeigen
           </label>

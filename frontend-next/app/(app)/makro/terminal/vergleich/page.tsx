@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Panel from "@/components/layout/Panel";
 import CurrencyDetailSections from "@/components/terminal/CurrencyDetailSections";
+import { BiasScore, DirectionTag } from "@/components/ui/terminal";
 import RegionCompare, { type RegionData } from "@/components/makro/RegionCompare";
 import SpreadChart from "@/components/makro/SpreadChart";
 import { unstable_cache } from "next/cache";
@@ -95,34 +96,13 @@ export default async function Page({
         (i.baseCcy === a && i.quoteCcy === b) || (i.baseCcy === b && i.quoteCcy === a),
     )?.instrument ?? "EUR_USD";
 
-  const fmt = (v: number | null) => (v === null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(2)}`);
   const head = (c: NonNullable<typeof ca>, slot: string) => (
     <div className="flex items-center gap-2.5">
       <span className="text-[10px] font-black uppercase tracking-widest text-faint">{slot}</span>
       <span className="text-xl leading-none">{c.flag}</span>
       <span className="font-mono font-black text-[16px]">{c.ccy}</span>
-      <span
-        className={`font-mono font-black text-[16px] ${
-          c.score.direction === "LONG"
-            ? "text-up"
-            : c.score.direction === "SHORT"
-              ? "text-down"
-              : "text-muted"
-        }`}
-      >
-        {fmt(c.score.total)}
-      </span>
-      <span
-        className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
-          c.score.direction === "LONG"
-            ? "border-up/40 text-up bg-up/10"
-            : c.score.direction === "SHORT"
-              ? "border-down/40 text-down bg-down/10"
-              : "border-border text-muted"
-        }`}
-      >
-        {c.score.direction}
-      </span>
+      <BiasScore value={c.score.total} threshold={0.15} size="sm" className="text-[16px]" />
+      <DirectionTag direction={c.score.direction} />
     </div>
   );
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Segmented from "@/components/ui/Segmented";
 import type { CalendarEventRow } from "@/lib/supabase/types";
 
 /**
@@ -10,8 +11,8 @@ import type { CalendarEventRow } from "@/lib/supabase/types";
  */
 
 const IMPACT_STYLE: Record<string, string> = {
-  High: "bg-down/15 text-down",
-  Medium: "bg-warn/15 text-warn",
+  High: "bg-down-dim text-down border-down/30",
+  Medium: "bg-warn-dim text-warn border-warn/30",
 };
 
 export default function NewsPanel({ events }: { events: CalendarEventRow[] }) {
@@ -32,23 +33,16 @@ export default function NewsPanel({ events }: { events: CalendarEventRow[] }) {
   }
   const days = [...byDay.keys()].sort();
 
-  const chip = (active: boolean) =>
-    `px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
-      active
-        ? "bg-accent/15 text-accent border-accent"
-        : "text-muted border-border hover:border-border2"
-    }`;
-
   return (
     <div className="space-y-4">
-      <div className="flex gap-1">
-        <button className={chip(range === "today")} onClick={() => setRange("today")}>
-          Heute
-        </button>
-        <button className={chip(range === "week")} onClick={() => setRange("week")}>
-          Ganze Woche
-        </button>
-      </div>
+      <Segmented
+        options={[
+          { value: "today", label: "Heute" },
+          { value: "week", label: "Ganze Woche" },
+        ]}
+        value={range}
+        onChange={setRange}
+      />
 
       {days.length === 0 && (
         <p className="text-muted text-sm py-6 text-center">
@@ -82,11 +76,11 @@ export default function NewsPanel({ events }: { events: CalendarEventRow[] }) {
                     })}
                   </span>
                   <span
-                    className={`w-16 text-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                      IMPACT_STYLE[e.impact ?? ""] ?? "bg-surface2 text-muted"
+                    className={`w-16 text-center px-1.5 py-0.5 rounded-(--radius-tag) border text-[10px] font-black font-mono uppercase tracking-wider shrink-0 ${
+                      IMPACT_STYLE[e.impact ?? ""] ?? "bg-neutral-dim text-muted border-border"
                     }`}
                   >
-                    {e.impact === "Medium" ? "Mid" : (e.impact ?? "–")}
+                    {e.impact === "Medium" ? "MID" : (e.impact ?? "–")}
                   </span>
                   <span className="w-10 font-mono font-bold shrink-0">{e.currency}</span>
                   <span className="flex-1 truncate">{e.title}</span>

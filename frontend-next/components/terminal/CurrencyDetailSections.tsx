@@ -8,6 +8,7 @@ import SentimentGrid from "@/components/sentiment/SentimentGrid";
 import SentimentHistory from "@/components/sentiment/SentimentHistory";
 import SeasonalityDetail from "@/components/saisonalitaet/SeasonalityDetail";
 import OverlayChart from "@/components/intermarket/OverlayChart";
+import { Metric } from "@/components/ui/terminal";
 import type { TerminalCurrency } from "@/lib/data/terminal";
 import type { SubScore } from "@/lib/calc/currencyScore";
 
@@ -203,9 +204,9 @@ function CotSection({ c }: { c: TerminalCurrency }) {
 
 // ── Zinsen ──────────────────────────────────────────────────────────────────
 const STANCE_STYLE: Record<string, string> = {
-  HAWKISH: "bg-up/15 text-up border-up/40",
-  DOVISH: "bg-down/15 text-down border-down/40",
-  NEUTRAL: "bg-surface text-muted border-border",
+  HAWKISH: "bg-up-dim text-up border-up/30",
+  DOVISH: "bg-down-dim text-down border-down/30",
+  NEUTRAL: "bg-neutral-dim text-muted border-border",
 };
 
 function ZinsenSection({ c }: { c: TerminalCurrency }) {
@@ -221,32 +222,30 @@ function ZinsenSection({ c }: { c: TerminalCurrency }) {
   return (
     <Section sub={sub(c, "zinsen")}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div className="bg-surface border border-border/60 rounded p-2">
-          <div className="text-[9px] uppercase tracking-widest text-faint">Leitzins</div>
-          <div className="text-[15px] font-mono font-bold mt-0.5">
+        <div className="bg-surface border border-border/60 rounded-(--radius-tag) p-2">
+          <Metric label="Rate" valueClassName="text-[15px]">
             {r.policyRate !== null ? `${r.policyRate.toFixed(2)} %` : "–"}
-          </div>
+          </Metric>
         </div>
-        <div className="bg-surface border border-border/60 rounded p-2">
-          <div className="text-[9px] uppercase tracking-widest text-faint">Momentum</div>
-          <div
-            className={`text-[12px] font-mono font-bold mt-1 ${
+        <div className="bg-surface border border-border/60 rounded-(--radius-tag) p-2">
+          <Metric
+            label="Momentum"
+            valueClassName={`text-[12px] ${
               r.delta6mBps === null ? "text-faint" : r.delta6mBps > 10 ? "text-up" : r.delta6mBps < -10 ? "text-down" : "text-muted"
             }`}
           >
             {momentum}
-          </div>
+          </Metric>
         </div>
-        <div className="bg-surface border border-border/60 rounded p-2">
-          <div className="text-[9px] uppercase tracking-widest text-faint">10Y-Rendite</div>
-          <div className="text-[15px] font-mono font-bold mt-0.5">
+        <div className="bg-surface border border-border/60 rounded-(--radius-tag) p-2">
+          <Metric label="10Y" valueClassName="text-[15px]">
             {r.y10 !== null ? `${r.y10.toFixed(2)} %` : "–"}
-          </div>
+          </Metric>
         </div>
-        <div className="bg-surface border border-border/60 rounded p-2">
+        <div className="bg-surface border border-border/60 rounded-(--radius-tag) p-2">
           <div className="text-[9px] uppercase tracking-widest text-faint">CB-Haltung</div>
           <span
-            className={`inline-block mt-1 px-1.5 py-0.5 rounded border text-[11px] font-black font-mono ${STANCE_STYLE[r.stance.label]}`}
+            className={`inline-block mt-1 px-1.5 py-0.5 rounded-(--radius-tag) border text-[10px] font-black font-mono uppercase tracking-wider ${STANCE_STYLE[r.stance.label]}`}
           >
             {r.stance.label}
           </span>

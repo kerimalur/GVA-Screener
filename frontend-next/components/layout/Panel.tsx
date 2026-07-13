@@ -8,46 +8,20 @@ interface PanelProps {
   className?: string;
 }
 
+/** Seiten-Sektion im Terminal-Stil: Surface-Fläche, dezenter Rand, ruhiger Header. */
 export default function Panel({ title, subtitle, actions, children, className = "" }: PanelProps) {
   return (
-    <section
-      className={className}
-      style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "12px",
-      }}
-    >
+    <section className={`bg-surface border border-border rounded-(--radius-card) ${className}`}>
       {(title || actions) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 20px",
-            borderBottom: "1px solid var(--color-border)",
-          }}
-        >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <div>
-            {title && (
-              <h2 style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.1px" }}>
-                {title}
-              </h2>
-            )}
-            {subtitle && (
-              <p style={{ fontSize: "12px", color: "var(--color-muted)", marginTop: "2px" }}>
-                {subtitle}
-              </p>
-            )}
+            {title && <h2 className="text-[14px] font-bold tracking-tight">{title}</h2>}
+            {subtitle && <p className="text-[12px] text-muted mt-0.5">{subtitle}</p>}
           </div>
-          {actions && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {actions}
-            </div>
-          )}
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div style={{ padding: "20px" }}>{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
