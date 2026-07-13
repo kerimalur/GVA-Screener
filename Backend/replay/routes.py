@@ -12,7 +12,7 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ml.db import select_all, insert, update
+from ml.db import select_all, insert, update, delete
 from .fundamentals import ranking_series
 from .gva_history import find_hit, normalize_pair, reconstruct_hits
 from .trade_result import simulate_trade
@@ -144,7 +144,8 @@ class SessionCreate(BaseModel):
 
 
 class SessionPatch(BaseModel):
-    status: str  # 'active' | 'paused' | 'done'
+    status: str | None = None  # 'active' | 'paused' | 'done'
+    name: str | None = None
     notes: str | None = None
 
 
@@ -184,14 +185,20 @@ def list_sessions():
 
 @replay_router.patch("/sessions/{session_id}")
 def patch_session(session_id: int, req: SessionPatch):
-    if req.status not in ("active", "paused", "done"):
-        raise HTTPException(status_code=422, detail="status muss active/paused/done sein")
-    patch: dict = {"status": req.status}
-    if req.status == "done":
-        from datetime import datetime, timezone
-        patch["finished_at"] = datetime.now(timezone.utc).isoformat()
+    patch: dict = {}
+    if req.status is not None:
+        if req.status not in ("active", "paused", "done"):
+            raise HTTPException(status_code=422, detail="status muss active/paused/done sein")
+        patch["status"] = req.status
+        if req.status == "done":
+            from datetime import datetime, timezone
+            patch["finished_at"] = datetime.now(timezone.utc).isoformat()
+    if req.name is not None and req.name.strip():
+        patch["name"] = req.name.strip()
     if req.notes is not None:
         patch["notes"] = req.notes
+    if not patch:
+        raise HTTPException(status_code=422, detail="nichts zu ändern")
     try:
         update("replay_sessions", {"id": f"eq.{session_id}"}, patch)
         rows = select_all("replay_sessions", {"select": "*", "id": f"eq.{session_id}"})
@@ -200,6 +207,17 @@ def patch_session(session_id: int, req: SessionPatch):
     if not rows:
         raise HTTPException(status_code=404, detail="Session nicht gefunden")
     return {"session": rows[0]}
+
+
+@replay_router.delete("/sessions/{session_id}")
+def delete_session(session_id: int):
+    """Session inkl. ihrer Bewertungen löschen (wie Backtest-Lab: Session = Container)."""
+    try:
+        delete("backtest_replay", {"session_id": f"eq.{session_id}"})
+        delete("replay_sessions", {"id": f"eq.{session_id}"})
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"ok": True}
 
 
 def _bucket() -> dict:

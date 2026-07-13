@@ -72,6 +72,18 @@ def insert(table: str, rows: list[dict] | dict, upsert_on: str | None = None) ->
         raise RuntimeError(f"{table} insert fehlgeschlagen ({r.status_code}): {r.text[:300]}")
 
 
+def delete(table: str, match: dict) -> None:
+    url, key = _config()
+    r = requests.delete(
+        f"{url}/rest/v1/{table}",
+        params=match,
+        headers=_headers(key, {"Prefer": "return=minimal"}),
+        timeout=60,
+    )
+    if r.status_code >= 300:
+        raise RuntimeError(f"{table} delete fehlgeschlagen ({r.status_code}): {r.text[:300]}")
+
+
 def update(table: str, match: dict, patch: dict) -> None:
     url, key = _config()
     r = requests.patch(
