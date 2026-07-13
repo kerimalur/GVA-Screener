@@ -19,6 +19,11 @@ jobs:
           cache: pip
           cache-dependency-path: Backend/requirements.txt
       - run: pip install -r requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: Backend/macro_features/cache
+          key: ml-data-cache-${{ github.run_id }}
+          restore-keys: ml-data-cache-
       - run: python -m ml_engine.run_experiments
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

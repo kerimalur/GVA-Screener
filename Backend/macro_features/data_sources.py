@@ -25,6 +25,23 @@ SOCRATA_TFF = "https://publicreporting.cftc.gov/resource/gpe5-46if.json"
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 
 _SOCRATA_PAGE = 5000
+_TIMEOUT_S = 90
+_RETRIES = 3
+
+
+def _get_with_retry(url: str, params: dict | None = None) -> requests.Response:
+    """GET mit Retry+Backoff — CFTC/FRED drosseln Cloud-IPs (GitHub-Runner)."""
+    last_exc: Exception | None = None
+    for attempt in range(_RETRIES):
+        try:
+            r = requests.get(url, params=params, timeout=_TIMEOUT_S)
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            last_exc = e
+            if attempt < _RETRIES - 1:
+                time.sleep(5 * (attempt + 1))
+    raise last_exc  # type: ignore[misc]
 
 
 def _cache_path(name: str):
@@ -44,7 +61,13 @@ def _cached(name: str, loader) -> pd.DataFrame:
     path = _cache_path(name)
     if _cache_fresh(path):
         return pd.read_csv(path, parse_dates=["date"])
-    df = loader()
+    try:
+        df = loader()
+    except Exception:
+        if path.exists():
+            # Fetch geplatzt (Timeout/Drosselung) → lieber alter Cache als Crash
+            return pd.read_csv(path, parse_dates=["date"])
+        raise
     if not df.empty:
         df.to_csv(path, index=False)
     elif path.exists():
@@ -65,8 +88,7 @@ def _socrata_fetch(url: str, code: str, fields: dict[str, str]) -> pd.DataFrame:
             "$limit": _SOCRATA_PAGE,
             "$offset": offset,
         }
-        r = requests.get(url, params=params, timeout=30)
-        r.raise_for_status()
+        r = _get_with_retry(url, params=params)
         batch = r.json()
         rows.extend(batch)
         if len(batch) < _SOCRATA_PAGE:
@@ -115,8 +137,7 @@ def fetch_fred(sid: str) -> pd.DataFrame:
     """FRED-Serie → DataFrame[date, value] (nur numerische Beobachtungen)."""
 
     def load() -> pd.DataFrame:
-        r = requests.get(FRED_CSV.format(sid=sid), timeout=30)
-        r.raise_for_status()
+        r = _get_with_retry(FRED_CSV.format(sid=sid))
         df = pd.read_csv(io.StringIO(r.text))
         df.columns = ["date", "value"]
         df["date"] = pd.to_datetime(df["date"])
