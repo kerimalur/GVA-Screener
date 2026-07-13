@@ -49,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { href: "/ml/training", label: "Training", icon: "ph-play-circle" },
-      { href: "/ml/labor", label: "Labor", icon: "ph-flask" },
+      { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
       { href: "/ml/replay", label: "Replay", icon: "ph-rewind" },
       { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
@@ -83,7 +83,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal/backtest": "Backtest-Lab",
   "/ml": "Machine Learning — Daten-Check",
   "/ml/training": "ML-Training — Modell & Predictions",
-  "/ml/labor": "ML-Labor — Faktor-Explorer",
+  "/ml/ranking": "Währungs-Ranking — ML-Engine",
   "/ml/replay": "Backtest-Replay — GVA-Hits bewerten",
   "/ml/modell": "ML-Modell — Anleitung",
   "/ml/season": "Saisonalität 2.0 — Feature-Explorer",

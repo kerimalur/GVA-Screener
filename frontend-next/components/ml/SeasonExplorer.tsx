@@ -34,7 +34,7 @@ const VIEW_MODES: { value: ViewMode; label: string }[] = [
   { value: "special", label: "Spezial-Fenster" },
 ];
 
-// ── Stat-Helfer (identisch zu LaborExplorer) ──
+// ── Stat-Helfer ──
 
 interface Stat {
   n: number;
