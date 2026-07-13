@@ -10,17 +10,11 @@ Live-Hit → Telegram-Alert. Dashboard zeigt alle Pairs farbig.
 - `../CONTEXT.md` — sessionübergreifender Handoff (was zuletzt gemacht wurde, was noch offen ist)
 - `../CLAUDE.md` — Kerims persönliche Infos, Projekte, Präferenzen
 
-## Aktueller Fokus (Stand 2026-07-11)
-Nächster grosser Schritt: **Fundamental-Bias-Modul** (siehe STATUS.md → "IN ARBEIT")
-
-Reihenfolge:
-1. `fundamentals.py` testen (FRED-Selftest, fehlende Serien-IDs fixen)
-2. COT Z-Score ergänzen
-3. Risk-Regime (OANDA)
-4. Öl-Trend (OANDA)
-5. Saisonalität
-6. Scoring + Background-Loop
-7. Frontend-Integration
+## Aktueller Fokus (Stand 2026-07-13)
+**ML-Engine** — kontinuierliche Experiment-Suche (GitHub Actions, nächtlich) +
+wöchentliches Währungs-Ranking als fundamentale Confluence. Gebaut und getestet;
+siehe STATUS.md → "ML-Engine" (inkl. offener manueller Schritte: GitHub-Secrets,
+erster Workflow-Dispatch). Spec: `docs/superpowers/specs/2026-07-13-ml-engine-design.md`
 
 ## Deployment
 - Backend: Render → https://gva-screener.onrender.com (`Backend/`, FastAPI)

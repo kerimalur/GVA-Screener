@@ -14,6 +14,37 @@ README mit Original-Pfaden drin). Eingeloggt = voller Zugriff; Scanner bleibt Ad
 
 Masterplan der laufenden Umbauten: `docs/refactor-prompt.md`.
 
+## ML-Engine — Experiment-Maschine + Währungs-Ranking (2026-07-13)
+Spec: `docs/superpowers/specs/2026-07-13-ml-engine-design.md`,
+Plan: `docs/superpowers/plans/2026-07-13-ml-engine.md`
+- **Backend/macro_features/panel.py**: vektorisiertes Wochen-Panel 25J × 8 Währungen
+  (11'320 Zeilen, 36 Spalten, ~1 s Aufbau), as-of-sauber — Leak-Tests beweisen
+  Gleichheit mit dem Punkt-Build an 3 Stichtagen. Korb-Targets 1/2/4W (demeaned).
+- **Backend/ml_engine/**: nächtliche Random-Search (GitHub Actions 02:00 UTC,
+  50 min Budget) mit Purged-Walk-Forward (5 Folds à 52W, Embargo=Horizont).
+  Holdout = letzte 104 Wochen, NUR promote.py fasst es an (jeder Zugriff in
+  ml_holdout_access protokolliert). Baseline #0 = Zins+Saison-Composite (beste
+  Labor-Kombi) — jedes ML muss sie schlagen. Synthetik-Tests: geplantete Edge
+  wird gefunden (AUC>0.62), Rauschen bleibt bei 0.5.
+- **Wochen-Job** (Sa 08:00 UTC): Champion+Baseline → ml_weekly_rankings
+  (insert-only, PK week_start+ccy+model), Paper-Track-Reifung automatisch.
+  Promotion manuell: `python -m ml_engine.promote --list|--evaluate ID|--promote ID`.
+- **Supabase**: ml_experiments, ml_champion, ml_weekly_rankings, ml_holdout_access
+  (Migration `ml_engine_tables` angewandt, RLS an ohne Policies).
+- **Frontend**: /ml/labor → Redirect auf /ml/ranking (neue Seite: Ranking-Tabelle
+  mit Q5-Badge, Paper-Track Champion vs. Baseline, Engine-Status inkl.
+  Holdout-Zähler). LaborExplorer/factorMatrix/api/ml/matrix entfernt —
+  Labor-Erkenntnisse leben als Baseline-Gewichte weiter.
+- **Tests**: 24 pytest grün (`Backend/tests/`), Build sauber.
+- **OFFEN (manuell durch Kerim)**:
+  1. GitHub-Repo-Secrets setzen: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+     (GitHub → Settings → Secrets and variables → Actions; gh CLI ist lokal
+     nicht installiert).
+  2. Danach einmal "ML Nightly Search" + "ML Weekly Ranking" manuell dispatchen
+     (Actions-Tab) → ml_experiments füllt sich, /ml/ranking zeigt erste Woche.
+  3. Nach ~4 Wochen Paper-Track: ersten Promotion-Kandidaten prüfen
+     (`--list`, dann bewusst `--evaluate`; Holdout-Zähler bleibt sonst 0).
+
 ## Architektur
 - **Backend (Render):** `Backend/`, FastAPI → https://gva-screener.onrender.com
   GVA-Kerzenmuster-Scanner für 28 FX-Pairs, Live-Preis-HIT-Check, Telegram-Alerts.
