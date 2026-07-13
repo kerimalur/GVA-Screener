@@ -12,7 +12,8 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ml.db import select_all, insert
+from ml.db import select_all, insert, update
+from .fundamentals import ranking_snapshot
 from .gva_history import find_hit, normalize_pair, reconstruct_hits
 from .trade_result import simulate_trade
 
@@ -29,8 +30,9 @@ def get_hits(
         hits = reconstruct_hits(pair, date_from, date_to)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    instrument = normalize_pair(pair)
     return {
-        "pair": normalize_pair(pair),
+        "pair": instrument,
         "from": date_from,
         "to": date_to,
         "count": len(hits),
@@ -41,6 +43,8 @@ def get_hits(
                 "direction": h["direction"],
                 "line_formed_date": h["line_formed_date"],
                 "fundamental_snapshot": h["fundamental_snapshot"],
+                # as-of-Ranking (Zins+Saison-Baseline, Q-Stufen) der Hit-Woche
+                "ranking_snapshot": ranking_snapshot(instrument, h["hit_date"]),
             }
             for h in hits
         ],
@@ -56,6 +60,7 @@ class EvaluateRequest(BaseModel):
     notes: str | None = None
     # optional: disambiguiert bei mehreren Hits gleicher Richtung am selben Tag
     hit_level: float | None = None
+    session_id: int | None = None
 
 
 @replay_router.post("/evaluate")
@@ -73,6 +78,7 @@ def evaluate(req: EvaluateRequest):
         raise HTTPException(status_code=404, detail="Hit nicht gefunden (Datum/Richtung prüfen)")
 
     snap = hit.get("fundamental_snapshot") or {}
+    ranking = ranking_snapshot(instrument, req.hit_date)
     row = {
         "instrument": instrument,
         "hit_date": req.hit_date,
@@ -82,6 +88,9 @@ def evaluate(req: EvaluateRequest):
         "fundamental_direction": snap.get("direction"),
         "fundamental_aligned_count": snap.get("aligned_count"),
         "fundamental_factors": snap.get("factors"),
+        "ranking_bias": ranking["bias"] if ranking else None,
+        "ranking_detail": ranking,
+        "session_id": req.session_id,
         "trade_taken": req.trade_taken,
         "skip_reason": req.skip_reason,
         "notes": req.notes,
@@ -120,6 +129,74 @@ def get_trades(pair: str | None = Query(default=None)):
     return {"count": len(rows), "trades": rows}
 
 
+# ── Sessions: anlegen, auflisten (mit Fortschritt), pausieren/abschliessen ──
+
+class SessionCreate(BaseModel):
+    pair: str
+    date_from: str
+    date_to: str
+    name: str | None = None
+
+
+class SessionPatch(BaseModel):
+    status: str  # 'active' | 'paused' | 'done'
+    notes: str | None = None
+
+
+@replay_router.post("/sessions")
+def create_session(req: SessionCreate):
+    instrument = normalize_pair(req.pair)
+    name = req.name or f"{instrument} {req.date_from} – {req.date_to}"
+    try:
+        insert("replay_sessions", {
+            "name": name, "pair": instrument,
+            "date_from": req.date_from, "date_to": req.date_to,
+        })
+        rows = select_all("replay_sessions", {
+            "select": "*", "order": "id.desc", "limit": 1,
+        })
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"session": rows[0]}
+
+
+@replay_router.get("/sessions")
+def list_sessions():
+    try:
+        sessions = select_all("replay_sessions", {"select": "*", "order": "id.desc"})
+        evaluated = select_all("backtest_replay", {
+            "select": "session_id", "session_id": "not.is.null",
+        })
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    counts: dict[int, int] = defaultdict(int)
+    for r in evaluated:
+        counts[r["session_id"]] += 1
+    for s in sessions:
+        s["evaluated_count"] = counts.get(s["id"], 0)
+    return {"sessions": sessions}
+
+
+@replay_router.patch("/sessions/{session_id}")
+def patch_session(session_id: int, req: SessionPatch):
+    if req.status not in ("active", "paused", "done"):
+        raise HTTPException(status_code=422, detail="status muss active/paused/done sein")
+    patch: dict = {"status": req.status}
+    if req.status == "done":
+        from datetime import datetime, timezone
+        patch["finished_at"] = datetime.now(timezone.utc).isoformat()
+    if req.notes is not None:
+        patch["notes"] = req.notes
+    try:
+        update("replay_sessions", {"id": f"eq.{session_id}"}, patch)
+        rows = select_all("replay_sessions", {"select": "*", "id": f"eq.{session_id}"})
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    if not rows:
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
+    return {"session": rows[0]}
+
+
 def _bucket() -> dict:
     return {"n": 0, "wins": 0, "losses": 0, "timeouts": 0, "sum_rr": 0.0,
             "win_pips": 0.0, "loss_pips": 0.0}
@@ -156,10 +233,20 @@ def _final(b: dict) -> dict:
     }
 
 
+def _ranking_bucket_key(t: dict) -> str:
+    """Rückenwind/Gegenwind: as-of-Ranking-Bias vs. Hit-Richtung."""
+    bias = t.get("ranking_bias")
+    if bias not in ("long", "short"):
+        return "neutral"
+    hit_long = t["hit_direction"] == "LONG"
+    return "Rückenwind" if (bias == "long") == hit_long else "Gegenwind"
+
+
 @replay_router.get("/stats")
 def get_stats(
     date_from: str | None = Query(default=None, alias="from"),
     date_to: str | None = Query(default=None, alias="to"),
+    session_id: int | None = Query(default=None),
 ):
     params = {"select": "*", "trade_taken": "eq.true", "order": "hit_date.asc"}
     date_filters = []
@@ -169,6 +256,8 @@ def get_stats(
         date_filters.append(f"lte.{date_to}")
     if date_filters:
         params["hit_date"] = date_filters
+    if session_id is not None:
+        params["session_id"] = f"eq.{session_id}"
     try:
         trades = select_all("backtest_replay", params)
     except RuntimeError as e:
@@ -181,12 +270,15 @@ def get_stats(
     by_direction: dict[str, dict] = defaultdict(_bucket)
     by_pair: dict[str, dict] = defaultdict(_bucket)
     by_confluence: dict[str, dict] = defaultdict(_bucket)
+    by_ranking: dict[str, dict] = defaultdict(_bucket)
     by_year: dict[str, dict] = defaultdict(_bucket)
 
     # Skip-Zählung separat (fließt NICHT in die Winrate)
     skip_params = {"select": "id", "trade_taken": "eq.false"}
     if date_filters:
         skip_params["hit_date"] = date_filters
+    if session_id is not None:
+        skip_params["session_id"] = f"eq.{session_id}"
     try:
         skips = select_all("backtest_replay", skip_params)
     except RuntimeError:
@@ -198,6 +290,7 @@ def get_stats(
         _add(by_pair[t["instrument"]], t)
         ac = t.get("fundamental_aligned_count")
         _add(by_confluence[str(ac) if ac is not None else "unbekannt"], t)
+        _add(by_ranking[_ranking_bucket_key(t)], t)
         _add(by_year[str(t["hit_date"])[:4]], t)
 
     return {
@@ -206,5 +299,6 @@ def get_stats(
         "by_direction": {k: _final(v) for k, v in sorted(by_direction.items())},
         "by_pair": {k: _final(v) for k, v in sorted(by_pair.items())},
         "by_confluence": {k: _final(v) for k, v in sorted(by_confluence.items())},
+        "by_ranking": {k: _final(v) for k, v in sorted(by_ranking.items())},
         "by_year": {k: _final(v) for k, v in sorted(by_year.items())},
     }

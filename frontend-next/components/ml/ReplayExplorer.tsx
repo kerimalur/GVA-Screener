@@ -30,12 +30,36 @@ interface Snapshot {
   source: string;
 }
 
+interface RankingSide {
+  ccy: string;
+  score: number;
+  quintile: number;
+}
+
+interface RankingSnapshot {
+  week_start: string;
+  base: RankingSide;
+  quote: RankingSide;
+  bias: "long" | "short" | "neutral";
+}
+
 interface Hit {
   hit_date: string;
   level: number;
   direction: "SHORT" | "LONG";
   line_formed_date: string;
   fundamental_snapshot: Snapshot | null;
+  ranking_snapshot: RankingSnapshot | null;
+}
+
+interface Session {
+  id: number;
+  name: string;
+  pair: string;
+  date_from: string;
+  date_to: string;
+  status: "active" | "paused" | "done";
+  evaluated_count: number;
 }
 
 interface Evaluation {
@@ -70,6 +94,7 @@ interface Stats {
   by_direction: Record<string, StatBucket>;
   by_pair: Record<string, StatBucket>;
   by_confluence: Record<string, StatBucket>;
+  by_ranking: Record<string, StatBucket>;
   by_year: Record<string, StatBucket>;
 }
 
@@ -101,25 +126,38 @@ export default function ReplayExplorer() {
   const [notes, setNotes] = useState("");
   const [skipReason, setSkipReason] = useState("");
 
-  const loadStats = useCallback(() => {
-    fetch(`${API}/replay/stats`)
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
+
+  const loadStats = useCallback((sessionId?: number | null) => {
+    const qs = sessionId != null ? `?session_id=${sessionId}` : "";
+    fetch(`${API}/replay/stats${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(setStats)
       .catch(() => {});
   }, []);
 
+  const loadSessions = useCallback(() => {
+    fetch(`${API}/replay/sessions`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j) => setSessions(j.sessions))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    loadSessions();
+  }, [loadStats, loadSessions]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (p?: string, from?: string, to?: string) => {
+    const usePair = p ?? pair, useFrom = from ?? dateFrom, useTo = to ?? dateTo;
     setLoading(true);
     setError(null);
     setHits(null);
     try {
       const [hitsRes, tradesRes] = await Promise.all([
-        fetch(`${API}/replay/hits?pair=${pair}&from=${dateFrom}&to=${dateTo}`),
-        fetch(`${API}/replay/trades?pair=${pair}`),
+        fetch(`${API}/replay/hits?pair=${usePair}&from=${useFrom}&to=${useTo}`),
+        fetch(`${API}/replay/trades?pair=${usePair}`),
       ]);
       if (!hitsRes.ok) throw new Error(`Hits HTTP ${hitsRes.status}`);
       const hitsJson = await hitsRes.json();
@@ -139,6 +177,59 @@ export default function ReplayExplorer() {
       setLoading(false);
     }
   }, [pair, dateFrom, dateTo]);
+
+  // ── Sessions: starten (aus aktueller Auswahl), fortsetzen, Status ändern ──
+  const startSession = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await fetch(`${API}/replay/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pair, date_from: dateFrom, date_to: dateTo }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const j = await res.json();
+      setSession({ ...j.session, evaluated_count: 0 });
+      loadSessions();
+      loadStats(j.session.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    }
+  }, [pair, dateFrom, dateTo, load, loadSessions, loadStats]);
+
+  const resumeSession = useCallback(
+    async (s: Session) => {
+      setSession(s);
+      setPair(s.pair);
+      setDateFrom(s.date_from);
+      setDateTo(s.date_to);
+      loadStats(s.id);
+      await load(s.pair, s.date_from, s.date_to);
+    },
+    [load, loadStats],
+  );
+
+  const patchSession = useCallback(
+    async (status: "paused" | "done" | "active") => {
+      if (!session) return;
+      try {
+        const res = await fetch(`${API}/replay/sessions/${session.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        setSession(status === "paused" ? null : { ...j.session, evaluated_count: session.evaluated_count });
+        if (status === "paused") loadStats(null);
+        loadSessions();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Fehler");
+      }
+    },
+    [session, loadSessions, loadStats],
+  );
 
   const hit = hits && hits.length > 0 ? hits[Math.min(idx, hits.length - 1)] : null;
   const currentEval = hit ? evals.get(evalKey(hit.hit_date, hit.direction)) ?? null : null;
@@ -179,6 +270,7 @@ export default function ReplayExplorer() {
             trade_taken: taken,
             skip_reason: taken ? null : skipReason || null,
             notes: notes || null,
+            session_id: session?.id ?? null,
           }),
         });
         if (!res.ok) {
@@ -191,14 +283,15 @@ export default function ReplayExplorer() {
           next.set(evalKey(hit.hit_date, hit.direction), json.evaluation);
           return next;
         });
-        loadStats();
+        loadStats(session?.id ?? null);
+        if (session) loadSessions();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Fehler");
       } finally {
         setSaving(false);
       }
     },
-    [hit, pair, notes, skipReason, loadStats],
+    [hit, pair, notes, skipReason, loadStats, session, loadSessions],
   );
 
   const evaluatedCount = useMemo(() => {
@@ -213,6 +306,59 @@ export default function ReplayExplorer() {
 
   return (
     <div className="space-y-6">
+      {/* ── Session ── */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-border bg-surface2 p-3">
+        <div className="text-[9px] uppercase tracking-widest text-faint">Session</div>
+        {session ? (
+          <>
+            <span className="text-[12px] font-mono font-bold">{session.name}</span>
+            <span className="text-[11px] font-mono text-muted">
+              {session.evaluated_count} bewertet · {session.status}
+            </span>
+            <button className={seg} onClick={() => patchSession("paused")}>
+              ⏸ Pausieren
+            </button>
+            <button className={seg} onClick={() => patchSession("done")}>
+              ✓ Abschliessen
+            </button>
+            {session.status === "done" && (
+              <span className="text-[11px] font-mono text-up">
+                Abgeschlossen — Auswertung unten (Statistik zeigt nur diese Session).
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <button className={seg} onClick={startSession}>
+              ▶ Neue Session (aktuelle Auswahl)
+            </button>
+            {sessions.filter((s) => s.status !== "done").map((s) => (
+              <button key={s.id} className={seg} onClick={() => resumeSession(s)} title={`${s.evaluated_count} bewertet`}>
+                ⏵ {s.name} ({s.status === "paused" ? "pausiert" : "aktiv"})
+              </button>
+            ))}
+            {sessions.filter((s) => s.status === "done").slice(0, 3).map((s) => (
+              <button
+                key={s.id}
+                className={`${seg} opacity-60`}
+                onClick={() => {
+                  setSession(s);
+                  loadStats(s.id);
+                }}
+                title="Nur Auswertung laden"
+              >
+                ✓ {s.name}
+              </button>
+            ))}
+            {sessions.length === 0 && (
+              <span className="text-[11px] text-faint font-mono">
+                Ohne Session wird trotzdem gespeichert — Sessions bündeln Durchgänge für die Auswertung.
+              </span>
+            )}
+          </>
+        )}
+      </div>
+
       {/* ── Auswahl ── */}
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3 rounded border border-border bg-surface2 p-3">
         <div>
@@ -248,7 +394,7 @@ export default function ReplayExplorer() {
           />
         </div>
         <button
-          onClick={load}
+          onClick={() => load()}
           disabled={loading}
           className="px-3 py-1.5 rounded text-[12px] font-mono font-bold border border-accent text-accent bg-accent/10 hover:bg-accent/20 disabled:opacity-50 transition-colors"
         >
@@ -414,6 +560,54 @@ export default function ReplayExplorer() {
                   Kein Snapshot für diese Woche (außerhalb der 416-Wochen-Historie).
                 </p>
               )}
+
+              {/* ── Währungs-Ranking as-of (Zins+Saison-Baseline, wie /ml/ranking) ── */}
+              <div className="border-t border-border/60 pt-2 mt-2 space-y-1.5">
+                <div className="text-[10px] uppercase tracking-widest text-faint">
+                  Währungs-Ranking damals{hit.ranking_snapshot ? ` (Woche ${hit.ranking_snapshot.week_start})` : ""}
+                </div>
+                {hit.ranking_snapshot ? (
+                  <>
+                    {[hit.ranking_snapshot.base, hit.ranking_snapshot.quote].map((s) => (
+                      <div key={s.ccy} className="text-[11px] font-mono flex items-center gap-2">
+                        <b className="w-9">{s.ccy}</b>
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            s.quintile === 5
+                              ? "bg-up/15 text-up"
+                              : s.quintile === 1
+                                ? "bg-down/15 text-down"
+                                : "bg-border/40 text-muted"
+                          }`}
+                        >
+                          Q{s.quintile}
+                        </span>
+                        <span className={s.score >= 0 ? "text-up" : "text-down"}>
+                          {s.score >= 0 ? "+" : ""}
+                          {s.score.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                    <div
+                      className={`text-[11px] font-mono ${
+                        hit.ranking_snapshot.bias === "neutral"
+                          ? "text-muted"
+                          : (hit.ranking_snapshot.bias === "long") === (hit.direction === "LONG")
+                            ? "text-up"
+                            : "text-down"
+                      }`}
+                    >
+                      {hit.ranking_snapshot.bias === "neutral"
+                        ? "→ Ranking neutral (kein Q5/Q1-Extrem)"
+                        : (hit.ranking_snapshot.bias === "long") === (hit.direction === "LONG")
+                          ? `→ RÜCKENWIND für ${hit.direction}`
+                          : `→ GEGENWIND (Ranking sagt ${hit.ranking_snapshot.bias.toUpperCase()})`}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-muted text-[11px]">Kein Ranking verfügbar (Datenlücke).</p>
+                )}
+              </div>
             </div>
 
             {/* ── Bewertung ── */}
@@ -491,7 +685,7 @@ export default function ReplayExplorer() {
       {stats && stats.total.trades > 0 && (
         <div className="border-t border-border pt-4 space-y-4">
           <div className="text-[11px] text-muted font-mono uppercase tracking-wider">
-            Statistik — alle bewerteten Trades (Skips: {stats.skips}, zählen nicht)
+            Statistik — {session ? `Session «${session.name}»` : "alle bewerteten Trades"} (Skips: {stats.skips}, zählen nicht)
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatTile label="Winrate" value={stats.total.winrate != null ? `${stats.total.winrate.toFixed(1)}%` : "–"} cls={stats.total.winrate != null && stats.total.winrate >= 50 ? "text-up" : "text-down"} />
@@ -499,7 +693,8 @@ export default function ReplayExplorer() {
             <StatTile label="Ø R:R" value={stats.total.avg_rr != null ? stats.total.avg_rr.toFixed(2) : "–"} cls={(stats.total.avg_rr ?? 0) > 0 ? "text-up" : "text-down"} />
             <StatTile label="Profit Factor" value={stats.total.profit_factor != null ? stats.total.profit_factor.toFixed(2) : "–"} cls={(stats.total.profit_factor ?? 0) >= 1 ? "text-up" : "text-down"} />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+            <BreakdownTable title="Nach Ranking (A/B)" data={stats.by_ranking ?? {}} keyLabel="Ranking" />
             <BreakdownTable title="Nach Confluence" data={stats.by_confluence} keyLabel="Faktoren" />
             <BreakdownTable title="Nach Richtung" data={stats.by_direction} keyLabel="Richtung" />
             <BreakdownTable title="Nach Pair" data={stats.by_pair} keyLabel="Pair" />
