@@ -34,6 +34,8 @@ function SessionWizard({
   onClose: () => void;
 }) {
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [withFundamentals, setWithFundamentals] = useState<boolean | null>(null);
   const [form, setForm] = useState({
     name: "",
     pair: "EURUSD",
@@ -48,9 +50,21 @@ function SessionWizard({
     loadStrategies().then(setStrategies).catch(() => {});
   }, []);
 
-  const submit = () => {
+  const next = () => {
     if (!form.name.trim()) {
       toast.error("Name fehlt");
+      return;
+    }
+    setStep(2);
+  };
+
+  const submit = () => {
+    if (withFundamentals === null) {
+      toast.error("Mit oder ohne fundamentale Daten wählen");
+      return;
+    }
+    if (withFundamentals && !form.startDate) {
+      toast.error("Startdatum wird für die fundamentalen Wochen benötigt");
       return;
     }
     const strategy = strategies.find((s) => s.id === form.strategyId);
@@ -70,9 +84,68 @@ function SessionWizard({
       riskPercent: form.riskPercent || undefined,
       accountSize: form.accountSize || undefined,
       startDate: form.startDate || undefined,
+      withFundamentals,
     });
     onClose();
   };
+
+  if (step === 2) {
+    return (
+      <Modal
+        open
+        onClose={onClose}
+        title="Fundamentale Daten?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
+              Zurück
+            </Button>
+            <Button size="sm" icon="ph-play" onClick={submit} disabled={withFundamentals === null}>
+              Session starten
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-[12px] text-muted">
+            Mit Fundamentals werden beim Start alle Wochen-Rankings (Zins+Saison, Q-Stufen)
+            zwischen Startdatum und heute geladen — pro Trade siehst du sofort, ob die
+            fundamentale Lage die Richtung stützt.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { val: true, icon: "ph-ranking", title: "Mit fundamentalen Daten", desc: "Wochen-Rankings vorab geladen, Ja/Nein je Trade" },
+              { val: false, icon: "ph-prohibit", title: "Ohne", desc: "Reiner Technik-Backtest wie bisher" },
+            ] as const).map((opt) => (
+              <button
+                key={String(opt.val)}
+                onClick={() => setWithFundamentals(opt.val)}
+                className={`rounded-md border p-4 text-left transition-colors ${
+                  withFundamentals === opt.val
+                    ? "border-accent bg-accent/10"
+                    : "border-border2 bg-bg hover:border-accent/50"
+                }`}
+              >
+                <i className={`ph-bold ${opt.icon} text-lg ${withFundamentals === opt.val ? "text-accent" : "text-muted"}`} />
+                <div className="text-[13px] font-semibold mt-1">{opt.title}</div>
+                <div className="text-[11px] text-muted mt-0.5">{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+          {withFundamentals && !form.startDate && (
+            <Field label="Startdatum" hint="Pflicht bei Fundamentals">
+              <Input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+              />
+            </Field>
+          )}
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -85,8 +158,8 @@ function SessionWizard({
           <Button variant="ghost" size="sm" onClick={onClose}>
             Abbrechen
           </Button>
-          <Button size="sm" icon="ph-play" onClick={submit}>
-            Session starten
+          <Button size="sm" icon="ph-arrow-right" onClick={next}>
+            Weiter
           </Button>
         </>
       }

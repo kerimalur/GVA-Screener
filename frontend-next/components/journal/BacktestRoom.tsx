@@ -10,13 +10,23 @@ import { loadPref, savePref } from "@/lib/journal/prefs";
 import {
   computeStats,
   downscaleImage,
+  loadWeekRankings,
+  mondayOf,
+  toTradeFundamental,
   type BacktestSession,
   type BacktestTrade,
+  type WeekRanking,
 } from "@/lib/journal/backtests";
 
 function today(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function shiftDate(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 interface Props {
@@ -49,6 +59,22 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
   const [newProblem, setNewProblem] = useState("");
   const [noteSnippets, setNoteSnippets] = useState<string[]>(() => getNoteSnippets());
   const [elapsed, setElapsed] = useState("00:00");
+
+  // Skip-Erfassung: Setup gesehen, bewusst nicht genommen
+  const [skipMode, setSkipMode] = useState(false);
+  const [skipReason, setSkipReason] = useState("Kein BOS");
+
+  // Fundamentale Wochen-Rankings (einmal vorab geladen, dann nur Lookups)
+  const [rankings, setRankings] = useState<Map<string, WeekRanking> | null>(null);
+  const [rankingsLoading, setRankingsLoading] = useState(false);
+  useEffect(() => {
+    if (!session.withFundamentals || !session.pair || !session.startDate) return;
+    setRankingsLoading(true);
+    loadWeekRankings(session.pair, session.startDate, today())
+      .then(setRankings)
+      .catch(() => toast.error("Fundamentale Wochen konnten nicht geladen werden"))
+      .finally(() => setRankingsLoading(false));
+  }, [session.withFundamentals, session.pair, session.startDate]);
 
   // Wiederverwendbare Listen aus dem Backend hydrieren
   useEffect(() => {
@@ -91,22 +117,35 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
     setFormData((prev) => ({ ...prev, result, rMultiple: defaultR }));
   };
 
+  // Fundamental-Lage der aktuell gewählten Woche (null solange nicht geladen)
+  const weekRanking = rankings?.get(mondayOf(formData.date)) ?? null;
+
   const handleSubmit = useCallback(() => {
     if (completed) return;
+    const fundamental =
+      session.withFundamentals && weekRanking
+        ? toTradeFundamental(weekRanking, formData.direction)
+        : session.withFundamentals
+          ? null
+          : undefined;
     onAddTrade({
       id: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       pair: formData.pair,
       direction: formData.direction,
-      result: formData.result,
-      rMultiple: formData.rMultiple,
+      result: skipMode ? "breakeven" : formData.result,
+      rMultiple: skipMode ? 0 : formData.rMultiple,
       date: formData.date,
       setups: formData.setups,
       problems: formData.problems,
       timestamp: Date.now(),
       screenshot: formData.screenshot || undefined,
       notes: formData.notes || undefined,
+      taken: !skipMode,
+      skipReason: skipMode ? skipReason : undefined,
+      fundamental,
     });
     // Reset — Datum/Pair/Setups bleiben stehen
+    setSkipMode(false);
     setFormData((prev) => ({
       ...prev,
       rMultiple: prev.result === "win" ? session.defaultRR || 1 : prev.result === "loss" ? -1 : 0,
@@ -114,7 +153,7 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
       screenshot: "",
       notes: "",
     }));
-  }, [completed, formData, onAddTrade, session.defaultRR]);
+  }, [completed, formData, onAddTrade, session.defaultRR, session.withFundamentals, weekRanking, skipMode, skipReason]);
 
   // Tastaturkürzel: L/S Richtung, W/X/B Ergebnis, 1–9 R, +/− Feinjustage, Enter speichert
   useEffect(() => {
@@ -258,6 +297,61 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
           )}
         </div>
 
+        {/* Fundamentale Lage der gewählten Woche */}
+        {session.withFundamentals && (
+          <div className="mb-4 rounded-md border border-border bg-surface p-3.5">
+            <div className="text-[10px] uppercase tracking-widest text-faint mb-2">
+              Fundamentale Lage — Woche {mondayOf(formData.date)}
+            </div>
+            {rankingsLoading ? (
+              <p className="text-[12px] text-muted font-mono animate-pulse">
+                Lade alle Wochen-Rankings seit {session.startDate} … (einmalig)
+              </p>
+            ) : weekRanking ? (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                {[weekRanking.base, weekRanking.quote].map((s, i) => (
+                  <div key={s.ccy} className="flex items-center gap-2 text-[13px] font-mono">
+                    <b>{s.ccy}</b>
+                    <span
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        s.quintile === 5
+                          ? "bg-up/15 text-up"
+                          : s.quintile === 1
+                            ? "bg-down/15 text-down"
+                            : "bg-border/40 text-muted"
+                      }`}
+                    >
+                      Q{s.quintile}
+                    </span>
+                    <span className={s.score >= 0 ? "text-up" : "text-down"}>
+                      {s.score >= 0 ? "+" : ""}
+                      {s.score.toFixed(2)}
+                    </span>
+                    {i === 0 && <span className="text-faint">vs.</span>}
+                  </div>
+                ))}
+                <div
+                  className={`ml-auto px-3 py-1.5 rounded-md text-[13px] font-black font-mono border ${
+                    weekRanking.bias === "neutral"
+                      ? "border-border2 text-muted"
+                      : (weekRanking.bias === formData.direction)
+                        ? "border-up/50 bg-up/15 text-up"
+                        : "border-down/50 bg-down/15 text-down"
+                  }`}
+                >
+                  {weekRanking.bias === "neutral"
+                    ? "NEUTRAL — kein Q5/Q1-Extrem"
+                    : weekRanking.bias === formData.direction
+                      ? `JA — Rückenwind für ${formData.direction.toUpperCase()}`
+                      : `NEIN — Ranking sagt ${weekRanking.bias.toUpperCase()}`}
+                </div>
+              </div>
+            ) : (
+              <p className="text-[12px] text-muted">Keine Fundamental-Daten für diese Woche.</p>
+            )}
+          </div>
+        )}
+
         {/* Erfassungs-Formular */}
         <div className="bg-surface border border-border rounded-md p-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -273,12 +367,35 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
                 ))}
               </Select>
             </Field>
-            <Field label="Datum">
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData((p) => ({ ...p, date: e.target.value }))}
-              />
+            <Field label="Datum" hint="◀ ▶ Tag · ▶▶ Woche">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, -1) }))}
+                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
+                  title="1 Tag zurück"
+                >
+                  <i className="ph-bold ph-caret-left" />
+                </button>
+                <Input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData((p) => ({ ...p, date: e.target.value }))}
+                />
+                <button
+                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, 1) }))}
+                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
+                  title="1 Tag vor"
+                >
+                  <i className="ph-bold ph-caret-right" />
+                </button>
+                <button
+                  onClick={() => setFormData((p) => ({ ...p, date: shiftDate(p.date, 7) }))}
+                  className="px-1.5 py-1.5 rounded border border-border2 text-muted hover:text-text transition-colors"
+                  title="1 Woche vor"
+                >
+                  <i className="ph-bold ph-caret-double-right" />
+                </button>
+              </div>
             </Field>
             <div>
               <Label hint="L / S">Richtung</Label>
@@ -464,9 +581,42 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
             </div>
           </div>
 
-          <div className="flex justify-end pt-2 border-t border-border">
-            <Button icon="ph-plus" onClick={handleSubmit} disabled={completed}>
-              Trade speichern (Enter)
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border">
+            <button
+              onClick={() => setSkipMode((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-md text-[12px] font-semibold border transition-colors ${
+                skipMode
+                  ? "bg-warn/15 text-warn border-warn/50"
+                  : "bg-bg text-muted border-border2 hover:text-text"
+              }`}
+            >
+              {skipMode ? "✗ Skip — nicht genommen" : "Als Skip erfassen"}
+            </button>
+            {skipMode && (
+              <div className="flex items-center gap-1.5">
+                {["Fundamental dagegen", "Kein BOS"].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setSkipReason(r)}
+                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${
+                      skipReason === r
+                        ? "bg-down/15 text-down border-down/50"
+                        : "bg-bg text-muted border-border2 hover:text-text"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+                <Input
+                  className="!w-40 !py-1 text-[11px]"
+                  value={skipReason === "Fundamental dagegen" || skipReason === "Kein BOS" ? "" : skipReason}
+                  onChange={(e) => setSkipReason(e.target.value || "Kein BOS")}
+                  placeholder="anderer Grund…"
+                />
+              </div>
+            )}
+            <Button className="ml-auto" icon={skipMode ? "ph-prohibit" : "ph-plus"} onClick={handleSubmit} disabled={completed}>
+              {skipMode ? "Skip speichern (Enter)" : "Trade speichern (Enter)"}
             </Button>
           </div>
         </div>
@@ -487,14 +637,33 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
                   <span className={t.direction === "long" ? "text-up" : "text-down"}>
                     {t.direction === "long" ? "▲" : "▼"}
                   </span>
-                  <span
-                    className={`ml-auto font-semibold ${
-                      t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
-                    }`}
-                  >
-                    {t.rMultiple > 0 ? "+" : ""}
-                    {t.rMultiple.toFixed(1)} R
-                  </span>
+                  {t.fundamental !== undefined && t.fundamental !== null && (
+                    <span
+                      className={`text-[10px] font-bold ${
+                        t.fundamental.aligned == null
+                          ? "text-faint"
+                          : t.fundamental.aligned
+                            ? "text-up"
+                            : "text-down"
+                      }`}
+                    >
+                      {t.fundamental.aligned == null ? "F:–" : t.fundamental.aligned ? "F:JA" : "F:NEIN"}
+                    </span>
+                  )}
+                  {t.taken === false ? (
+                    <span className="ml-auto font-semibold text-warn">
+                      SKIP{t.skipReason ? ` · ${t.skipReason}` : ""}
+                    </span>
+                  ) : (
+                    <span
+                      className={`ml-auto font-semibold ${
+                        t.rMultiple > 0 ? "text-up" : t.rMultiple < 0 ? "text-down" : "text-muted"
+                      }`}
+                    >
+                      {t.rMultiple > 0 ? "+" : ""}
+                      {t.rMultiple.toFixed(1)} R
+                    </span>
+                  )}
                 </div>
               ))}
           </div>

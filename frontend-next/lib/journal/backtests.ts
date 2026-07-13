@@ -12,6 +12,20 @@ import { SETUP_DEFINITIONS } from "./types";
 // Typen
 // ============================================================
 
+/** As-of-Fundamental-Lage der Trade-Woche (aus /replay/rankings, ML-Engine-Baseline). */
+export interface TradeFundamental {
+  weekStart: string;
+  baseCcy: string;
+  baseScore: number;
+  baseQ: number;
+  quoteCcy: string;
+  quoteScore: number;
+  quoteQ: number;
+  bias: "long" | "short" | "neutral";
+  /** true = Bias stimmt mit Trade-Richtung überein ("fundamental Ja") */
+  aligned: boolean | null;
+}
+
 export interface BacktestTrade {
   id: string;
   pair: string;
@@ -24,6 +38,10 @@ export interface BacktestTrade {
   timestamp: number;
   screenshot?: string;
   notes?: string;
+  /** false = Setup gesehen, aber bewusst nicht genommen (Skip) */
+  taken?: boolean;
+  skipReason?: string; // z.B. "Fundamental dagegen", "Kein BOS"
+  fundamental?: TradeFundamental | null;
 }
 
 export interface BacktestSession {
@@ -42,6 +60,8 @@ export interface BacktestSession {
   riskPercent?: number;
   accountSize?: number;
   startDate?: string;
+  /** Session mit fundamentaler Confluence (Wochen-Rankings vorab geladen) */
+  withFundamentals?: boolean;
 }
 
 export interface BacktestStats {
@@ -107,6 +127,7 @@ function rowToSession(r: any): BacktestSession {
     riskPercent: config.riskPercent,
     accountSize: config.accountSize,
     startDate: config.startDate,
+    withFundamentals: config.withFundamentals,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -129,6 +150,7 @@ function sessionToRow(s: BacktestSession, userId: string) {
         riskPercent: s.riskPercent,
         accountSize: s.accountSize,
         startDate: s.startDate,
+        withFundamentals: s.withFundamentals,
       },
     },
     created_at: new Date(s.createdAt || Date.now()).toISOString(),
@@ -195,11 +217,17 @@ export function computeEurRisk(accountSize?: number, riskPercent?: number): numb
   return a > 0 && r > 0 ? (a * r) / 100 : 0;
 }
 
+/** Nur tatsächlich genommene Trades (Skips zählen nie in Performance-Zahlen). */
+export function takenOnly(trades: BacktestTrade[]): BacktestTrade[] {
+  return trades.filter((t) => t.taken !== false);
+}
+
 export function computeStats(
-  trades: BacktestTrade[],
+  allTrades: BacktestTrade[],
   accountSize?: number,
   riskPercent?: number,
 ): BacktestStats {
+  const trades = takenOnly(allTrades);
   const acctSize = accountSize || 0;
   const eurRisk = computeEurRisk(accountSize, riskPercent);
   const base = { hasEur: eurRisk > 0, eurRisk, totalEur: 0, accountEnd: acctSize, growthPct: 0 };
@@ -238,11 +266,12 @@ export interface EquityPoint {
  * Trade-Datum gemessen (Backtests liegen historisch); Filter zoomt nur.
  */
 export function buildEquityByDate(
-  trades: BacktestTrade[],
+  allTrades: BacktestTrade[],
   period: EquityPeriod,
   accountSize?: number,
   riskPercent?: number,
 ): EquityPoint[] {
+  const trades = takenOnly(allTrades);
   if (trades.length === 0) return [];
   const eurRisk = computeEurRisk(accountSize, riskPercent);
   const hasEur = eurRisk > 0;
@@ -287,7 +316,8 @@ export interface CategoryStat {
 }
 
 /** Performance je Setup — Trade mit mehreren Setups zählt bei jedem. */
-export function computeSetupStats(trades: BacktestTrade[]): CategoryStat[] {
+export function computeSetupStats(allTrades: BacktestTrade[]): CategoryStat[] {
+  const trades = takenOnly(allTrades);
   const agg: Record<string, { n: number; wins: number; losses: number; totalR: number }> = {};
   for (const t of trades) {
     for (const key of t.setups.length ? t.setups : ["(ohne Setup)"]) {
@@ -317,7 +347,8 @@ export function computeSetupStats(trades: BacktestTrade[]): CategoryStat[] {
 }
 
 /** Performance je Problem-Tag — SCHLECHTESTE zuerst (Leaks finden). */
-export function computeProblemStats(trades: BacktestTrade[]): CategoryStat[] {
+export function computeProblemStats(allTrades: BacktestTrade[]): CategoryStat[] {
+  const trades = takenOnly(allTrades);
   const agg: Record<string, { n: number; wins: number; losses: number; totalR: number }> = {};
   for (const t of trades) {
     for (const key of t.problems) {
@@ -367,4 +398,102 @@ export function filterTrades(trades: BacktestTrade[], f: TradeFilter): BacktestT
     }
     return true;
   });
+}
+
+// ============================================================
+// Fundamentale Confluence (as-of Wochen-Rankings der ML-Engine)
+// ============================================================
+
+const GVA_API = (process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com").replace(/\/+$/, "");
+
+export interface WeekRanking {
+  week_start: string;
+  base: { ccy: string; score: number; quintile: number };
+  quote: { ccy: string; score: number; quintile: number };
+  bias: "long" | "short" | "neutral";
+}
+
+/** Alle Wochen-Rankings eines Pairs im Zeitraum vorab laden (ein Request). */
+export async function loadWeekRankings(
+  pair: string,
+  from: string,
+  to: string,
+): Promise<Map<string, WeekRanking>> {
+  const res = await fetch(`${GVA_API}/replay/rankings?pair=${pair}&from=${from}&to=${to}`);
+  if (!res.ok) throw new Error(`Rankings HTTP ${res.status}`);
+  const json = await res.json();
+  const map = new Map<string, WeekRanking>();
+  for (const r of json.rankings as WeekRanking[]) map.set(r.week_start, r);
+  return map;
+}
+
+/** Montag (ISO) der Woche eines Datums — Schlüssel in der Rankings-Map. */
+export function mondayOf(dateIso: string): string {
+  const d = new Date(dateIso + "T00:00:00");
+  const day = d.getDay(); // 0 = So
+  d.setDate(d.getDate() - ((day + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+export function toTradeFundamental(
+  r: WeekRanking,
+  direction: "long" | "short",
+): TradeFundamental {
+  return {
+    weekStart: r.week_start,
+    baseCcy: r.base.ccy,
+    baseScore: r.base.score,
+    baseQ: r.base.quintile,
+    quoteCcy: r.quote.ccy,
+    quoteScore: r.quote.score,
+    quoteQ: r.quote.quintile,
+    bias: r.bias,
+    aligned: r.bias === "neutral" ? null : r.bias === direction,
+  };
+}
+
+/** Auswertung: Performance mit vs. gegen vs. ohne fundamentalen Rückenwind. */
+export function computeFundamentalStats(allTrades: BacktestTrade[]): CategoryStat[] {
+  const trades = takenOnly(allTrades).filter((t) => t.fundamental !== undefined);
+  const agg: Record<string, { n: number; wins: number; losses: number; totalR: number }> = {};
+  for (const t of trades) {
+    const key =
+      t.fundamental == null || t.fundamental.aligned == null
+        ? "Neutral"
+        : t.fundamental.aligned
+          ? "Rückenwind (Ja)"
+          : "Gegenwind (Nein)";
+    if (!agg[key]) agg[key] = { n: 0, wins: 0, losses: 0, totalR: 0 };
+    agg[key].n++;
+    agg[key].totalR += t.rMultiple;
+    if (t.result === "win") agg[key].wins++;
+    else if (t.result === "loss") agg[key].losses++;
+  }
+  return Object.entries(agg)
+    .map(([key, v]) => {
+      const decided = v.wins + v.losses;
+      return {
+        key,
+        label: key,
+        n: v.n,
+        winRate: decided > 0 ? (v.wins / decided) * 100 : 0,
+        totalR: v.totalR,
+        expectancy: v.n > 0 ? v.totalR / v.n : 0,
+        reliable: v.n >= MIN_SAMPLE,
+      };
+    })
+    .sort((a, b) => b.expectancy - a.expectancy);
+}
+
+/** Skips nach Grund (zählen nicht in die Winrate, aber in die Disziplin-Auswertung). */
+export function computeSkipCounts(allTrades: BacktestTrade[]): { reason: string; n: number }[] {
+  const counts: Record<string, number> = {};
+  for (const t of allTrades) {
+    if (t.taken !== false) continue;
+    const key = t.skipReason || "(ohne Grund)";
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([reason, n]) => ({ reason, n }))
+    .sort((a, b) => b.n - a.n);
 }

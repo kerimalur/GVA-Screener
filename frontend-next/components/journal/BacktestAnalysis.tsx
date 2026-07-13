@@ -23,6 +23,8 @@ import {
   buildEquityByDate,
   computeSetupStats,
   computeProblemStats,
+  computeFundamentalStats,
+  computeSkipCounts,
   filterTrades,
   isFilterActive,
   EMPTY_FILTER,
@@ -125,6 +127,8 @@ export default function BacktestAnalysis({ session, onContinue, onBack, onDelete
   );
   const setupStats = useMemo(() => computeSetupStats(filtered), [filtered]);
   const problemStats = useMemo(() => computeProblemStats(filtered), [filtered]);
+  const fundamentalStats = useMemo(() => computeFundamentalStats(filtered), [filtered]);
+  const skipCounts = useMemo(() => computeSkipCounts(filtered), [filtered]);
   const problemOptions = getProblems();
 
   return (
@@ -295,6 +299,39 @@ export default function BacktestAnalysis({ session, onContinue, onBack, onDelete
           emptyHint="Keine Problem-Tags vergeben — gut so."
         />
       </div>
+
+      {/* Fundamentale Confluence: A/B-Auswertung + Skip-Disziplin */}
+      {(fundamentalStats.length > 0 || skipCounts.length > 0) && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <PerformanceTable
+            title="Fundamental: mit vs. gegen Rückenwind"
+            rows={fundamentalStats}
+            emptyHint="Keine Trades mit Fundamental-Daten (Session ohne Fundamentals?)."
+          />
+          <Panel title="Skips — nicht genommene Setups" subtitle="zählen nicht in die Winrate">
+            {skipCounts.length === 0 ? (
+              <p className="text-[12px] text-muted py-2">Keine Skips erfasst.</p>
+            ) : (
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-widest text-faint border-b border-border">
+                    <th className="py-1.5 font-semibold">Grund</th>
+                    <th className="py-1.5 font-semibold text-right">n</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skipCounts.map((s) => (
+                    <tr key={s.reason} className="border-b border-border/50 last:border-0">
+                      <td className="py-1.5">{s.reason}</td>
+                      <td className="py-1.5 text-right font-mono text-muted">{s.n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+        </div>
+      )}
 
       {/* Trade-Liste */}
       <Panel title={`Trades (${filtered.length})`}>

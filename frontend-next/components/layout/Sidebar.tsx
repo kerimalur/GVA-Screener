@@ -19,6 +19,13 @@ export default function Sidebar() {
   const [signingOut, setSigningOut] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
+  // Aktiv ist nur der LÄNGSTE passende Nav-Eintrag — sonst leuchtet z.B.
+  // "/ml" (Daten-Check) bei jeder /ml/*-Unterseite mit.
+  const activeHref =
+    NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href))
+      .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+      .sort((a, b) => b.length - a.length)[0] ?? null;
+
   // Gemerkten Auf/Zu-Zustand laden (nur für collapsible-Gruppen relevant)
   useEffect(() => {
     try {
@@ -102,9 +109,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto flex flex-col px-3.5">
         {NAV_GROUPS.map((group, gi) => {
-          const hasActiveItem = group.items.some(
-            (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
-          );
+          const hasActiveItem = group.items.some((item) => item.href === activeHref);
           // Aktive Route in zugeklappter Gruppe → trotzdem aufklappen
           const isOpen = !group.collapsible || openGroups[group.title] === true || hasActiveItem;
           const groupHead =
@@ -128,7 +133,7 @@ export default function Sidebar() {
               )}
               <div className={`${isOpen ? "flex" : "hidden"} flex-col gap-px`}>
                 {group.items.map((item) => {
-                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  const active = item.href === activeHref;
                   const locked = item.requiresAdmin && !isAdmin;
 
                   if (locked) {

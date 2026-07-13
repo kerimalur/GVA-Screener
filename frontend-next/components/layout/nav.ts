@@ -50,16 +50,20 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/journal/equity", label: "Equity", icon: "ph-chart-line-up" },
       { href: "/journal/outlook", label: "Outlook", icon: "ph-crosshair" },
       { href: "/journal/kalender", label: "Trade-Kalender", icon: "ph-calendar-heart" },
-      { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
-      { href: "/journal/backtest", label: "Backtest", icon: "ph-flask" },
+    ],
+  },
+  {
+    title: "Backtest",
+    collapsible: true,
+    items: [
+      { href: "/journal/backtest", label: "Backtest-Lab", icon: "ph-flask" },
+      { href: "/ml/replay", label: "Replay (GVA-Hits)", icon: "ph-rewind" },
     ],
   },
   {
     title: "Machine Learning",
     collapsible: true,
     items: [
-      { href: "/ml/training", label: "Training", icon: "ph-play-circle" },
-      { href: "/ml/replay", label: "Replay", icon: "ph-rewind" },
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
     ],
@@ -67,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "System",
     items: [
+      { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
       { href: "/einstellungen", label: "Einstellungen", icon: "ph-gear" },
       { href: "/leitfaden", label: "Leitfaden", icon: "ph-book-open" },
     ],

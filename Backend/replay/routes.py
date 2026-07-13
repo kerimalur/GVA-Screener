@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ml.db import select_all, insert, update
-from .fundamentals import ranking_snapshot
+from .fundamentals import ranking_series, ranking_snapshot
 from .gva_history import find_hit, normalize_pair, reconstruct_hits
 from .trade_result import simulate_trade
 
@@ -127,6 +127,19 @@ def get_trades(pair: str | None = Query(default=None)):
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     return {"count": len(rows), "trades": rows}
+
+
+@replay_router.get("/rankings")
+def get_rankings(
+    pair: str = Query(...),
+    date_from: str = Query(..., alias="from"),
+    date_to: str = Query(..., alias="to"),
+):
+    """Wochen-Rankings (as-of Baseline + Q-Stufen) eines Pairs im Zeitraum."""
+    instrument = normalize_pair(pair)
+    rankings = ranking_series(instrument, date_from, date_to)
+    return {"pair": instrument, "from": date_from, "to": date_to,
+            "count": len(rankings), "rankings": rankings}
 
 
 # ── Sessions: anlegen, auflisten (mit Fortschritt), pausieren/abschliessen ──
