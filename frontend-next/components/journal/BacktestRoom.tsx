@@ -32,13 +32,14 @@ function shiftDate(iso: string, days: number): string {
 interface Props {
   session: BacktestSession;
   onAddTrade: (trade: BacktestTrade) => void;
+  onDeleteTrade: (tradeId: string) => void;
   onTogglePause: () => void;
   onClose: () => void;
   onFinish: () => void;
 }
 
 /** Fokus-Raum: schnelles Erfassen von Backtest-Trades, Tastatur-first. */
-export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClose, onFinish }: Props) {
+export default function BacktestRoom({ session, onAddTrade, onDeleteTrade, onTogglePause, onClose, onFinish }: Props) {
   const initialDate =
     session.trades.length > 0
       ? session.trades[session.trades.length - 1].date
@@ -664,6 +665,13 @@ export default function BacktestRoom({ session, onAddTrade, onTogglePause, onClo
                       {t.rMultiple.toFixed(1)} R
                     </span>
                   )}
+                  <button
+                    onClick={() => confirm("Eintrag löschen?") && onDeleteTrade(t.id)}
+                    className="text-faint hover:text-down transition-colors"
+                    title="Löschen"
+                  >
+                    <i className="ph-bold ph-trash" />
+                  </button>
                 </div>
               ))}
           </div>

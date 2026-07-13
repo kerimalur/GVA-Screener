@@ -331,6 +331,7 @@ export default function BacktestView() {
       <BacktestRoom
         session={current}
         onAddTrade={addTrade}
+        onDeleteTrade={deleteTrade}
         onTogglePause={togglePause}
         onClose={() => {
           if (!current.isPaused) togglePause();
