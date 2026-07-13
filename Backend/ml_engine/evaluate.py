@@ -1,0 +1,56 @@
+"""Experiment-Auswertung: Purged Walk-Forward → Fold-Metriken → hall_score."""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import roc_auc_score
+
+from .baseline import baseline_scores
+from .models import design_matrix, make_model, predict_scores
+from .splits import purged_walk_forward
+
+
+def _fold_metrics(scores: np.ndarray, labels: pd.Series, rets: pd.Series) -> dict:
+    mask = labels.notna() & pd.Series(scores, index=labels.index).ne(0.0)
+    y = labels[mask].astype(bool).to_numpy()
+    s = np.asarray(scores)[mask.to_numpy()]
+    if len(y) == 0:
+        return {"hitrate": np.nan, "auc": np.nan, "n": 0}
+    hit = float(((s > 0) == y).mean())
+    auc = float(roc_auc_score(y, s)) if 0 < y.sum() < len(y) else np.nan
+    return {"hitrate": hit, "auc": auc, "n": int(len(y))}
+
+
+def run_experiment_on_panel(panel: pd.DataFrame, config: dict) -> dict:
+    """OOS-Metriken eines Experiments (Panel OHNE Holdout übergeben!)."""
+    h = config["horizon"]
+    label_col, ret_col = f"label_{h}w", f"fwd_ret_{h}w"
+    data = panel[panel[label_col].notna()].reset_index(drop=True)
+    folds = purged_walk_forward(data["week_start"], horizon=h)
+
+    fold_rows = []
+    for train_weeks, test_weeks in folds:
+        tr = data[data["week_start"].isin(train_weeks)]
+        te = data[data["week_start"].isin(test_weeks)]
+        if config["algo"] == "baseline":
+            scores = baseline_scores(te)
+        else:
+            X_tr = design_matrix(tr, config["features"])
+            X_te = design_matrix(te, config["features"])
+            model = make_model(config["algo"], config.get("params", {}), config.get("seed", 42))
+            model.fit(X_tr, tr[label_col].astype(bool))
+            scores = predict_scores(model, config["algo"], X_te)
+        fold_rows.append(_fold_metrics(scores, te[label_col], te[ret_col]))
+
+    hits = [f["hitrate"] for f in fold_rows if not np.isnan(f["hitrate"])]
+    aucs = [f["auc"] for f in fold_rows if not np.isnan(f["auc"])]
+    mean_hit = float(np.mean(hits)) if hits else np.nan
+    std_hit = float(np.std(hits)) if hits else np.nan
+    return {
+        "folds": fold_rows,
+        "n_folds": len(fold_rows),
+        "mean_hitrate": mean_hit,
+        "std_hitrate": std_hit,
+        "mean_auc": float(np.mean(aucs)) if aucs else np.nan,
+        "hall_score": mean_hit - std_hit if hits else np.nan,
+    }
