@@ -22,9 +22,9 @@ from ml.db import select_all
 # Identisch zu data_pipeline.py — der bewiesene TV-Anker (Dienstag).
 BUSDAY_ANCHOR = np.datetime64("2026-04-21")
 
-# Muster-Parameter — identisch zu compute_zones() in main.py.
-TOL_PIPS = 2.5
-SIZE_MULT = 1.3
+# Muster-Parameter — identisch zu analyzer.py (Pine Script v4.0):
+# Toleranz = 5% vom Body der 1. Kerze, 2. Kerze min. 40% groesser.
+from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
 
 # Vorlauf vor dem angefragten Zeitraum, damit Linien die vor dem Zeitraum
 # gebildet wurden (und im Zeitraum gehittet werden) existieren.
@@ -91,7 +91,6 @@ def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
     if df_3d.empty or len(df_3d) < 2:
         return []
 
-    tol = TOL_PIPS * pip_size_of(instrument)
     active_shorts: list[dict] = []
     active_longs: list[dict] = []
     hits: list[dict] = []
@@ -108,8 +107,10 @@ def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
 
         prev_body = abs(prev["close"] - prev["open"])
         curr_body = abs(curr["close"] - curr["open"])
-        valid_size = curr_body >= (prev_body * SIZE_MULT)
-        valid_gap = abs(prev["close"] - curr["open"]) <= tol
+        valid_size = prev_body > 0 and curr_body >= (prev_body * GVA_SIZE_FACTOR)
+        tol = prev_body * GVA_TOL_PCT
+        bot_match = abs(min(prev["open"], prev["close"]) - min(curr["open"], curr["close"])) <= tol
+        top_match = abs(max(prev["open"], prev["close"]) - max(curr["open"], curr["close"])) <= tol
 
         for x in active_shorts:
             if curr["high"] >= x["level"]:
@@ -139,16 +140,16 @@ def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
         active_shorts = [x for x in active_shorts if curr["high"] < x["level"]]
         active_longs = [x for x in active_longs if curr["low"] > x["level"]]
 
-        # Zone EXAKT auf dem Open der Signal-Kerze; High/Low der Signal-Kerze
-        # werden für die spätere SL-Berechnung mitgeführt.
-        if prev_bull and curr_bear and valid_gap and valid_size:
+        # Level = Body-Top/Boden der Signal-Kerze B (Pine: top_B/bot_B);
+        # High/Low der Signal-Kerze werden für die SL-Berechnung mitgeführt.
+        if prev_bull and curr_bear and valid_size and top_match:
             active_shorts.append(
-                {"level": curr["open"], "date": curr_time,
+                {"level": max(curr["open"], curr["close"]), "date": curr_time,
                  "signal_high": curr["high"], "signal_low": curr["low"]}
             )
-        if prev_bear and curr_bull and valid_gap and valid_size:
+        if prev_bear and curr_bull and valid_size and bot_match:
             active_longs.append(
-                {"level": curr["open"], "date": curr_time,
+                {"level": min(curr["open"], curr["close"]), "date": curr_time,
                  "signal_high": curr["high"], "signal_low": curr["low"]}
             )
 

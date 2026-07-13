@@ -225,7 +225,8 @@ def compute_zones():
             if df_3d.empty:
                 continue
 
-            short_lvl, short_date, long_lvl, long_date, price, last_touched, all_shorts, all_longs = analyze_gva_zones(df_3d, pair, tol_pips=2.5, size_mult=1.3)
+            # Parameter kommen aus analyzer.py (Pine v4: 5% Body-Toleranz, Faktor 1.4)
+            short_lvl, short_date, long_lvl, long_date, price, last_touched, all_shorts, all_longs = analyze_gva_zones(df_3d, pair)
 
             ZONES[pair] = {
                 "shorts": all_shorts,

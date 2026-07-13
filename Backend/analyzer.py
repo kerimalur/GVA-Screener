@@ -1,11 +1,20 @@
 import pandas as pd
 
-def analyze_gva_zones(df: pd.DataFrame, instrument: str, tol_pips: float = 2.5, size_mult: float = 1.3):
+# GVA-Muster — 1:1 nach Kerims Pine Script "Waagerechte Szenarien Pro v4.0":
+#   Kerze A (prev) und Kerze B (curr) auf 3D:
+#   - LONG:  A bearisch, B bullisch, Body B >= Body A * SIZE_FACTOR,
+#            |Body-Boden A - Body-Boden B| <= Body A * TOL_PCT  -> Level = Body-Boden B
+#   - SHORT: A bullisch, B bearisch, gleiche Groessen-Bedingung,
+#            |Body-Top A - Body-Top B| <= Body A * TOL_PCT      -> Level = Body-Top B
+#   Touch: Wick zaehlt, exakt (keine Toleranz). Linie nach Touch weg.
+GVA_TOL_PCT = 0.05      # 5% vom Body der 1. Kerze (Pine: gva_toleranz_pct=5.0)
+GVA_SIZE_FACTOR = 1.4   # Body B min. 40% groesser (Pine: gva_kerze2_groesser_pct=40)
+
+
+def analyze_gva_zones(df: pd.DataFrame, instrument: str,
+                      tol_pct: float = GVA_TOL_PCT, size_factor: float = GVA_SIZE_FACTOR):
     if df.empty or len(df) < 2:
         return None, None, None, None, None, None, [], []
-
-    pip_size = 0.01 if "JPY" in instrument else 0.0001
-    tol = tol_pips * pip_size
 
     active_shorts = []
     active_longs = []
@@ -14,20 +23,22 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str, tol_pips: float = 2.5, 
     for i in range(1, len(df)):
         prev = df.iloc[i-1]
         curr = df.iloc[i]
-        
+
         curr_time = df.index[i]
 
         prev_bull = prev['close'] > prev['open']
         prev_bear = prev['close'] < prev['open']
-        
+
         curr_bull = curr['close'] > curr['open']
         curr_bear = curr['close'] < curr['open']
 
         prev_body = abs(prev['close'] - prev['open'])
         curr_body = abs(curr['close'] - curr['open'])
 
-        valid_size = curr_body >= (prev_body * size_mult)
-        valid_gap = abs(prev['close'] - curr['open']) <= tol
+        valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
+        tol = prev_body * tol_pct
+        bot_match = abs(min(prev['open'], prev['close']) - min(curr['open'], curr['close'])) <= tol
+        top_match = abs(max(prev['open'], prev['close']) - max(curr['open'], curr['close'])) <= tol
 
         for x in active_shorts:
             if curr['high'] >= x['level']:
@@ -50,12 +61,12 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str, tol_pips: float = 2.5, 
         active_shorts = [x for x in active_shorts if curr['high'] < x['level']]
         active_longs = [x for x in active_longs if curr['low'] > x['level']]
 
-        # Die Zone wird EXAKT auf dem Open der Signal-Kerze gebildet
-        if prev_bull and curr_bear and valid_gap and valid_size:
-            active_shorts.append({'level': curr['open'], 'date': curr_time})
-        
-        if prev_bear and curr_bull and valid_gap and valid_size:
-            active_longs.append({'level': curr['open'], 'date': curr_time})
+        # Level = Body-Top/Boden der Signal-Kerze B (bei Bull/Bear = deren Open)
+        if prev_bull and curr_bear and valid_size and top_match:
+            active_shorts.append({'level': max(curr['open'], curr['close']), 'date': curr_time})
+
+        if prev_bear and curr_bull and valid_size and bot_match:
+            active_longs.append({'level': min(curr['open'], curr['close']), 'date': curr_time})
 
     current_price = df.iloc[-1]['close']
 
