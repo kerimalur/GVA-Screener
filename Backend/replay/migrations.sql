@@ -30,3 +30,14 @@ CREATE TABLE IF NOT EXISTS backtest_replay (
 );
 
 ALTER TABLE backtest_replay ENABLE ROW LEVEL SECURITY;
+
+-- 2026-07-14: SL/TP/R:R-Simulation komplett entfernt (GVA_BACKTEST_ROADMAP.md
+-- Phase 1). Replay speichert nur noch: Linie gebildet, gehittet, Preis, Bewertung.
+ALTER TABLE backtest_replay
+  DROP COLUMN IF EXISTS entry_price,
+  DROP COLUMN IF EXISTS sl_price,
+  DROP COLUMN IF EXISTS tp_price,
+  DROP COLUMN IF EXISTS result,
+  DROP COLUMN IF EXISTS result_pips,
+  DROP COLUMN IF EXISTS result_rr,
+  DROP COLUMN IF EXISTS exit_date;

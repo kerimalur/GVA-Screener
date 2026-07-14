@@ -47,31 +47,15 @@ interface Evaluation {
   trade_taken: boolean | null;
   skip_reason: string | null;
   notes: string | null;
-  entry_price: number | null;
-  sl_price: number | null;
-  tp_price: number | null;
-  result: string | null;
-  result_pips: number | null;
-  result_rr: number | null;
-  exit_date: string | null;
-}
-
-interface StatBucket {
-  trades: number;
-  wins: number;
-  losses: number;
-  timeouts: number;
-  winrate: number | null;
-  avg_rr: number | null;
-  profit_factor: number | null;
 }
 
 interface Stats {
-  total: StatBucket;
+  evaluated: number;
+  taken: number;
   skips: number;
-  by_direction: Record<string, StatBucket>;
-  by_pair: Record<string, StatBucket>;
-  by_year: Record<string, StatBucket>;
+  by_direction: Record<string, number>;
+  by_pair: Record<string, number>;
+  by_year: Record<string, number>;
 }
 
 const evalKey = (hitDate: string, direction: string) => `${hitDate}_${direction}`;
@@ -226,42 +210,25 @@ function ReplayAnalysis({
         <Panel>
           <SkeletonRows rows={4} />
         </Panel>
-      ) : stats.total.trades === 0 ? (
+      ) : stats.evaluated === 0 ? (
         <Panel>
           <EmptyState
             icon="ph-chart-bar"
-            title="Noch keine simulierten Trades"
-            description="Bewerte Hits im Raum als «Trade genommen», dann erscheinen hier Winrate, R:R und Profit Factor."
+            title="Noch keine Bewertungen"
+            description="Bewerte Hits im Raum, dann erscheinen hier die Zählungen. Ergebnis-Kennzahlen kommen zurück, sobald die GVA-Linien-Logik 1:1 mit TradingView stimmt (siehe GVA_BACKTEST_ROADMAP.md)."
           />
         </Panel>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatTile
-              label="Winrate"
-              value={stats.total.winrate != null ? `${stats.total.winrate.toFixed(1)}%` : "–"}
-              cls={stats.total.winrate != null && stats.total.winrate >= 50 ? "text-up" : "text-down"}
-            />
-            <StatTile
-              label="Trades"
-              value={String(stats.total.trades)}
-              sub={`${stats.total.wins}W / ${stats.total.losses}L / ${stats.total.timeouts}T · Skips ${stats.skips}`}
-            />
-            <StatTile
-              label="Ø R:R"
-              value={stats.total.avg_rr != null ? stats.total.avg_rr.toFixed(2) : "–"}
-              cls={(stats.total.avg_rr ?? 0) > 0 ? "text-up" : "text-down"}
-            />
-            <StatTile
-              label="Profit Factor"
-              value={stats.total.profit_factor != null ? stats.total.profit_factor.toFixed(2) : "–"}
-              cls={(stats.total.profit_factor ?? 0) >= 1 ? "text-up" : "text-down"}
-            />
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <StatTile label="Bewertet" value={String(stats.evaluated)} />
+            <StatTile label="Trade genommen" value={String(stats.taken)} cls="text-up" />
+            <StatTile label="Skips" value={String(stats.skips)} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <BreakdownTable title="Nach Richtung" data={stats.by_direction} keyLabel="Richtung" />
-            <BreakdownTable title="Nach Pair" data={stats.by_pair} keyLabel="Pair" />
-            <BreakdownTable title="Nach Jahr" data={stats.by_year} keyLabel="Jahr" />
+            <BreakdownTable title="Genommen nach Richtung" data={stats.by_direction} keyLabel="Richtung" />
+            <BreakdownTable title="Genommen nach Pair" data={stats.by_pair} keyLabel="Pair" />
+            <BreakdownTable title="Genommen nach Jahr" data={stats.by_year} keyLabel="Jahr" />
           </div>
         </>
       )}
@@ -461,12 +428,8 @@ function ReplayRoom({
               let cls = "bg-surface2 border-border text-faint";
               let deco = "";
               if (ev) {
-                if (ev.trade_taken === false) {
-                  cls = "bg-surface2 border-border text-faint";
-                  deco = "line-through";
-                } else if (ev.result === "WIN") cls = "bg-up/20 border-up/40 text-up";
-                else if (ev.result === "LOSS") cls = "bg-down/20 border-down/40 text-down";
-                else cls = "bg-warn/20 border-warn/40 text-warn";
+                if (ev.trade_taken === false) deco = "line-through";
+                else cls = "bg-up/20 border-up/40 text-up";
               }
               return (
                 <button
@@ -548,28 +511,9 @@ function ReplayRoom({
                 rows={2}
                 className="w-full bg-surface border border-border rounded px-2 py-1 text-[12px] resize-y"
               />
-              {saving && <p className="text-[11px] text-muted font-mono animate-pulse">Speichere + simuliere …</p>}
-              {currentEval?.trade_taken && currentEval.result && (
-                <div
-                  className={`rounded border p-2.5 text-[12px] font-mono ${
-                    currentEval.result === "WIN"
-                      ? "border-up/40 bg-up/10 text-up"
-                      : currentEval.result === "LOSS"
-                        ? "border-down/40 bg-down/10 text-down"
-                        : "border-warn/40 bg-warn/10 text-warn"
-                  }`}
-                >
-                  <b>
-                    → {currentEval.result}{" "}
-                    {currentEval.result_pips != null &&
-                      `${currentEval.result_pips > 0 ? "+" : ""}${currentEval.result_pips} Pips`}
-                    {currentEval.result_rr != null && ` (1:${currentEval.result_rr.toFixed(1)})`}
-                  </b>
-                  <div className="text-[10px] mt-1 opacity-80">
-                    Entry {currentEval.entry_price} · SL {currentEval.sl_price} · TP {currentEval.tp_price}
-                    {currentEval.exit_date && ` · Exit ${currentEval.exit_date}`}
-                  </div>
-                </div>
+              {saving && <p className="text-[11px] text-muted font-mono animate-pulse">Speichere …</p>}
+              {currentEval?.trade_taken && (
+                <p className="text-[11px] text-up font-mono">✓ Als «Trade genommen» gespeichert.</p>
               )}
               {currentEval && currentEval.trade_taken === false && (
                 <p className="text-[11px] text-faint font-mono">
@@ -582,10 +526,9 @@ function ReplayRoom({
       )}
 
       <p className="text-[11px] text-faint leading-relaxed border-t border-border/50 pt-3">
-        Tastenkürzel: ← → blättern. Ergebnis-Simulation: Entry = Close am Hit-Tag, SL = Signal-Kerzen-Extrem ±5
-        Pips, TP = 1:3 R:R, SL+TP am selben Tag → konservativ SL, Timeout nach 20 Handelstagen. Hits werden mit dem
-        identischen 3D-Raster wie der Live-Screener rekonstruiert (Anker 21.04.2026). Rein technisch —
-        Fundamentals spielen hier bewusst keine Rolle.
+        Tastenkürzel: ← → blättern. Hits werden mit dem identischen 3D-Raster wie der Live-Screener
+        rekonstruiert (Anker 21.04.2026). Rein technisch — nur GVA-Linien: gebildet am, gehittet am, Preis.
+        Keine SL/TP/R:R-Simulation (entfernt für den 1:1-Vergleich mit TradingView, siehe GVA_BACKTEST_ROADMAP.md).
       </p>
     </div>
   );
@@ -800,7 +743,7 @@ function BreakdownTable({
   keyLabel,
 }: {
   title: string;
-  data: Record<string, StatBucket>;
+  data: Record<string, number>;
   keyLabel: string;
 }) {
   const entries = Object.entries(data);
@@ -812,24 +755,14 @@ function BreakdownTable({
         <thead>
           <tr className="text-[9px] text-faint uppercase tracking-wider">
             <th className="text-left pb-1">{keyLabel}</th>
-            <th className="text-right pb-1 px-2">n</th>
-            <th className="text-right pb-1 px-2">WR</th>
-            <th className="text-right pb-1">PF</th>
+            <th className="text-right pb-1">n</th>
           </tr>
         </thead>
         <tbody>
-          {entries.map(([k, b]) => (
+          {entries.map(([k, n]) => (
             <tr key={k} className="border-t border-border/50">
               <td className="py-1">{k}</td>
-              <td className="py-1 px-2 text-right text-muted">{b.trades}</td>
-              <td
-                className={`py-1 px-2 text-right font-bold ${
-                  b.winrate != null && b.winrate >= 50 ? "text-up" : b.winrate != null ? "text-down" : "text-faint"
-                }`}
-              >
-                {b.winrate != null ? `${b.winrate.toFixed(0)}%` : "–"}
-              </td>
-              <td className="py-1 text-right text-muted">{b.profit_factor != null ? b.profit_factor.toFixed(1) : "–"}</td>
+              <td className="py-1 text-right text-muted">{n}</td>
             </tr>
           ))}
         </tbody>

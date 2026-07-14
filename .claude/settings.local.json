@@ -29,7 +29,9 @@
       "Bash(git commit --quiet -m 'docs: STATUS.md auf Stand 2026-07-11 — privater Fokus, ML-Fundament, offene Punkte *)",
       "Bash(git commit --quiet -m 'docs: STATUS.md — Aufgabe 2 erledigt, nächster Schritt Backtest-Modul *)",
       "Bash(git commit --quiet -m 'docs: STATUS.md — Backtest-Modul + 8 Jahre erledigt, Backfill-Hinweis *)",
-      "mcp__claude_ai_Supabase__list_organizations"
+      "mcp__claude_ai_Supabase__list_organizations",
+      "PowerShell(Remove-Item \"c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\replay\\\\trade_result.py\" -Confirm:$false)",
+      "PowerShell(python -c \"import ast; ast.parse\\(open\\(r'c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\replay\\\\routes.py', encoding='utf-8'\\).read\\(\\)\\); print\\('routes.py OK'\\)\")"
     ]
   }
 }

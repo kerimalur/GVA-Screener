@@ -8,7 +8,7 @@ export default function Page() {
     <div className="space-y-5 max-w-[1400px] mx-auto">
       <Panel
         title="GVA-Replay — Hits manuell bewerten"
-        subtitle="Rein technisch: historische GVA-Hits chronologisch durchgehen, Chart in TradingView prüfen (BOS/Fib/Volumen), bewerten — Ergebnis wird automatisch bei 1:3 R:R simuliert. Sessions lassen sich pausieren, fortsetzen und auswerten."
+        subtitle="Rein technisch: historische GVA-Hits chronologisch durchgehen und mit TradingView abgleichen — pro Linie nur Erstellungsdatum, Hit-Datum und Hit-Preis. Sessions lassen sich pausieren, fortsetzen und auswerten."
       >
         <ReplayExplorer />
       </Panel>
