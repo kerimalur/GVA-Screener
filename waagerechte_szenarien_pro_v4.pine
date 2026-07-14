@@ -29,6 +29,11 @@ touch_wick    = input.bool(true,  "Docht (Wick) zählt als Berührung", group=gr
 touch_tol_atr = input.float(0.0,  "Touch-Toleranz (x ATR HTF)", minval=0.0, maxval=0.5, step=0.005, group=group_touch, tooltip="0 = exakter Punkt. Höher = Linie stoppt schon kurz vor dem Level. ATR vom Zeichnungs-TF, damit auf allen Timeframes identisch.")
 atr_length    = input.int(14, "ATR Periode (HTF)", minval=1, maxval=50, group=group_touch)
 
+group_cmp = "🔍 Replay-Vergleich"
+show_cmp_table = input.bool(true, "Vergleichs-Tabelle anzeigen", group=group_cmp, tooltip="Gleiche Felder wie der Replay-Tab der App: Richtung, Level, gebildet am, gehittet am. Für den 1:1-Abgleich (GVA_BACKTEST_ROADMAP.md Phase 1).")
+cmp_rows       = input.int(40, "Tabelle: letzte N Linien", minval=5, maxval=98, group=group_cmp)
+cmp_logs       = input.bool(true, "Pine-Logs schreiben (FORMED/HIT)", group=group_cmp, tooltip="Schreibt pro Linie eine FORMED,- und HIT,-Zeile in den Pine-Logs-Pane. Von dort kopieren und gegen den CSV-Export der App diffen.")
+
 group_optik = "🎨 Optik"
 color_long  = input.color(color.new(#00C851, 0), "Farbe Long GVA",  group=group_optik)
 color_short = input.color(color.new(#FF4444, 0), "Farbe Short GVA", group=group_optik)
@@ -142,6 +147,19 @@ var float[] bull_levels = array.new<float>()
 var line[]  bear_lines  = array.new<line>()
 var float[] bear_levels = array.new<float>()
 
+// ── Replay-Vergleich: Historie ALLER Linien (bleibt nach Hit erhalten) ──
+// FX-Kerzen öffnen 17:00 New York → +12h ergibt den Handelstag.
+// Zeigt der Abgleich mit der App einen konstanten ±1-Tag-Versatz: hier justieren.
+f_date(t) => str.format_time(t + 43200000, "yyyy-MM-dd", "America/New_York")
+
+var int[]    gva_formed = array.new<int>()
+var string[] gva_dir    = array.new<string>()
+var float[]  gva_level  = array.new<float>()
+var int[]    gva_hit    = array.new<int>()   // na = noch offen
+// Index in die Historie, parallel zu bull_lines / bear_lines
+var int[] bull_hist = array.new<int>()
+var int[] bear_hist = array.new<int>()
+
 // ============================================================================
 // HAUPTLOGIK
 // ============================================================================
@@ -171,6 +189,13 @@ if is_enabled
             newLine = line.new(tB, level, time, level, xloc=xloc.bar_time, color=color_long, width=line_width, extend=extend.right, style=line.style_solid)
             array.push(bull_lines,  newLine)
             array.push(bull_levels, level)
+            array.push(gva_formed, tB)
+            array.push(gva_dir, "LONG")
+            array.push(gva_level, level)
+            array.push(gva_hit, int(na))
+            array.push(bull_hist, array.size(gva_formed) - 1)
+            if cmp_logs
+                log.info("FORMED,{0},LONG,{1}", f_date(tB), str.tostring(level, format.mintick))
 
         // SHORT GVA (Bull -> Bear, Body-Tops nahe beieinander)
         if first_bull and second_bear and second_larger and math.abs(top_A - top_B) <= body_match_tolerance
@@ -179,6 +204,13 @@ if is_enabled
             newLine = line.new(tB, level, time, level, xloc=xloc.bar_time, color=color_short, width=line_width, extend=extend.right, style=line.style_solid)
             array.push(bear_lines,  newLine)
             array.push(bear_levels, level)
+            array.push(gva_formed, tB)
+            array.push(gva_dir, "SHORT")
+            array.push(gva_level, level)
+            array.push(gva_hit, int(na))
+            array.push(bear_hist, array.size(gva_formed) - 1)
+            if cmp_logs
+                log.info("FORMED,{0},SHORT,{1}", f_date(tB), str.tostring(level, format.mintick))
 
     // ================================================================
     // LONG GVA: Touch Detection (Preis kommt von oben runter aufs Level)
@@ -192,6 +224,10 @@ if is_enabled
                 line.set_width(ln, 1)
                 line.set_extend(ln, extend.none)
                 line.set_x2(ln, time)
+                array.set(gva_hit, array.get(bull_hist, i), time)
+                if cmp_logs
+                    log.info("HIT,{0},LONG,{1}", f_date(time), str.tostring(lvl, format.mintick))
+                array.remove(bull_hist,   i)
                 array.remove(bull_lines,  i)
                 array.remove(bull_levels, i)
 
@@ -207,5 +243,36 @@ if is_enabled
                 line.set_width(ln, 1)
                 line.set_extend(ln, extend.none)
                 line.set_x2(ln, time)
+                array.set(gva_hit, array.get(bear_hist, i), time)
+                if cmp_logs
+                    log.info("HIT,{0},SHORT,{1}", f_date(time), str.tostring(lvl, format.mintick))
+                array.remove(bear_hist,   i)
                 array.remove(bear_lines,  i)
                 array.remove(bear_levels, i)
+
+// ============================================================================
+// VERGLEICHS-TABELLE — gleiche Felder wie der Replay-Tab der App
+// (# · Richtung · Level · Gebildet am · Hit am). GVA_BACKTEST_ROADMAP.md Phase 1.
+// ============================================================================
+
+var table cmp_t = table.new(position.bottom_right, 5, 100, bgcolor=color.new(color.black, 15), border_width=1, border_color=color.new(color.gray, 70))
+
+if show_cmp_table and barstate.islast
+    table.cell(cmp_t, 0, 0, "#",        text_color=color.gray,  text_size=size.tiny)
+    table.cell(cmp_t, 1, 0, "Richtung", text_color=color.gray,  text_size=size.tiny)
+    table.cell(cmp_t, 2, 0, "Level",    text_color=color.gray,  text_size=size.tiny)
+    table.cell(cmp_t, 3, 0, "Gebildet", text_color=color.gray,  text_size=size.tiny)
+    table.cell(cmp_t, 4, 0, "Hit",      text_color=color.gray,  text_size=size.tiny)
+    n = array.size(gva_formed)
+    if n > 0
+        start = math.max(0, n - cmp_rows)
+        for i = start to n - 1
+            row  = i - start + 1
+            dirS = array.get(gva_dir, i)
+            dirC = dirS == "LONG" ? color_long : color_short
+            hitT = array.get(gva_hit, i)
+            table.cell(cmp_t, 0, row, str.tostring(i + 1), text_color=color.gray, text_size=size.tiny)
+            table.cell(cmp_t, 1, row, dirS, text_color=dirC, text_size=size.tiny)
+            table.cell(cmp_t, 2, row, str.tostring(array.get(gva_level, i), format.mintick), text_color=color.white, text_size=size.tiny)
+            table.cell(cmp_t, 3, row, f_date(array.get(gva_formed, i)), text_color=color.white, text_size=size.tiny)
+            table.cell(cmp_t, 4, row, na(hitT) ? "offen" : f_date(hitT), text_color=na(hitT) ? color.gray : color.white, text_size=size.tiny)

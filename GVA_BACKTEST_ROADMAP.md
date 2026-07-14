@@ -14,6 +14,10 @@ auf TradingView — erst dann wird darauf Auswertungslogik gebaut.
 - [ ] DB-Migration in Supabase ausführen (Spalten droppen):
       `Backend/replay/migrations.sql` → ALTER-TABLE-Block vom 2026-07-14
 - [ ] Vergleichsstrategie umsetzen (siehe unten)
+  - [x] Pine Script: Vergleichs-Tabelle am Chart (# · Richtung · Level ·
+        Gebildet · Hit) + `FORMED,`/`HIT,`-Logzeilen im Pine-Logs-Pane
+        (`waagerechte_szenarien_pro_v4.pine`, Gruppe «🔍 Replay-Vergleich»)
+  - [ ] App-Seite: Hits als CSV ziehen (`/replay/hits`) und gegen Pine-Logs diffen
 - [ ] Logik iterativ anpassen, bis 1:1-Übereinstimmung mit Pine Script:
   - [ ] gleiche Linien entstehen (Anzahl + Erstellungsdatum + Preis)
   - [ ] gleiche Hits (Hit-Datum + Hit-Preis)
