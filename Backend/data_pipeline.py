@@ -92,6 +92,17 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
     return df.sort_index()
 
 
+def gva_3d_block_ids(index: pd.DatetimeIndex, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> np.ndarray:
+    """Block-ID je Tageskerze nach der TV-Regel (Kalender-Wochentage, siehe
+    Anker-Kommentar). Einzige Quelle der Gruppierung — Scanner, Replay und
+    Debug-Endpoint muessen alle hierueber laufen."""
+    # Wochentags-Index jeder Kerze relativ zum Anker (negativ = vor dem Anker);
+    # numpy-// floort auch negative Werte -> Blockgrenzen stimmen rueckwirkend.
+    days = index.values.astype('datetime64[D]')
+    idx = np.busday_count(np.datetime64(pd.Timestamp(anchor).date()), days)
+    return idx // 3
+
+
 def resample_3d_bars(df_daily: pd.DataFrame, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> pd.DataFrame:
     """3D-Kerzen wie TradingView: 3er-Gruppen ueber KALENDER-Wochentage (Mo-Fr),
     phasiert am Anker. Feiertags-Slots ohne Kerze zaehlen mit (TV-Regel, siehe
@@ -99,11 +110,7 @@ def resample_3d_bars(df_daily: pd.DataFrame, anchor: pd.Timestamp = GVA_3D_ANCHO
     if df_daily.empty:
         return df_daily
     df = df_daily.sort_index().copy()
-    # Wochentags-Index jeder Kerze relativ zum Anker (negativ = vor dem Anker);
-    # numpy-// floort auch negative Werte -> Blockgrenzen stimmen rueckwirkend.
-    days = df.index.values.astype('datetime64[D]')
-    idx = np.busday_count(np.datetime64(pd.Timestamp(anchor).date()), days)
-    df['block_id'] = idx // 3
+    df['block_id'] = gva_3d_block_ids(df.index, anchor)
     df_3d = df.groupby('block_id').agg({
         'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum',
     })

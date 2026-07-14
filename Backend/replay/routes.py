@@ -58,18 +58,14 @@ def get_blocks(
     zeigt die 3D-Block-Grenzen inkl. der Tageskerzen pro Block. Damit sieht
     man direkt, wo das Raster gegen TradingView phasenverschoben ist und ob
     Feiertags-Kerzen (z.B. Karfreitag) im OANDA-Feed fehlen/existieren."""
-    import numpy as np
-
-    from data_pipeline import GVA_3D_ANCHOR, fetch_daily_oanda
+    from data_pipeline import GVA_3D_ANCHOR, fetch_daily_oanda, gva_3d_block_ids
 
     instrument = normalize_pair(pair)
     daily = fetch_daily_oanda(instrument, count=5000)
     if daily.empty:
         raise HTTPException(status_code=503, detail="Keine OANDA-Daten")
     df = daily.sort_index().copy()
-    pos = np.arange(len(df))
-    anchor_pos = int(df.index.searchsorted(GVA_3D_ANCHOR))
-    df["block_id"] = (pos - anchor_pos) // 3
+    df["block_id"] = gva_3d_block_ids(df.index)
 
     blocks = []
     for _, grp in df.groupby("block_id"):
