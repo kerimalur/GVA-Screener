@@ -18,6 +18,33 @@ auf TradingView — erst dann wird darauf Auswertungslogik gebaut.
         Gebildet · Hit) + `FORMED,`/`HIT,`-Logzeilen im Pine-Logs-Pane
         (`waagerechte_szenarien_pro_v4.pine`, Gruppe «🔍 Replay-Vergleich»)
   - [ ] App-Seite: Hits als CSV ziehen (`/replay/hits`) und gegen Pine-Logs diffen
+### Abgleich-Stand (2026-07-14) — 3D-Raster 1 Handelstag verschoben
+
+Erster Referenzfall EURUSD, erste SHORT-Linie 2025:
+
+| | App (Backend/OANDA) | TradingView |
+|---|---|---|
+| Signal-Block | **20.03.2025** (20/21/24) | **18.03.2025** (18/19/20) |
+| Level | 1.09032 | 1.09224 |
+| Hit | 02.04.2025 ✓ | 02.04.2025 ✓ |
+
+- Muster- und Hit-Logik korrekt, nur das 3D-Raster ist im März 2025 um
+  **1 Handelstag** gegen TV verschoben (Backend-Blöcke starten 1 Tag früher).
+- Karfreitag 18.04.2025 existiert in BEIDEN Feeds → nicht die Ursache.
+- Debug-Endpoint: `GET /replay/blocks?pair=EUR_USD&from=…&to=…` zeigt die
+  Backend-Blöcke inkl. Tageszuordnung. Anker aktuell `2025-05-06`
+  (`Backend/data_pipeline.py` → `GVA_3D_ANCHOR`).
+- Backend gruppiert aktuell: 10.07. + 13.07. + 14.07.2026.
+
+**Nächste zwei Checks (TradingView, OANDA:EURUSD):**
+- [ ] Startet die AKTUELLE 3D-Kerze am 10.07.2026?
+      → Nein: Anker ist global 1 Tag daneben → `GVA_3D_ANCHOR` um 1 Handelstag
+        schieben, März neu prüfen (einfachster Fix)
+      → Ja: Phase kippt zwischen März 2025 und heute → mit `/replay/blocks`
+        vs. TV-3D-Chart binär eingrenzen (Feed-Lücke suchen)
+- [ ] Bestätigen, dass der März-Vergleich auf `OANDA:EURUSD` lief (nicht
+      `FX:EURUSD` — anderer Feed, anderes Raster möglich)
+
 - [ ] Logik iterativ anpassen, bis 1:1-Übereinstimmung mit Pine Script:
   - [ ] gleiche Linien entstehen (Anzahl + Erstellungsdatum + Preis)
   - [ ] gleiche Hits (Hit-Datum + Hit-Preis)
