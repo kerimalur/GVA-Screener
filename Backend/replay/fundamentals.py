@@ -78,6 +78,82 @@ def ranking_series(instrument: str, date_from: str, date_to: str) -> list[dict]:
         return []
 
 
+def fundamental_track(instrument: str, weeks: int = 52) -> dict:
+    """Pro Pair: die letzten `weeks` Wochen-Q-Scores (as-of, Baseline) beider
+    Währungen + ob der Markt danach 1W/4W in Bias-Richtung lief. Reine
+    Inspektion (kein Backtest-Engine) — zeigt, wie gut der Score kalibriert war.
+
+    Bias-Richtung: _pair_bias(base_q, quote_q). ret = Close-to-Close des Pairs
+    über 1 bzw. 4 Wochen ab Wochen-Start. Treffer = Vorzeichen passt zum Bias
+    (neutral => kein Treffer-Zähler).
+    """
+    from data_pipeline import fetch_daily_oanda
+
+    inst = normalize_pair(instrument)
+    flat = inst.replace("_", "")
+    base, quote = flat[:3], flat[3:6]
+    # Vorlauf für die 4W-Forward-Fenster der jüngsten Wochen
+    lo = (pd.Timestamp.today() - pd.Timedelta(weeks=weeks + 6)).normalize()
+    hi = pd.Timestamp.today().normalize()
+    series = ranking_series(inst, str(lo.date()), str(hi.date()))
+    if not series:
+        return {"pair": inst, "base_ccy": base, "quote_ccy": quote, "weeks": [], "summary": {}}
+
+    daily = fetch_daily_oanda(inst, count=5000)
+    close = daily["close"] if not daily.empty else pd.Series(dtype=float)
+
+    def close_at(ts: pd.Timestamp) -> float | None:
+        if close.empty:
+            return None
+        sub = close[close.index >= ts]
+        return float(sub.iloc[0]) if not sub.empty else None
+
+    rows: list[dict] = []
+    for r in series:
+        wk = pd.Timestamp(r["week_start"])
+        c0 = close_at(wk)
+        bias = r["bias"]
+        row = {
+            "week_start": r["week_start"],
+            "base_q": r["base"]["quintile"],
+            "base_score": r["base"]["score"],
+            "quote_q": r["quote"]["quintile"],
+            "quote_score": r["quote"]["score"],
+            "bias": bias,
+        }
+        for label, wks in (("1w", 1), ("4w", 4)):
+            cN = close_at(wk + pd.Timedelta(weeks=wks)) if c0 is not None else None
+            if c0 is None or cN is None or c0 == 0:
+                row[f"ret_{label}"] = None
+                row[f"hit_{label}"] = None
+                continue
+            ret = (cN - c0) / c0
+            row[f"ret_{label}"] = round(ret * 100, 2)  # Prozent
+            if bias == "long":
+                row[f"hit_{label}"] = ret > 0
+            elif bias == "short":
+                row[f"hit_{label}"] = ret < 0
+            else:
+                row[f"hit_{label}"] = None  # neutral zählt nicht
+        rows.append(row)
+
+    rows = rows[-weeks:]
+
+    def summarize(label: str) -> dict:
+        decided = [r[f"hit_{label}"] for r in rows if r[f"hit_{label}"] is not None]
+        n = len(decided)
+        hits = sum(1 for h in decided if h)
+        return {"n": n, "hits": hits, "rate": round(hits / n * 100, 1) if n else None}
+
+    return {
+        "pair": inst,
+        "base_ccy": base,
+        "quote_ccy": quote,
+        "weeks": rows,
+        "summary": {"h1": summarize("1w"), "h4": summarize("4w")},
+    }
+
+
 def ranking_snapshot(instrument: str, hit_date: str) -> dict | None:
     """As-of-Ranking beider Pair-Währungen zur Woche des Hits; None bei Fehlern."""
     try:

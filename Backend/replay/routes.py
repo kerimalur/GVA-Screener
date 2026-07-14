@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
 from ml.db import select_all, insert, update, delete
-from .fundamentals import ranking_series, ranking_snapshot
+from .fundamentals import fundamental_track, ranking_series, ranking_snapshot
 from .gva_history import find_hit, normalize_pair, reconstruct_hits, reconstruct_lines
 
 replay_router = APIRouter()
@@ -210,6 +210,15 @@ def get_trades(pair: str | None = Query(default=None)):
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     return {"count": len(rows), "trades": rows}
+
+
+@replay_router.get("/fundamental-track")
+def get_fundamental_track(
+    pair: str = Query(...),
+    weeks: int = Query(default=52, ge=4, le=260),
+):
+    """Pair-Fundamental-Timeline: Wochen-Q-Scores + 1W/4W Forward-Treffer."""
+    return fundamental_track(pair, weeks)
 
 
 @replay_router.get("/rankings")
