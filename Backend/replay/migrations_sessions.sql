@@ -18,3 +18,10 @@ create table if not exists replay_sessions (
 );
 create index if not exists backtest_replay_session_idx on backtest_replay (session_id);
 alter table replay_sessions enable row level security;
+
+-- 2026-07-14: pro Session gespeicherte GVA-Erkennungs-Toleranz (reproduzierbar).
+-- Neue Sessions erben den globalen Kalibrier-Default (Frontend/localStorage);
+-- Defaults hier = Live-Scanner-Konstanten. Migration: replay_sessions_gva_tuning
+alter table replay_sessions
+  add column if not exists tol_pct real not null default 0.05,
+  add column if not exists size_factor real not null default 1.4;

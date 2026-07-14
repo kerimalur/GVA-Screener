@@ -28,6 +28,12 @@ interface Hit {
   level: number;
   direction: "SHORT" | "LONG";
   line_formed_date: string;
+  // Fundamentale Konfluenz (as-of), null wenn Panel-Daten fehlen
+  bias?: "long" | "short" | "neutral" | null;
+  base_ccy?: string;
+  base_q?: number;
+  quote_ccy?: string;
+  quote_q?: number;
 }
 
 interface Session {
@@ -38,6 +44,45 @@ interface Session {
   date_to: string;
   status: "active" | "paused" | "done";
   evaluated_count: number;
+  tol_pct?: number; // roh (0.05), nicht Prozent
+  size_factor?: number; // roh (1.4)
+}
+
+// GVA-Tuning (Pine-Einheiten): Toleranz % vom Body der 1. Kerze,
+// Kerze-2-mindestens-X%-grösser. Defaults = Live-Scanner (0.05 / 1.4).
+const TUNE_DEFAULTS = { tolPct: 5, sizePct: 40 };
+const toApiTune = (t: { tolPct: number; sizePct: number }) => ({
+  tol_pct: t.tolPct / 100,
+  size_factor: 1 + t.sizePct / 100,
+});
+const rawToHuman = (tolPctRaw: number, sizeFactorRaw: number) => ({
+  tolPct: Math.round(tolPctRaw * 1000) / 10,
+  sizePct: Math.round((sizeFactorRaw - 1) * 1000) / 10,
+});
+// globaler Kalibrier-Default für NEU erstellte Sessions (localStorage)
+function loadGlobalTune(): { tolPct: number; sizePct: number } {
+  if (typeof window === "undefined") return { ...TUNE_DEFAULTS };
+  const tol = Number(localStorage.getItem("replay_tol_pct"));
+  const size = Number(localStorage.getItem("replay_size_pct"));
+  return {
+    tolPct: Number.isFinite(tol) && tol > 0 ? tol : TUNE_DEFAULTS.tolPct,
+    sizePct: Number.isFinite(size) && size > 0 ? size : TUNE_DEFAULTS.sizePct,
+  };
+}
+function saveGlobalTune(t: { tolPct: number; sizePct: number }) {
+  localStorage.setItem("replay_tol_pct", String(t.tolPct));
+  localStorage.setItem("replay_size_pct", String(t.sizePct));
+}
+function monthsAgoIso(n: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+// Rückenwind/Gegenwind: Fundamental-Bias relativ zur Hit-Richtung
+function windOf(bias: string | null | undefined, direction: string): "Rückenwind" | "Gegenwind" | "Neutral" | null {
+  if (bias !== "long" && bias !== "short") return bias === "neutral" ? "Neutral" : null;
+  const hitLong = direction === "LONG";
+  return (bias === "long") === hitLong ? "Rückenwind" : "Gegenwind";
 }
 
 interface Evaluation {
@@ -56,6 +101,7 @@ interface Stats {
   by_direction: Record<string, number>;
   by_pair: Record<string, number>;
   by_year: Record<string, number>;
+  by_ranking?: Record<string, number>;
 }
 
 const evalKey = (hitDate: string, direction: string) => `${hitDate}_${direction}`;
@@ -92,6 +138,8 @@ function ReplayWizard({
     }
     setSaving(true);
     try {
+      // globaler Kalibrier-Default wird in die Session eingefroren (reproduzierbar)
+      const tune = toApiTune(loadGlobalTune());
       const res = await fetch(`${API}/replay/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,6 +148,8 @@ function ReplayWizard({
           date_from: form.dateFrom,
           date_to: form.dateTo,
           name: form.name.trim() || null,
+          tol_pct: tune.tol_pct,
+          size_factor: tune.size_factor,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -230,6 +280,19 @@ function ReplayAnalysis({
             <BreakdownTable title="Genommen nach Pair" data={stats.by_pair} keyLabel="Pair" />
             <BreakdownTable title="Genommen nach Jahr" data={stats.by_year} keyLabel="Jahr" />
           </div>
+          {stats.by_ranking && Object.keys(stats.by_ranking).length > 0 && (
+            <div className="rounded border border-border bg-surface2 p-3.5 space-y-2">
+              <BreakdownTable
+                title="Genommen nach Fundamental-Bias"
+                data={stats.by_ranking}
+                keyLabel="Bias"
+              />
+              <p className="text-[10px] text-faint leading-relaxed">
+                Noch reine Zählung (Rückenwind = Bias in Hit-Richtung). Der Winrate-Split kommt
+                zurück, sobald die GVA-Ergebnisse (Win/Loss) wieder erfasst werden.
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -263,8 +326,14 @@ function ReplayRoom({
       setLoading(true);
       setError(null);
       try {
+        // Session-eigene GVA-Toleranz (eingefroren bei Erstellung); Fallback = Scanner-Default
+        const sf = session.size_factor ?? 1.4;
+        const tp = session.tol_pct ?? 0.05;
+        const hitsUrl =
+          `${API}/replay/hits?pair=${session.pair}&from=${session.date_from}&to=${session.date_to}` +
+          `&size_factor=${sf}&tol_pct=${tp}`;
         const [hitsRes, tradesRes] = await Promise.all([
-          fetch(`${API}/replay/hits?pair=${session.pair}&from=${session.date_from}&to=${session.date_to}`),
+          fetch(hitsUrl),
           fetch(`${API}/replay/trades?pair=${session.pair}`),
         ]);
         if (!hitsRes.ok) throw new Error(`Hits HTTP ${hitsRes.status}`);
@@ -333,6 +402,9 @@ function ReplayRoom({
             skip_reason: taken ? null : skipReason || null,
             notes: notes || null,
             session_id: session.id,
+            // dieselbe Toleranz wie beim Laden → find_hit findet exakt diesen Hit
+            size_factor: session.size_factor ?? 1.4,
+            tol_pct: session.tol_pct ?? 0.05,
           }),
         });
         if (!res.ok) {
@@ -386,7 +458,8 @@ function ReplayRoom({
 
       {loading && (
         <p className="text-[12px] text-muted font-mono animate-pulse">
-          Rekonstruiere GVA-Hits — 3D-Resampling + Muster-Scan, kann 5–15 s dauern (Render-Kaltstart länger) …
+          Lädt GVA + Fundamentals seit {session.date_from} — 3D-Resampling, Muster-Scan &amp; as-of Bias,
+          kann 5–15 s dauern (Render-Kaltstart länger) …
         </p>
       )}
       {error && <p className="text-down text-sm font-mono">Fehler: {error}</p>}
@@ -461,6 +534,7 @@ function ReplayRoom({
                 Gebildet am: {fmtDateLong(hit.line_formed_date)}
               </div>
               <div className="text-[12px] font-mono text-muted">Hit am: {fmtDateLong(hit.hit_date)}</div>
+              <BiasRow hit={hit} />
               <a
                 href={`https://www.tradingview.com/chart/?symbol=FX:${tvSymbol}&interval=D`}
                 target="_blank"
@@ -548,6 +622,7 @@ export default function ReplayExplorer() {
   const [mode, setMode] = useState<Mode>("landing");
   const [current, setCurrent] = useState<Session | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [showCalib, setShowCalib] = useState(false);
 
   const loadSessions = useCallback(() => {
     fetch(`${API}/replay/sessions`)
@@ -621,14 +696,25 @@ export default function ReplayExplorer() {
   // ── Landing ──
   return (
     <div className="space-y-4 anim-fade-in">
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         <span className="text-[12px] text-muted">
           {sessions.length} {sessions.length === 1 ? "Session" : "Sessions"}
         </span>
-        <Button size="sm" icon="ph-plus" className="ml-auto" onClick={() => setShowWizard(true)}>
+        <Button
+          variant={showCalib ? "primary" : "ghost"}
+          size="sm"
+          icon="ph-sliders-horizontal"
+          className="ml-auto"
+          onClick={() => setShowCalib((v) => !v)}
+        >
+          Kalibrierung
+        </Button>
+        <Button size="sm" icon="ph-plus" onClick={() => setShowWizard(true)}>
           Neue Session
         </Button>
       </div>
+
+      {showCalib && <CalibrationPanel />}
 
       {loading ? (
         <Panel>
@@ -728,6 +814,163 @@ export default function ReplayExplorer() {
           onClose={() => setShowWizard(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ── Kalibrier-Bereich: Toleranz an EURUSD / 12 Monaten testen ──
+function CalibrationPanel() {
+  const CAL_PAIR = "EUR_USD";
+  const [draft, setDraft] = useState(loadGlobalTune);
+  const [hits, setHits] = useState<Hit[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const reload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const api = toApiTune(draft);
+      const from = monthsAgoIso(12);
+      const to = todayIso();
+      const url =
+        `${API}/replay/hits?pair=${CAL_PAIR}&from=${from}&to=${to}` +
+        `&size_factor=${api.size_factor}&tol_pct=${api.tol_pct}&with_bias=0`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setHits(json.hits);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyGlobal = () => {
+    saveGlobalTune(draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const tvSymbol = CAL_PAIR.replace("_", "");
+  return (
+    <div className="rounded border border-border bg-surface2 p-4 space-y-3 anim-slide-up">
+      <div className="text-[10px] uppercase tracking-widest text-faint">
+        GVA-Erkennung kalibrieren · EURUSD · letzte 12 Monate
+      </div>
+      <p className="text-[11px] text-muted leading-relaxed">
+        Fehlen Hits vs. TradingView? <b>Toleranz höher</b> + <b>Kerze-2-Grösse tiefer</b> → lockerer,
+        mehr Hits. Defaults = Live-Scanner ({TUNE_DEFAULTS.tolPct} % / {TUNE_DEFAULTS.sizePct} %). Vorschau
+        rein technisch (ohne Fundamentals). „Übernehmen" gilt nur für <b>neu erstellte</b> Sessions.
+      </p>
+      <div className="grid grid-cols-2 gap-3 max-w-md">
+        <label className="space-y-1">
+          <span className="text-[11px] font-mono text-muted">Toleranz (%)</span>
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={0.5}
+            value={draft.tolPct}
+            onChange={(e) => setDraft((d) => ({ ...d, tolPct: Number(e.target.value) }))}
+            className="w-full bg-surface border border-border rounded px-2 py-1 text-[12px] font-mono"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] font-mono text-muted">Kerze 2 grösser (%)</span>
+          <input
+            type="number"
+            min={0}
+            max={200}
+            step={5}
+            value={draft.sizePct}
+            onChange={(e) => setDraft((d) => ({ ...d, sizePct: Number(e.target.value) }))}
+            className="w-full bg-surface border border-border rounded px-2 py-1 text-[12px] font-mono"
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" icon="ph-arrow-clockwise" onClick={reload} disabled={loading}>
+          {hits === null ? "Laden" : "Neu laden"}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setDraft({ ...TUNE_DEFAULTS })} disabled={loading}>
+          Zurücksetzen
+        </Button>
+        <Button variant="ghost" size="sm" icon="ph-check" onClick={applyGlobal}>
+          Für neue Sessions übernehmen
+        </Button>
+        {saved && <span className="text-[11px] text-up font-mono">✓ übernommen</span>}
+      </div>
+
+      {loading && <p className="text-[11px] text-muted font-mono animate-pulse">Rekonstruiere GVA-Hits …</p>}
+      {error && <p className="text-[12px] text-down font-mono">Fehler: {error}</p>}
+      {hits && (
+        <div className="space-y-2">
+          <div className="text-[12px] font-mono">
+            <b>{hits.length}</b> GVA-Hits gefunden (12 Monate)
+          </div>
+          <div className="max-h-56 overflow-y-auto rounded border border-border/50">
+            <table className="w-full text-[11px] font-mono">
+              <thead className="sticky top-0 bg-surface2">
+                <tr className="text-[9px] text-faint uppercase tracking-wider">
+                  <th className="text-left px-2 py-1">Hit-Tag</th>
+                  <th className="text-left px-2 py-1">Richtung</th>
+                  <th className="text-right px-2 py-1">Level</th>
+                  <th className="text-left px-2 py-1">Linie gebildet</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hits.map((h) => (
+                  <tr key={`${h.hit_date}_${h.direction}_${h.level}`} className="border-t border-border/40">
+                    <td className="px-2 py-1">{h.hit_date}</td>
+                    <td className={`px-2 py-1 ${h.direction === "SHORT" ? "text-down" : "text-up"}`}>
+                      {h.direction}
+                    </td>
+                    <td className="px-2 py-1 text-right text-muted">{h.level.toFixed(5)}</td>
+                    <td className="px-2 py-1 text-muted">{h.line_formed_date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <a
+            href={`https://www.tradingview.com/chart/?symbol=FX:${tvSymbol}&interval=D`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block px-2.5 py-1 rounded text-[11px] font-mono font-bold border border-accent text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+          >
+            EURUSD in TradingView öffnen ↗
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fundamentale Konfluenz als Badge + Kurz-Inline (EUR Q5 / USD Q1)
+function BiasRow({ hit }: { hit: Hit }) {
+  const wind = windOf(hit.bias, hit.direction);
+  if (!wind) return null; // kein Panel-Datum → nichts anzeigen
+  const tone =
+    wind === "Rückenwind"
+      ? "border-up/40 bg-up/10 text-up"
+      : wind === "Gegenwind"
+        ? "border-down/40 bg-down/10 text-down"
+        : "border-border bg-surface text-muted";
+  const detail =
+    hit.base_ccy && hit.quote_ccy
+      ? `${hit.base_ccy} Q${hit.base_q} / ${hit.quote_ccy} Q${hit.quote_q}`
+      : null;
+  return (
+    <div className="flex items-center gap-2 pt-0.5">
+      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${tone}`}>
+        {wind === "Rückenwind" ? "↑ " : wind === "Gegenwind" ? "↓ " : ""}
+        {wind}
+      </span>
+      {detail && <span className="text-[11px] font-mono text-muted">{detail}</span>}
+      <span className="text-[9px] uppercase tracking-widest text-faint">Fundamental (as-of)</span>
     </div>
   );
 }

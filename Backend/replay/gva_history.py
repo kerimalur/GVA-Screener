@@ -29,12 +29,20 @@ def pip_size_of(instrument: str) -> float:
     return 0.01 if "JPY" in instrument else 0.0001
 
 
-def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
+def collect_hits(
+    df_3d: pd.DataFrame,
+    instrument: str,
+    size_factor: float = GVA_SIZE_FACTOR,
+    tol_pct: float = GVA_TOL_PCT,
+) -> list[dict]:
     """Portierte analyze_gva_zones-Loop, die jeden Hit sammelt.
 
     Reihenfolge je Kerze wie im Original: erst Hits gegen aktive Linien
     prüfen, dann berührte Linien entfernen, dann neue Linien bilden.
     Jede Linie wird genau einmal gehittet (danach entfernt).
+
+    size_factor/tol_pct sind im Replay stimmbar (Default = Live-Scanner-Werte),
+    damit Kerim die GVA-Erkennung gegen TradingView kalibrieren kann.
     """
     if df_3d.empty or len(df_3d) < 2:
         return []
@@ -55,8 +63,8 @@ def collect_hits(df_3d: pd.DataFrame, instrument: str) -> list[dict]:
 
         prev_body = abs(prev["close"] - prev["open"])
         curr_body = abs(curr["close"] - curr["open"])
-        valid_size = prev_body > 0 and curr_body >= (prev_body * GVA_SIZE_FACTOR)
-        tol = prev_body * GVA_TOL_PCT
+        valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
+        tol = prev_body * tol_pct
         bot_match = abs(min(prev["open"], prev["close"]) - min(curr["open"], curr["close"])) <= tol
         top_match = abs(max(prev["open"], prev["close"]) - max(curr["open"], curr["close"])) <= tol
 
@@ -117,7 +125,13 @@ def refine_hit_day(hit: dict, daily: pd.DataFrame) -> str:
     return hit["hit_block_date"]
 
 
-def reconstruct_hits(pair: str, date_from: str, date_to: str) -> list[dict]:
+def reconstruct_hits(
+    pair: str,
+    date_from: str,
+    date_to: str,
+    size_factor: float = GVA_SIZE_FACTOR,
+    tol_pct: float = GVA_TOL_PCT,
+) -> list[dict]:
     """Alle GVA-Hits eines Pairs im Zeitraum, chronologisch — rein technisch
     (nur Linien-Logik). Linien werden aus der VOLLEN OANDA-Historie gebildet
     (automatischer Vorlauf), die Hits danach auf den Zeitraum gefiltert."""
@@ -127,7 +141,7 @@ def reconstruct_hits(pair: str, date_from: str, date_to: str) -> list[dict]:
         return []
 
     df_3d = resample_3d_bars(daily)
-    all_hits = collect_hits(df_3d, instrument)
+    all_hits = collect_hits(df_3d, instrument, size_factor, tol_pct)
 
     # Tagesgenau verfeinern + auf den angefragten Zeitraum filtern
     hits: list[dict] = []
@@ -140,7 +154,14 @@ def reconstruct_hits(pair: str, date_from: str, date_to: str) -> list[dict]:
     return hits
 
 
-def find_hit(pair: str, hit_date: str, direction: str, level: float | None = None) -> dict | None:
+def find_hit(
+    pair: str,
+    hit_date: str,
+    direction: str,
+    level: float | None = None,
+    size_factor: float = GVA_SIZE_FACTOR,
+    tol_pct: float = GVA_TOL_PCT,
+) -> dict | None:
     """Einzelnen Hit für /evaluate re-rekonstruieren (Level + Signal-Kerze).
     Bei mehreren Hits gleicher Richtung am selben Tag disambiguiert `level`."""
     d = date.fromisoformat(hit_date)
@@ -148,6 +169,8 @@ def find_hit(pair: str, hit_date: str, direction: str, level: float | None = Non
         pair,
         (d - timedelta(days=7)).isoformat(),
         (d + timedelta(days=7)).isoformat(),
+        size_factor,
+        tol_pct,
     )
     tol = 0.5 * pip_size_of(normalize_pair(pair))
     candidates = [

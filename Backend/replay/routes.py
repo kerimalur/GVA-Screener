@@ -12,11 +12,28 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
 from ml.db import select_all, insert, update, delete
-from .fundamentals import ranking_series
+from .fundamentals import ranking_series, ranking_snapshot
 from .gva_history import find_hit, normalize_pair, reconstruct_hits
 
 replay_router = APIRouter()
+
+
+def _bias_fields(instrument: str, hit_date: str) -> dict:
+    """As-of Fundamental-Bias (Rückenwind/Gegenwind) für einen Hit — kompakt
+    fürs Frontend-Badge + Inline. Ausfall => bias=None (Hit bleibt nutzbar)."""
+    snap = ranking_snapshot(instrument, hit_date)
+    if not snap:
+        return {"bias": None}
+    return {
+        "bias": snap["bias"],
+        "base_ccy": snap["base"]["ccy"],
+        "base_q": snap["base"]["quintile"],
+        "quote_ccy": snap["quote"]["ccy"],
+        "quote_q": snap["quote"]["quintile"],
+        "bias_week": snap["week_start"],
+    }
 
 
 @replay_router.get("/hits")
@@ -24,27 +41,34 @@ def get_hits(
     pair: str = Query(...),
     date_from: str = Query(..., alias="from"),
     date_to: str = Query(..., alias="to"),
+    size_factor: float = Query(default=GVA_SIZE_FACTOR),
+    tol_pct: float = Query(default=GVA_TOL_PCT),
+    with_bias: bool = Query(default=True),
 ):
     try:
-        hits = reconstruct_hits(pair, date_from, date_to)
+        hits = reconstruct_hits(pair, date_from, date_to, size_factor, tol_pct)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    # Bewusst OHNE Fundamentals/Ranking: das GVA-Replay prüft rein die
-    # Linien-Logik (Kerims Vorgabe) — und bleibt dadurch schnell.
+    instrument = normalize_pair(pair)
+    out = []
+    for h in hits:
+        row = {
+            "hit_date": h["hit_date"],
+            "level": h["level"],
+            "direction": h["direction"],
+            "line_formed_date": h["line_formed_date"],
+        }
+        # Fundamentale Konfluenz: as-of Bias je Hit. with_bias=0 (Kalibrier-
+        # Vorschau) überspringt den Panel-Lookup → rein technisch + schnell.
+        if with_bias:
+            row.update(_bias_fields(instrument, h["hit_date"]))
+        out.append(row)
     return {
-        "pair": normalize_pair(pair),
+        "pair": instrument,
         "from": date_from,
         "to": date_to,
-        "count": len(hits),
-        "hits": [
-            {
-                "hit_date": h["hit_date"],
-                "level": h["level"],
-                "direction": h["direction"],
-                "line_formed_date": h["line_formed_date"],
-            }
-            for h in hits
-        ],
+        "count": len(out),
+        "hits": out,
     }
 
 
@@ -94,6 +118,9 @@ class EvaluateRequest(BaseModel):
     # optional: disambiguiert bei mehreren Hits gleicher Richtung am selben Tag
     hit_level: float | None = None
     session_id: int | None = None
+    # GVA-Toleranz der Session (damit find_hit dieselben Hits rekonstruiert)
+    size_factor: float | None = None
+    tol_pct: float | None = None
 
 
 @replay_router.post("/evaluate")
@@ -104,14 +131,20 @@ def evaluate(req: EvaluateRequest):
         raise HTTPException(status_code=422, detail="hit_direction muss SHORT oder LONG sein")
 
     try:
-        hit = find_hit(instrument, req.hit_date, direction, level=req.hit_level)
+        hit = find_hit(
+            instrument, req.hit_date, direction, level=req.hit_level,
+            size_factor=req.size_factor if req.size_factor is not None else GVA_SIZE_FACTOR,
+            tol_pct=req.tol_pct if req.tol_pct is not None else GVA_TOL_PCT,
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     if not hit:
         raise HTTPException(status_code=404, detail="Hit nicht gefunden (Datum/Richtung prüfen)")
 
-    # Replay ist rein technisch (nur GVA-Linien) — keine Fundamental-Felder,
-    # keine SL/TP/R:R-Simulation. Nur: Linie gebildet, Linie gehittet, Preis.
+    # Fundamentale Konfluenz: as-of Bias beider Pair-Währungen zur Hit-Woche
+    # mitspeichern → sobald GVA-Ergebnisse zurückkommen, ist der Winrate-Split
+    # Rückenwind vs. Gegenwind sofort auswertbar. Ausfall => bias null (kein Block).
+    snap = ranking_snapshot(instrument, req.hit_date)
     row = {
         "instrument": instrument,
         "hit_date": req.hit_date,
@@ -122,6 +155,8 @@ def evaluate(req: EvaluateRequest):
         "trade_taken": req.trade_taken,
         "skip_reason": req.skip_reason,
         "notes": req.notes,
+        "ranking_bias": snap["bias"] if snap else None,
+        "ranking_detail": snap,
     }
 
     try:
@@ -164,6 +199,9 @@ class SessionCreate(BaseModel):
     date_from: str
     date_to: str
     name: str | None = None
+    # kalibrierte GVA-Toleranz, in die Session eingefroren (reproduzierbar)
+    tol_pct: float | None = None
+    size_factor: float | None = None
 
 
 class SessionPatch(BaseModel):
@@ -176,11 +214,16 @@ class SessionPatch(BaseModel):
 def create_session(req: SessionCreate):
     instrument = normalize_pair(req.pair)
     name = req.name or f"{instrument} {req.date_from} – {req.date_to}"
+    row = {
+        "name": name, "pair": instrument,
+        "date_from": req.date_from, "date_to": req.date_to,
+    }
+    if req.tol_pct is not None:
+        row["tol_pct"] = req.tol_pct
+    if req.size_factor is not None:
+        row["size_factor"] = req.size_factor
     try:
-        insert("replay_sessions", {
-            "name": name, "pair": instrument,
-            "date_from": req.date_from, "date_to": req.date_to,
-        })
+        insert("replay_sessions", row)
         rows = select_all("replay_sessions", {
             "select": "*", "order": "id.desc", "limit": 1,
         })
@@ -243,6 +286,15 @@ def delete_session(session_id: int):
     return {"ok": True}
 
 
+def _ranking_bucket(t: dict) -> str:
+    """Rückenwind/Gegenwind: as-of-Bias vs. gehandelte Hit-Richtung."""
+    bias = t.get("ranking_bias")
+    if bias not in ("long", "short"):
+        return "Neutral"
+    hit_long = t["hit_direction"] == "LONG"
+    return "Rückenwind" if (bias == "long") == hit_long else "Gegenwind"
+
+
 @replay_router.get("/stats")
 def get_stats(
     date_from: str | None = Query(default=None, alias="from"),
@@ -271,10 +323,12 @@ def get_stats(
     by_direction: dict[str, int] = defaultdict(int)
     by_pair: dict[str, int] = defaultdict(int)
     by_year: dict[str, int] = defaultdict(int)
+    by_ranking: dict[str, int] = defaultdict(int)
     for t in taken:
         by_direction[t["hit_direction"]] += 1
         by_pair[t["instrument"]] += 1
         by_year[str(t["hit_date"])[:4]] += 1
+        by_ranking[_ranking_bucket(t)] += 1
 
     return {
         "evaluated": len(rows),
@@ -283,4 +337,7 @@ def get_stats(
         "by_direction": dict(sorted(by_direction.items())),
         "by_pair": dict(sorted(by_pair.items())),
         "by_year": dict(sorted(by_year.items())),
+        # Vorbereitung: Zählung genommener Trades nach Fundamental-Bias.
+        # Winrate-Split folgt, sobald GVA-Ergebnisse zurückkommen.
+        "by_ranking": dict(sorted(by_ranking.items())),
     }
