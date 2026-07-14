@@ -151,6 +151,8 @@ class EvaluateRequest(BaseModel):
     # GVA-Toleranz der Session (damit find_hit dieselben Hits rekonstruiert)
     size_factor: float | None = None
     tol_pct: float | None = None
+    # Bias nur berechnen/speichern, wenn die Session fundamental läuft
+    with_fundamentals: bool = True
 
 
 @replay_router.post("/evaluate")
@@ -172,9 +174,10 @@ def evaluate(req: EvaluateRequest):
         raise HTTPException(status_code=404, detail="Hit nicht gefunden (Datum/Richtung prüfen)")
 
     # Fundamentale Konfluenz: as-of Bias beider Pair-Währungen zur Hit-Woche
-    # mitspeichern → sobald GVA-Ergebnisse zurückkommen, ist der Winrate-Split
-    # Rückenwind vs. Gegenwind sofort auswertbar. Ausfall => bias null (kein Block).
-    snap = ranking_snapshot(instrument, req.hit_date)
+    # (Datum = HIT-Tag, nicht Linien-Bildung) mitspeichern → sobald GVA-Ergebnisse
+    # zurückkommen, ist der Winrate-Split Rückenwind vs. Gegenwind sofort auswertbar.
+    # Nur wenn die Session fundamental läuft; Ausfall => bias null (kein Block).
+    snap = ranking_snapshot(instrument, req.hit_date) if req.with_fundamentals else None
     row = {
         "instrument": instrument,
         "hit_date": req.hit_date,
@@ -232,6 +235,8 @@ class SessionCreate(BaseModel):
     # kalibrierte GVA-Toleranz, in die Session eingefroren (reproduzierbar)
     tol_pct: float | None = None
     size_factor: float | None = None
+    # mit fundamentaler Konfluenz (as-of Bias) oder rein technisch
+    with_fundamentals: bool | None = None
 
 
 class SessionPatch(BaseModel):
@@ -252,6 +257,8 @@ def create_session(req: SessionCreate):
         row["tol_pct"] = req.tol_pct
     if req.size_factor is not None:
         row["size_factor"] = req.size_factor
+    if req.with_fundamentals is not None:
+        row["with_fundamentals"] = req.with_fundamentals
     try:
         insert("replay_sessions", row)
         rows = select_all("replay_sessions", {

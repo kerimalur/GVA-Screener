@@ -46,6 +46,7 @@ interface Session {
   evaluated_count: number;
   tol_pct?: number; // roh (0.05), nicht Prozent
   size_factor?: number; // roh (1.4)
+  with_fundamentals?: boolean;
 }
 
 // GVA-Tuning (Pine-Einheiten): Toleranz % vom Body der 1. Kerze,
@@ -128,6 +129,7 @@ function ReplayWizard({
     pair: "EUR_USD",
     dateFrom: "",
     dateTo: todayIso(),
+    withFundamentals: true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -150,6 +152,7 @@ function ReplayWizard({
           name: form.name.trim() || null,
           tol_pct: tune.tol_pct,
           size_factor: tune.size_factor,
+          with_fundamentals: form.withFundamentals,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -215,6 +218,21 @@ function ReplayWizard({
             />
           </Field>
         </div>
+        <label className="flex items-start gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.withFundamentals}
+            onChange={(e) => setForm((f) => ({ ...f, withFundamentals: e.target.checked }))}
+            className="mt-0.5"
+          />
+          <span className="text-[12px]">
+            Mit fundamentaler Konfluenz
+            <span className="block text-[11px] text-muted">
+              Rückenwind/Gegenwind je Hit — as-of Bias zum <b>Hit-Datum</b> (Zins+Saison). Aus =
+              rein technischer GVA-Durchgang.
+            </span>
+          </span>
+        </label>
       </div>
     </Modal>
   );
@@ -329,9 +347,10 @@ function ReplayRoom({
         // Session-eigene GVA-Toleranz (eingefroren bei Erstellung); Fallback = Scanner-Default
         const sf = session.size_factor ?? 1.4;
         const tp = session.tol_pct ?? 0.05;
+        const wf = session.with_fundamentals !== false;
         const hitsUrl =
           `${API}/replay/hits?pair=${session.pair}&from=${session.date_from}&to=${session.date_to}` +
-          `&size_factor=${sf}&tol_pct=${tp}`;
+          `&size_factor=${sf}&tol_pct=${tp}&with_bias=${wf ? 1 : 0}`;
         const [hitsRes, tradesRes] = await Promise.all([
           fetch(hitsUrl),
           fetch(`${API}/replay/trades?pair=${session.pair}`),
@@ -405,6 +424,7 @@ function ReplayRoom({
             // dieselbe Toleranz wie beim Laden → find_hit findet exakt diesen Hit
             size_factor: session.size_factor ?? 1.4,
             tol_pct: session.tol_pct ?? 0.05,
+            with_fundamentals: session.with_fundamentals !== false,
           }),
         });
         if (!res.ok) {
@@ -458,8 +478,9 @@ function ReplayRoom({
 
       {loading && (
         <p className="text-[12px] text-muted font-mono animate-pulse">
-          Lädt GVA + Fundamentals seit {session.date_from} — 3D-Resampling, Muster-Scan &amp; as-of Bias,
-          kann 5–15 s dauern (Render-Kaltstart länger) …
+          Lädt GVA{session.with_fundamentals !== false ? " + Fundamentals" : ""} seit {session.date_from} —
+          3D-Resampling, Muster-Scan{session.with_fundamentals !== false ? " & as-of Bias" : ""}, kann 5–15 s
+          dauern (Render-Kaltstart länger) …
         </p>
       )}
       {error && <p className="text-down text-sm font-mono">Fehler: {error}</p>}
@@ -752,6 +773,9 @@ export default function ReplayExplorer() {
                     {s.date_from} – {s.date_to}
                   </span>
                   <span>{s.evaluated_count} bewertet</span>
+                  <span className={s.with_fundamentals !== false ? "text-accent" : "text-faint"}>
+                    {s.with_fundamentals !== false ? "◆ fundamental" : "○ technisch"}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 ml-auto shrink-0">

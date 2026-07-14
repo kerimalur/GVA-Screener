@@ -25,3 +25,8 @@ alter table replay_sessions enable row level security;
 alter table replay_sessions
   add column if not exists tol_pct real not null default 0.05,
   add column if not exists size_factor real not null default 1.4;
+
+-- 2026-07-14: Session-Wahl mit/ohne fundamentale Konfluenz (Bias as-of HIT-Datum).
+-- false = rein technischer Durchgang. Migration: replay_sessions_with_fundamentals
+alter table replay_sessions
+  add column if not exists with_fundamentals boolean not null default true;
