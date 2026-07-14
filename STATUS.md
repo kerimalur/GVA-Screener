@@ -11,7 +11,10 @@ Lage pro Hit und ist gegen TradingView kalibrierbar.
 
 - **Fundamentale Konfluenz (as-of, HIT-Datum):** `/replay/hits` hängt je Hit den
   Bias an (`fundamentals.ranking_snapshot` → Baseline Zins+Saison + Quintil beider
-  Pair-Währungen, Datum = HIT-Tag, nicht Linien-Bildung). `/replay/evaluate`
+  Pair-Währungen, Datum = HIT-Tag, nicht Linien-Bildung). Replay-Hits nutzen die
+  **weite** Bias-Regel `_pair_bias_wide` (Q2/Q4 zählen als Richtung, nur Q3 neutral,
+  relativer Quintil-Vergleich) — Währungs-Ranking + Fundamental-Track bleiben strikt
+  (Q5/Q1). `/replay/evaluate`
   speichert `ranking_bias` + `ranking_detail` (jsonb, bestehende Spalten in
   backtest_replay). `/replay/stats` → `by_ranking` (Rückenwind/Gegenwind/Neutral,
   reine Zählung — Winrate-Split kommt zurück, sobald GVA-Ergebnisse wieder erfasst

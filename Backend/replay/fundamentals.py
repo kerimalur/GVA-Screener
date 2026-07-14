@@ -17,6 +17,7 @@ import pandas as pd
 from macro_features.panel import build_feature_panel
 from ml_engine.baseline import baseline_scores
 from ml_engine.run_weekly import QUANTILE_WINDOW_WEEKS, quintile_of
+from .gva_history import normalize_pair
 
 
 @lru_cache(maxsize=1)
@@ -47,6 +48,18 @@ def _pair_bias(bq: int, qq: int) -> str:
     if b5 or q1:
         return "long"
     if b1 or q5:
+        return "short"
+    return "neutral"
+
+
+def _pair_bias_wide(bq: int, qq: int) -> str:
+    """Weite Regel NUR für Replay-Hits (Kerims Vorgabe): auch Q2/Q4 zählen als
+    Richtung, nur Q3 ist neutral. Relativer Vergleich der beiden Quintile —
+    Basis stärker (höheres Q) => long, schwächer => short, gleich => neutral.
+    Das Währungs-Ranking bleibt bewusst bei der strikten Q5/Q1-Regel."""
+    if bq > qq:
+        return "long"
+    if bq < qq:
         return "short"
     return "neutral"
 
@@ -176,7 +189,8 @@ def ranking_snapshot(instrument: str, hit_date: str) -> dict | None:
             "week_start": str(week.date()),
             "base": b,
             "quote": q,
-            "bias": _pair_bias(b["quintile"], q["quintile"]),
+            # Replay-Hits: weite Regel (Q2/Q4 zählen, nur Q3 neutral)
+            "bias": _pair_bias_wide(b["quintile"], q["quintile"]),
         }
     except Exception:
         return None  # Ranking ist Zusatzinfo — Hits müssen auch ohne laden
