@@ -346,13 +346,15 @@ function ReplayRoom({
           return next;
         });
         onEvaluated();
+        // nach Speichern/Skip automatisch zum nächsten Hit
+        setIdx((i) => (hits ? Math.min(hits.length - 1, i + 1) : i));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Fehler");
       } finally {
         setSaving(false);
       }
     },
-    [hit, session, notes, skipReason, onEvaluated],
+    [hit, hits, session, notes, skipReason, onEvaluated],
   );
 
   const evaluatedCount = useMemo(() => {
@@ -428,8 +430,10 @@ function ReplayRoom({
               let cls = "bg-surface2 border-border text-faint";
               let deco = "";
               if (ev) {
-                if (ev.trade_taken === false) deco = "line-through";
-                else cls = "bg-up/20 border-up/40 text-up";
+                if (ev.trade_taken === false) {
+                  cls = "bg-down/20 border-down/40 text-down";
+                  deco = "line-through";
+                } else cls = "bg-up/20 border-up/40 text-up";
               }
               return (
                 <button

@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import pandas as pd
 import numpy as np
@@ -8,6 +9,12 @@ load_dotenv()
 OANDA_API_KEY = os.getenv('OANDA_API_KEY')
 OANDA_URL = os.getenv('OANDA_URL', 'https://api-fxpractice.oanda.com/v3')
 OANDA_ACCOUNT_ID = os.getenv('OANDA_ACCOUNT_ID')
+
+# In-Prozess-TTL-Cache für Tageskerzen. D-Kerzen schließen nur 1×/Tag, aber der
+# Replay-Raum fragt dasselbe Pair mehrfach ab (Hits + find_hit je Bewertung).
+# Ohne Cache = jeder Aufruf ein voller OANDA-Fetch (Render-Kaltstart → langsam).
+_DAILY_CACHE: dict[tuple[str, int], tuple[float, pd.DataFrame]] = {}
+_DAILY_TTL_SEC = 300.0
 
 
 def fetch_live_prices(instruments: list) -> dict:
@@ -51,10 +58,16 @@ GVA_3D_ANCHOR = pd.Timestamp('2026-07-09')
 
 def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
     """Saubere Tageskerzen von OANDA (NY-Alignment 17 Uhr, ohne Wochenenden).
-    Index = normalisiertes Datum, chronologisch. Basis für Scanner UND Replay."""
+    Index = normalisiertes Datum, chronologisch. Basis für Scanner UND Replay.
+    Ergebnis wird 5 min pro (instrument, count) gecacht."""
     if not OANDA_API_KEY:
         print("FEHLER: OANDA_API_KEY fehlt in der .env Datei.")
         return pd.DataFrame()
+
+    cache_key = (instrument, count)
+    cached = _DAILY_CACHE.get(cache_key)
+    if cached and (time.monotonic() - cached[0]) < _DAILY_TTL_SEC:
+        return cached[1]
 
     headers = {
         "Authorization": f"Bearer {OANDA_API_KEY}",
@@ -89,7 +102,9 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
         return df
     df = df.set_index('time')
     df = df[df.index.dayofweek < 5].copy()  # Wochenend-Artefakte raus
-    return df.sort_index()
+    df = df.sort_index()
+    _DAILY_CACHE[cache_key] = (time.monotonic(), df)
+    return df
 
 
 def gva_3d_block_ids(index: pd.DatetimeIndex, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> np.ndarray:
