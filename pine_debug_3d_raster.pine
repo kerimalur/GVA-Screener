@@ -1,5 +1,5 @@
 //@version=5
-// 3D-Raster-Debug: loggt das Startdatum JEDES 3D-Blocks von TradingView.
+// 3D-Raster-Debug: loggt das Startdatum JEDES 3D-Blocks von TradingView (ab 2025).
 // Anwendung: auf OANDA:EURUSD im 1D-Chart hinzufügen, Pine-Logs-Pane öffnen,
 // alle BLOCK,-Zeilen kopieren und Claude geben → Diff gegen /replay/blocks.
 indicator("3D-Raster-Debug", overlay=true)
@@ -8,5 +8,7 @@ f_date(t) => str.format_time(t + 43200000, "yyyy-MM-dd", "America/New_York")
 
 t3 = request.security(syminfo.tickerid, "3D", time, lookahead=barmerge.lookahead_on)
 
-if ta.change(t3) != 0
+// barstate.isconfirmed: nur einmal pro abgeschlossener Kerze loggen,
+// sonst schreibt jeder Preis-Tick der laufenden Kerze eine neue Zeile.
+if ta.change(t3) != 0 and barstate.isconfirmed and time >= timestamp("2025-01-01")
     log.info("BLOCK,{0}", f_date(t3))
