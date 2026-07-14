@@ -29,8 +29,8 @@ Feiertag. Fix: `resample_3d_bars` nutzt `np.busday_count` ab Anker
 0 Mismatches; pytest `tests/test_resample_3d.py` (3 Fälle inkl. Weihnachten).
 
 - [x] 3D-Raster identisch mit TradingView (bewiesen über 16 Monate)
-- [ ] Referenzfall EURUSD März 2025 im Replay-Tab gegenprüfen
-      (erwartet: SHORT gebildet 18.03.2025, Level ≈ 1.0922, Hit 02.04.2025)
+- [x] Referenzfall EURUSD März 2025 verifiziert (Render, 2026-07-14):
+      SHORT gebildet 18.03.2025, Level **1.09224 exakt wie TV**, Hit 02.04.2025
 
 ### Abgleich-Historie (2026-07-14) — 3D-Raster 1 Handelstag verschoben
 
