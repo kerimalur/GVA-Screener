@@ -48,6 +48,46 @@ def get_hits(
     }
 
 
+@replay_router.get("/blocks")
+def get_blocks(
+    pair: str = Query(...),
+    date_from: str = Query(..., alias="from"),
+    date_to: str = Query(..., alias="to"),
+):
+    """Debug für den TV-Raster-Abgleich (GVA_BACKTEST_ROADMAP.md Phase 1):
+    zeigt die 3D-Block-Grenzen inkl. der Tageskerzen pro Block. Damit sieht
+    man direkt, wo das Raster gegen TradingView phasenverschoben ist und ob
+    Feiertags-Kerzen (z.B. Karfreitag) im OANDA-Feed fehlen/existieren."""
+    import numpy as np
+
+    from data_pipeline import GVA_3D_ANCHOR, fetch_daily_oanda
+
+    instrument = normalize_pair(pair)
+    daily = fetch_daily_oanda(instrument, count=5000)
+    if daily.empty:
+        raise HTTPException(status_code=503, detail="Keine OANDA-Daten")
+    df = daily.sort_index().copy()
+    pos = np.arange(len(df))
+    anchor_pos = int(df.index.searchsorted(GVA_3D_ANCHOR))
+    df["block_id"] = (pos - anchor_pos) // 3
+
+    blocks = []
+    for _, grp in df.groupby("block_id"):
+        days = [ts.date().isoformat() for ts in grp.index]
+        if days[-1] < date_from or days[0] > date_to:
+            continue
+        o, c = float(grp["open"].iloc[0]), float(grp["close"].iloc[-1])
+        blocks.append({
+            "start": days[0],
+            "days": days,
+            "open": round(o, 5),
+            "close": round(c, 5),
+            "body_top": round(max(o, c), 5),
+            "body_bot": round(min(o, c), 5),
+        })
+    return {"pair": instrument, "anchor": GVA_3D_ANCHOR.date().isoformat(), "blocks": blocks}
+
+
 class EvaluateRequest(BaseModel):
     instrument: str
     hit_date: str
