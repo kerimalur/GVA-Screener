@@ -3,7 +3,41 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-11
+Stand: 2026-07-14
+
+## Replay — Fundamentale Konfluenz + Kalibrierung (2026-07-14)
+Der GVA-Replay ist nicht mehr rein technisch — er trägt jetzt die fundamentale
+Lage pro Hit und ist gegen TradingView kalibrierbar.
+
+- **Fundamentale Konfluenz (as-of, HIT-Datum):** `/replay/hits` hängt je Hit den
+  Bias an (`fundamentals.ranking_snapshot` → Baseline Zins+Saison + Quintil beider
+  Pair-Währungen, Datum = HIT-Tag, nicht Linien-Bildung). `/replay/evaluate`
+  speichert `ranking_bias` + `ranking_detail` (jsonb, bestehende Spalten in
+  backtest_replay). `/replay/stats` → `by_ranking` (Rückenwind/Gegenwind/Neutral,
+  reine Zählung — Winrate-Split kommt zurück, sobald GVA-Ergebnisse wieder erfasst
+  werden). Frontend-Raum: Badge ↑Rückenwind/↓Gegenwind + Inline „EUR Q5 / USD Q1".
+- **Session-Wahl mit/ohne Fundamentals:** Wizard-Checkbox; `replay_sessions.
+  with_fundamentals` (Migration). Aus = `with_bias=0` (kein Panel-Lookup, schneller).
+- **GVA-Toleranz kalibrierbar:** `collect_hits`/`reconstruct_hits`/`find_hit` +
+  `collect_lines`/`reconstruct_lines` nehmen `size_factor`/`tol_pct` (Default =
+  Scanner-Konstanten). Kalibrier-Panel auf der Replay-Landing: EURUSD letzte 12
+  Monate, zeigt **gebildete Linien** (`/replay/lines`, nicht nur gehittete) in
+  Raum-Darstellung (Raster+Karte), tol/size verstellen + neu laden. Button „Für
+  neue Sessions übernehmen" → globaler Default (localStorage). Jede Session friert
+  ihre Toleranz ein (`replay_sessions.tol_pct/size_factor`, Migration).
+- **Perf:** `data_pipeline.fetch_daily_oanda` hat 5-min In-Prozess-TTL-Cache pro
+  (instrument, count) — Replay fragt dasselbe Pair mehrfach ab. Skip→rot,
+  Speichern→Auto-Weiter im Raum.
+- **Neue Seite `/ml/fundamental-track`** (Nav: Analyse): pro Pair die letzten 52
+  Wochen-Q-Scores beider Währungen (Baseline, as-of) + ob der Markt danach 1W/4W
+  in Bias-Richtung lief. Trefferquote 1W/4W (neutrale Wochen zählen nicht) +
+  Timeline. Backend: `fundamentals.fundamental_track` + `/replay/fundamental-track`.
+  Reine Inspektion der Score-Kalibrierung — NICHT der ML-Backtest (den macht die Engine).
+- **Migrationen** (Supabase `bpggwelpuvbkeudrqoiv`, angewandt): replay_sessions_gva_tuning
+  (tol_pct/size_factor), replay_sessions_with_fundamentals. Lokal in
+  `Backend/replay/migrations_sessions.sql` dokumentiert.
+- **OFFEN:** entfernte Win/Loss/RR-Simulation zurück → dann wird aus by_ranking ein
+  echter Winrate-Split (Rückenwind vs. Gegenwind = die messbare Edge).
 
 ## Ausrichtung (WICHTIG, seit 2026-07-11)
 **Privates Trading-Tool. Kein Verkaufsprodukt mehr.** Fokus: Funktion, Effizienz,
