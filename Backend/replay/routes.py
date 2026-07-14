@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
 from ml.db import select_all, insert, update, delete
 from .fundamentals import ranking_series, ranking_snapshot
-from .gva_history import find_hit, normalize_pair, reconstruct_hits
+from .gva_history import find_hit, normalize_pair, reconstruct_hits, reconstruct_lines
 
 replay_router = APIRouter()
 
@@ -69,6 +69,36 @@ def get_hits(
         "to": date_to,
         "count": len(out),
         "hits": out,
+    }
+
+
+@replay_router.get("/lines")
+def get_lines(
+    pair: str = Query(...),
+    date_from: str = Query(..., alias="from"),
+    date_to: str = Query(..., alias="to"),
+    size_factor: float = Query(default=GVA_SIZE_FACTOR),
+    tol_pct: float = Query(default=GVA_TOL_PCT),
+):
+    """Alle GVA-Linien, die im Zeitraum GEBILDET wurden (nicht nur gehittete) —
+    fürs Kalibrieren der Erkennung gegen TradingView."""
+    try:
+        lines = reconstruct_lines(pair, date_from, date_to, size_factor, tol_pct)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {
+        "pair": normalize_pair(pair),
+        "from": date_from,
+        "to": date_to,
+        "count": len(lines),
+        "lines": [
+            {
+                "line_formed_date": ln["line_formed_date"],
+                "level": ln["level"],
+                "direction": ln["direction"],
+            }
+            for ln in lines
+        ],
     }
 
 

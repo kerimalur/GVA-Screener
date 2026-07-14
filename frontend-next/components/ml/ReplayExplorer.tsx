@@ -818,11 +818,19 @@ export default function ReplayExplorer() {
   );
 }
 
-// ── Kalibrier-Bereich: Toleranz an EURUSD / 12 Monaten testen ──
+interface Line {
+  line_formed_date: string;
+  level: number;
+  direction: "SHORT" | "LONG";
+}
+
+// ── Kalibrier-Bereich: gebildete GVA-Linien an EURUSD / 12 Monaten prüfen,
+// Darstellung wie der Replay-Raum (Raster + Karte), read-only. ──
 function CalibrationPanel() {
   const CAL_PAIR = "EUR_USD";
   const [draft, setDraft] = useState(loadGlobalTune);
-  const [hits, setHits] = useState<Hit[] | null>(null);
+  const [lines, setLines] = useState<Line[] | null>(null);
+  const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -835,12 +843,13 @@ function CalibrationPanel() {
       const from = monthsAgoIso(12);
       const to = todayIso();
       const url =
-        `${API}/replay/hits?pair=${CAL_PAIR}&from=${from}&to=${to}` +
-        `&size_factor=${api.size_factor}&tol_pct=${api.tol_pct}&with_bias=0`;
+        `${API}/replay/lines?pair=${CAL_PAIR}&from=${from}&to=${to}` +
+        `&size_factor=${api.size_factor}&tol_pct=${api.tol_pct}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      setHits(json.hits);
+      setLines(json.lines);
+      setIdx(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler");
     } finally {
@@ -854,16 +863,21 @@ function CalibrationPanel() {
     setTimeout(() => setSaved(false), 2500);
   };
 
+  const line = lines && lines.length > 0 ? lines[Math.min(idx, lines.length - 1)] : null;
+  const seg =
+    "px-2.5 py-1 rounded text-[11px] font-mono font-bold border border-border text-muted hover:text-text transition-colors cursor-pointer disabled:opacity-40";
   const tvSymbol = CAL_PAIR.replace("_", "");
+
   return (
     <div className="rounded border border-border bg-surface2 p-4 space-y-3 anim-slide-up">
       <div className="text-[10px] uppercase tracking-widest text-faint">
         GVA-Erkennung kalibrieren · EURUSD · letzte 12 Monate
       </div>
       <p className="text-[11px] text-muted leading-relaxed">
-        Fehlen Hits vs. TradingView? <b>Toleranz höher</b> + <b>Kerze-2-Grösse tiefer</b> → lockerer,
-        mehr Hits. Defaults = Live-Scanner ({TUNE_DEFAULTS.tolPct} % / {TUNE_DEFAULTS.sizePct} %). Vorschau
-        rein technisch (ohne Fundamentals). „Übernehmen" gilt nur für <b>neu erstellte</b> Sessions.
+        Zeigt alle <b>gebildeten Linien</b> (nicht nur gehittete). Fehlen welche vs. TradingView?
+        <b> Toleranz höher</b> + <b>Kerze-2-Grösse tiefer</b> → lockerer, mehr Linien. Defaults =
+        Live-Scanner ({TUNE_DEFAULTS.tolPct} % / {TUNE_DEFAULTS.sizePct} %). „Übernehmen" gilt nur für
+        <b> neu erstellte</b> Sessions.
       </p>
       <div className="grid grid-cols-2 gap-3 max-w-md">
         <label className="space-y-1">
@@ -893,7 +907,7 @@ function CalibrationPanel() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" icon="ph-arrow-clockwise" onClick={reload} disabled={loading}>
-          {hits === null ? "Laden" : "Neu laden"}
+          {lines === null ? "Laden" : "Neu laden"}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setDraft({ ...TUNE_DEFAULTS })} disabled={loading}>
           Zurücksetzen
@@ -904,45 +918,75 @@ function CalibrationPanel() {
         {saved && <span className="text-[11px] text-up font-mono">✓ übernommen</span>}
       </div>
 
-      {loading && <p className="text-[11px] text-muted font-mono animate-pulse">Rekonstruiere GVA-Hits …</p>}
+      {loading && (
+        <p className="text-[11px] text-muted font-mono animate-pulse">
+          Rekonstruiere gebildete GVA-Linien … (Render-Kaltstart kann dauern)
+        </p>
+      )}
       {error && <p className="text-[12px] text-down font-mono">Fehler: {error}</p>}
-      {hits && (
-        <div className="space-y-2">
+      {lines && lines.length === 0 && (
+        <p className="text-[12px] text-muted">Keine Linien mit diesen Werten in 12 Monaten.</p>
+      )}
+
+      {lines && lines.length > 0 && line && (
+        <div className="space-y-3">
           <div className="text-[12px] font-mono">
-            <b>{hits.length}</b> GVA-Hits gefunden (12 Monate)
+            <b>{lines.length}</b> gebildete GVA-Linien (12 Monate)
           </div>
-          <div className="max-h-56 overflow-y-auto rounded border border-border/50">
-            <table className="w-full text-[11px] font-mono">
-              <thead className="sticky top-0 bg-surface2">
-                <tr className="text-[9px] text-faint uppercase tracking-wider">
-                  <th className="text-left px-2 py-1">Hit-Tag</th>
-                  <th className="text-left px-2 py-1">Richtung</th>
-                  <th className="text-right px-2 py-1">Level</th>
-                  <th className="text-left px-2 py-1">Linie gebildet</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hits.map((h) => (
-                  <tr key={`${h.hit_date}_${h.direction}_${h.level}`} className="border-t border-border/40">
-                    <td className="px-2 py-1">{h.hit_date}</td>
-                    <td className={`px-2 py-1 ${h.direction === "SHORT" ? "text-down" : "text-up"}`}>
-                      {h.direction}
-                    </td>
-                    <td className="px-2 py-1 text-right text-muted">{h.level.toFixed(5)}</td>
-                    <td className="px-2 py-1 text-muted">{h.line_formed_date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="flex items-center justify-between">
+            <button className={seg} onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0}>
+              ◀ Zurück
+            </button>
+            <div className="text-center">
+              <div className="text-[13px] font-bold font-mono">
+                Linie {idx + 1} von {lines.length}
+              </div>
+              <div className="text-[12px] text-muted font-mono">{fmtDateLong(line.line_formed_date)}</div>
+            </div>
+            <button
+              className={seg}
+              onClick={() => setIdx((i) => Math.min(lines.length - 1, i + 1))}
+              disabled={idx === lines.length - 1}
+            >
+              Weiter ▶
+            </button>
           </div>
-          <a
-            href={`https://www.tradingview.com/chart/?symbol=FX:${tvSymbol}&interval=D`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block px-2.5 py-1 rounded text-[11px] font-mono font-bold border border-accent text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
-          >
-            EURUSD in TradingView öffnen ↗
-          </a>
+
+          <div className="flex flex-wrap gap-1">
+            {lines.map((ln, i) => (
+              <button
+                key={`${ln.line_formed_date}_${ln.direction}_${ln.level}`}
+                onClick={() => setIdx(i)}
+                title={`${ln.line_formed_date} ${ln.direction}`}
+                className={`w-7 h-7 rounded border text-[10px] font-mono font-bold transition-colors ${
+                  ln.direction === "SHORT"
+                    ? "bg-down/15 border-down/40 text-down"
+                    : "bg-up/15 border-up/40 text-up"
+                } ${i === idx ? "ring-1 ring-accent" : ""}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded border border-border bg-surface p-3.5 space-y-2 max-w-md">
+            <div className="text-[10px] uppercase tracking-widest text-faint">GVA-Linie gebildet</div>
+            <div className={`text-[15px] font-black font-mono ${line.direction === "SHORT" ? "text-down" : "text-up"}`}>
+              {line.direction} Line @ {line.level.toFixed(5)}
+            </div>
+            <div className="text-[12px] font-mono text-muted">
+              Gebildet am: {fmtDateLong(line.line_formed_date)}
+            </div>
+            <a
+              href={`https://www.tradingview.com/chart/?symbol=FX:${tvSymbol}&interval=D`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block mt-1 px-2.5 py-1 rounded text-[11px] font-mono font-bold border border-accent text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+            >
+              EURUSD in TradingView öffnen ↗
+            </a>
+          </div>
         </div>
       )}
     </div>

@@ -112,6 +112,77 @@ def collect_hits(
     return hits
 
 
+def collect_lines(
+    df_3d: pd.DataFrame,
+    instrument: str,
+    size_factor: float = GVA_SIZE_FACTOR,
+    tol_pct: float = GVA_TOL_PCT,
+) -> list[dict]:
+    """Jede GEBILDETE GVA-Linie (unabhängig davon, ob sie je gehittet wurde) —
+    fürs Kalibrieren gegen TradingView. Gleiche Muster-/Level-Logik wie
+    collect_hits, aber emittiert im Moment der Linien-Bildung."""
+    if df_3d.empty or len(df_3d) < 2:
+        return []
+
+    lines: list[dict] = []
+    for i in range(1, len(df_3d)):
+        prev = df_3d.iloc[i - 1]
+        curr = df_3d.iloc[i]
+        curr_time = df_3d.index[i]
+
+        prev_bull = prev["close"] > prev["open"]
+        prev_bear = prev["close"] < prev["open"]
+        curr_bull = curr["close"] > curr["open"]
+        curr_bear = curr["close"] < curr["open"]
+
+        prev_body = abs(prev["close"] - prev["open"])
+        curr_body = abs(curr["close"] - curr["open"])
+        valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
+        tol = prev_body * tol_pct
+        bot_match = abs(min(prev["open"], prev["close"]) - min(curr["open"], curr["close"])) <= tol
+        top_match = abs(max(prev["open"], prev["close"]) - max(curr["open"], curr["close"])) <= tol
+
+        if prev_bull and curr_bear and valid_size and top_match:
+            lines.append({
+                "direction": "SHORT",
+                "level": float(max(curr["open"], curr["close"])),
+                "line_formed_date": curr_time.date().isoformat(),
+                "signal_high": float(curr["high"]),
+                "signal_low": float(curr["low"]),
+            })
+        if prev_bear and curr_bull and valid_size and bot_match:
+            lines.append({
+                "direction": "LONG",
+                "level": float(min(curr["open"], curr["close"])),
+                "line_formed_date": curr_time.date().isoformat(),
+                "signal_high": float(curr["high"]),
+                "signal_low": float(curr["low"]),
+            })
+    return lines
+
+
+def reconstruct_lines(
+    pair: str,
+    date_from: str,
+    date_to: str,
+    size_factor: float = GVA_SIZE_FACTOR,
+    tol_pct: float = GVA_TOL_PCT,
+) -> list[dict]:
+    """Alle GVA-Linien, die im Zeitraum GEBILDET wurden — fürs Kalibrieren."""
+    instrument = normalize_pair(pair)
+    daily = fetch_daily_oanda(instrument, count=5000)
+    if daily.empty:
+        return []
+    df_3d = resample_3d_bars(daily)
+    lines = [
+        {**ln, "instrument": instrument}
+        for ln in collect_lines(df_3d, instrument, size_factor, tol_pct)
+        if date_from <= ln["line_formed_date"] <= date_to
+    ]
+    lines.sort(key=lambda ln: ln["line_formed_date"])
+    return lines
+
+
 def refine_hit_day(hit: dict, daily: pd.DataFrame) -> str:
     """Tagesgenauer Hit-Tag innerhalb des 3D-Blocks: erster Tag (ab Block-
     Start), an dem die Linie tatsächlich berührt wurde. Fallback: Block-Datum."""
