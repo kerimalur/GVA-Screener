@@ -18,7 +18,21 @@ auf TradingView — erst dann wird darauf Auswertungslogik gebaut.
         Gebildet · Hit) + `FORMED,`/`HIT,`-Logzeilen im Pine-Logs-Pane
         (`waagerechte_szenarien_pro_v4.pine`, Gruppe «🔍 Replay-Vergleich»)
   - [ ] App-Seite: Hits als CSV ziehen (`/replay/hits`) und gegen Pine-Logs diffen
-### Abgleich-Stand (2026-07-14) — 3D-Raster 1 Handelstag verschoben
+### GELÖST (2026-07-14): 3D-Raster — TV zählt Kalender-Wochentage
+
+Pine-Log-Dump (alle TV-Blockstarts 01/2025–07/2026) bewies: TradingView
+gruppiert 3D-Kerzen über **Kalender-Wochentage (Mo–Fr)** — Feiertage ohne
+Kerze (25.12., 01.01.) zählen als Slot MIT (→ 2-Kerzen-Blöcke {24.12., 26.12.}
+und {02.01., 05.01.}). Das Backend zählte echte Kerzen → Phase kippte an jedem
+Feiertag. Fix: `resample_3d_bars` nutzt `np.busday_count` ab Anker
+`2026-07-09` (bestätigter TV-Blockstart). Verifiziert: 118 TV-Blöcke,
+0 Mismatches; pytest `tests/test_resample_3d.py` (3 Fälle inkl. Weihnachten).
+
+- [x] 3D-Raster identisch mit TradingView (bewiesen über 16 Monate)
+- [ ] Referenzfall EURUSD März 2025 im Replay-Tab gegenprüfen
+      (erwartet: SHORT gebildet 18.03.2025, Level ≈ 1.0922, Hit 02.04.2025)
+
+### Abgleich-Historie (2026-07-14) — 3D-Raster 1 Handelstag verschoben
 
 Erster Referenzfall EURUSD, erste SHORT-Linie 2025:
 

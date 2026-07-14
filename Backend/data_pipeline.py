@@ -40,12 +40,13 @@ def fetch_live_prices(instruments: list) -> dict:
             out[pair] = {"bid": bid, "ask": ask, "mid": (bid + ask) / 2}
     return out
 
-# 3D-Anker: ein von TradingView verifizierter Block-START (6. Mai 2025 ist bei
-# EURUSD der Beginn des 3D-Blocks {6,7,8}). TradingView gruppiert je 3
-# AUFEINANDERFOLGENDE echte Handelstage und überspringt Feiertage — deshalb
-# zählen wir Kerzen-Positionen (nicht Kalender-Werktage, die durch Feiertage
-# über die Zeit gegen TV driften).
-GVA_3D_ANCHOR = pd.Timestamp('2025-05-06')
+# 3D-Anker: ein von TradingView verifizierter Block-START. TradingView zählt
+# KALENDER-Wochentage (Mo-Fr) in 3er-Gruppen — Feiertage ohne Kerze (25.12.,
+# 01.01.) zählen als Slot MIT, ein Block kann also nur 2 echte Kerzen haben.
+# Empirisch bewiesen per Pine-Log-Dump 01/2025-07/2026 (alle 132 Blockstarts,
+# inkl. 2-Kerzen-Bloecke {24.12.,26.12.} und {02.01.,05.01.}):
+# GVA_BACKTEST_ROADMAP.md Phase 1. 2026-07-09 ist ein bestaetigter Blockstart.
+GVA_3D_ANCHOR = pd.Timestamp('2026-07-09')
 
 
 def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
@@ -92,15 +93,17 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
 
 
 def resample_3d_bars(df_daily: pd.DataFrame, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> pd.DataFrame:
-    """3D-Kerzen wie TradingView: je 3 AUFEINANDERFOLGENDE echte Tageskerzen,
-    phasiert am Anker-Block-Start. Feiertage (fehlende Kerzen) verschieben die
-    Phase NICHT gegen TV, weil nach Kerzen-Position gruppiert wird."""
+    """3D-Kerzen wie TradingView: 3er-Gruppen ueber KALENDER-Wochentage (Mo-Fr),
+    phasiert am Anker. Feiertags-Slots ohne Kerze zaehlen mit (TV-Regel, siehe
+    Kommentar am Anker) — ein Block kann deshalb weniger als 3 Kerzen haben."""
     if df_daily.empty:
         return df_daily
     df = df_daily.sort_index().copy()
-    pos = np.arange(len(df))
-    anchor_pos = int(df.index.searchsorted(pd.Timestamp(anchor)))  # 1. Kerze am/nach Anker
-    df['block_id'] = (pos - anchor_pos) // 3  # floor-Division auch für negative Positionen
+    # Wochentags-Index jeder Kerze relativ zum Anker (negativ = vor dem Anker);
+    # numpy-// floort auch negative Werte -> Blockgrenzen stimmen rueckwirkend.
+    days = df.index.values.astype('datetime64[D]')
+    idx = np.busday_count(np.datetime64(pd.Timestamp(anchor).date()), days)
+    df['block_id'] = idx // 3
     df_3d = df.groupby('block_id').agg({
         'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum',
     })

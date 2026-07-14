@@ -527,8 +527,9 @@ function ReplayRoom({
 
       <p className="text-[11px] text-faint leading-relaxed border-t border-border/50 pt-3">
         Tastenkürzel: ← → blättern. Hits werden mit dem identischen 3D-Raster wie der Live-Screener
-        rekonstruiert (Anker 21.04.2026). Rein technisch — nur GVA-Linien: gebildet am, gehittet am, Preis.
-        Keine SL/TP/R:R-Simulation (entfernt für den 1:1-Vergleich mit TradingView, siehe GVA_BACKTEST_ROADMAP.md).
+        rekonstruiert (TV-Regel: 3er-Gruppen über Kalender-Wochentage, Feiertags-Slots zählen mit). Rein
+        technisch — nur GVA-Linien: gebildet am, gehittet am, Preis. Keine SL/TP/R:R-Simulation (entfernt
+        für den 1:1-Vergleich mit TradingView, siehe GVA_BACKTEST_ROADMAP.md).
       </p>
     </div>
   );
