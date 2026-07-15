@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchScreener, type MarketData } from "@/lib/gva/api";
-import type { WeekPlanPair } from "@/lib/dashboard/weekPlan";
+import type { WeekPlanPair, WeekPlanGroup } from "@/lib/dashboard/weekPlan";
 
 /** "AUD/USD" | "AUDUSD" → "AUDUSD" für robustes Matching gegen MarketData.pair */
 const norm = (s: string) => s.replace(/[^a-z]/gi, "").toUpperCase();
@@ -37,7 +37,42 @@ function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString("de-DE", { weekday: "short" });
 }
 
-export default function WeekPlan({ pairs }: { pairs: WeekPlanPair[] }) {
+function CurrencyGroups({ groups }: { groups: WeekPlanGroup[] }) {
+  if (groups.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      {groups.map((g) => (
+        <div
+          key={g.ccy}
+          className="flex items-start gap-3 py-1.5 border-t border-border/40 first:border-t-0"
+        >
+          <span className="w-36 shrink-0 font-mono font-bold text-xs">{g.label}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {g.ideas.map((i) => (
+              <span
+                key={i.pair}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  i.direction === "long" ? "bg-up/15 text-up" : "bg-down/15 text-down"
+                }`}
+              >
+                {i.pair}
+                <span className="opacity-70">{i.direction === "long" ? "L" : "S"}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function WeekPlan({
+  pairs,
+  groups,
+}: {
+  pairs: WeekPlanPair[];
+  groups: WeekPlanGroup[];
+}) {
   const [byPair, setByPair] = useState<Record<string, MarketData>>({});
   const [live, setLive] = useState(false);
 
@@ -63,16 +98,29 @@ export default function WeekPlan({ pairs }: { pairs: WeekPlanPair[] }) {
     };
   }, []);
 
-  if (pairs.length === 0) {
+  if (pairs.length === 0 && groups.length === 0) {
     return (
       <p className="text-sm text-muted">
-        Diese Woche keine Q5×Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.
+        Diese Woche keine Q5/Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.
       </p>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {groups.length > 0 && (
+        <div>
+          <div className="text-xs text-muted mb-1">Nach Währung — Extremwährung × ihre Pairs</div>
+          <CurrencyGroups groups={groups} />
+        </div>
+      )}
+
+      {pairs.length === 0 ? (
+        <p className="text-sm text-muted">
+          Keine Q5×Q1-Paarung (beide Seiten extrem) diese Woche — nur einseitiger Rückenwind oben.
+        </p>
+      ) : (
+      <div className="space-y-2">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -130,6 +178,8 @@ export default function WeekPlan({ pairs }: { pairs: WeekPlanPair[] }) {
         Kontrolle = Macro-Terminal-Richtung vs. Q5/Q1. ⚠ Divergenz → im Macro Terminal nachbohren.
         GVA-Nähe live vom Scanner (HIT = Linie berührt, ○ = ≤100 Pips).
       </p>
+      </div>
+      )}
     </div>
   );
 }

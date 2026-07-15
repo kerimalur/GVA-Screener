@@ -55,7 +55,7 @@ export default async function Page() {
         title={`Diese Woche — Q5/Q1 × GVA${weekPlan.weekStart ? ` · ${weekPlan.weekStart}` : ""}`}
         subtitle="Handelbare Extrem-Paare mit Macro-Kontrolle und Live-GVA-Nähe"
       >
-        <WeekPlan pairs={weekPlan.pairs} />
+        <WeekPlan pairs={weekPlan.pairs} groups={weekPlan.groups} />
       </Panel>
       <Panel
         title="Wirtschafts-News"

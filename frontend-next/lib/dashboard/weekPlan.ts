@@ -45,9 +45,17 @@ export interface WeekPlanPair {
   events: WeekPlanEvent[];
 }
 
+/** Schlichte Währungs-Ansicht: Extremwährung + ihre abgeleiteten Pairs */
+export interface WeekPlanGroup {
+  ccy: string;
+  label: string; // z.B. "AUD stark (Q5)"
+  ideas: { pair: string; direction: "long" | "short" }[];
+}
+
 export interface WeekPlanData {
   weekStart: string | null;
   pairs: WeekPlanPair[];
+  groups: WeekPlanGroup[];
 }
 
 const opposite = (d: Exclude<BiasDirection, "NEUTRAL">): Exclude<BiasDirection, "NEUTRAL"> =>
@@ -179,5 +187,11 @@ export async function loadWeekPlan(): Promise<WeekPlanData> {
     };
   });
 
-  return { weekStart: ranking.weekStart, pairs };
+  const groups: WeekPlanGroup[] = ranking.pairIdeas.groups.map((g) => ({
+    ccy: g.ccy,
+    label: g.label,
+    ideas: g.ideas.map((i) => ({ pair: i.pair, direction: i.direction })),
+  }));
+
+  return { weekStart: ranking.weekStart, pairs, groups };
 }
