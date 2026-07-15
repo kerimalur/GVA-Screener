@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 import Panel from "@/components/layout/Panel";
 import { Field, Select } from "@/components/ui/Field";
 import { SkeletonRows } from "@/components/ui/Skeleton";
-import { toast } from "@/components/ui/Toaster";
+import { useCachedFetch } from "@/lib/hooks/useCachedFetch";
 
 /**
  * Pair-Fundamental-Track: für ein Pair die letzten 52 Wochen-Q-Scores (Baseline,
@@ -89,30 +89,46 @@ function RateTile({ label, s }: { label: string; s?: Summary }) {
   );
 }
 
+const RANGE_PRESETS = [
+  { key: "52", label: "52 Wochen", weeks: 52 },
+  { key: "104", label: "2 Jahre", weeks: 104 },
+  { key: "260", label: "5 Jahre", weeks: 260 },
+  { key: "520", label: "10 Jahre", weeks: 520 },
+  { key: "custom", label: "Eigener Zeitraum", weeks: 0 },
+] as const;
+
 export default function FundamentalTrack() {
   const [pair, setPair] = useState("EUR_USD");
-  const [track, setTrack] = useState<Track | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<(typeof RANGE_PRESETS)[number]["key"]>("52");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  const load = useCallback((p: string) => {
-    setLoading(true);
-    fetch(`${API}/replay/fundamental-track?pair=${p}&weeks=52`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setTrack)
-      .catch(() => toast.error("Track konnte nicht geladen werden (Backend wach?)"))
-      .finally(() => setLoading(false));
-  }, []);
+  // Custom-Range erst laden, wenn beide Daten gesetzt sind (url=null = warten).
+  const url = useMemo(() => {
+    if (range === "custom") {
+      return from && to
+        ? `${API}/replay/fundamental-track?pair=${pair}&from=${from}&to=${to}`
+        : null;
+    }
+    return `${API}/replay/fundamental-track?pair=${pair}&weeks=${range}`;
+  }, [pair, range, from, to]);
 
-  useEffect(() => {
-    load(pair);
-  }, [pair, load]);
+  // Stale-first: letzter Stand sofort aus localStorage, Refresh im Hintergrund.
+  const { data: track, error, loading } = useCachedFetch<Track>(`ft:${url}`, url);
 
   const biasCls = (b: string) =>
     b === "long" ? "text-up" : b === "short" ? "text-down" : "text-muted";
 
+  const rangeLabel =
+    range === "custom"
+      ? from && to
+        ? `${from} – ${to}`
+        : "Von/Bis wählen"
+      : `letzte ${RANGE_PRESETS.find((r) => r.key === range)?.label}`;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <Field label="Pair">
           <Select value={pair} onChange={(e) => setPair(e.target.value)}>
             {FX_INSTRUMENTS.map((i) => (
@@ -122,10 +138,51 @@ export default function FundamentalTrack() {
             ))}
           </Select>
         </Field>
-        <span className="text-[11px] text-muted mt-5">letzte 52 Wochen · Baseline (Zins+Saison), as-of</span>
+        <Field label="Zeitraum">
+          <Select value={range} onChange={(e) => setRange(e.target.value as typeof range)}>
+            {RANGE_PRESETS.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {range === "custom" && (
+          <>
+            <Field label="Von">
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="bg-surface2 border border-border rounded px-2 py-1.5 text-sm font-mono"
+              />
+            </Field>
+            <Field label="Bis">
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="bg-surface2 border border-border rounded px-2 py-1.5 text-sm font-mono"
+              />
+            </Field>
+          </>
+        )}
+        <span className="text-[11px] text-muted pb-2">
+          {rangeLabel} · Baseline (Zins+Saison), as-of
+        </span>
       </div>
 
-      {loading ? (
+      {error ? (
+        <Panel>
+          <p className="p-5 text-sm text-down font-mono">
+            Track konnte nicht geladen werden ({error}) — Backend wach?
+          </p>
+        </Panel>
+      ) : url === null ? (
+        <Panel>
+          <p className="p-5 text-sm text-muted">Von- und Bis-Datum wählen.</p>
+        </Panel>
+      ) : loading ? (
         <Panel>
           <SkeletonRows rows={6} />
         </Panel>

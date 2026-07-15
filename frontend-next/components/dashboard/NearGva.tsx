@@ -2,13 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { fetchScreener, sortByDistance, type MarketData } from "@/lib/gva/api";
+import { biasReason, pairBias } from "@/lib/ml/pairBias";
 
 /** Alle Pairs innerhalb PIP_LIMIT Pips einer GVA-Linie — Schnellübersicht wie
  *  der Market-Scanner, unabhängig vom Q5/Q1-Wochenplan. */
 const PIP_LIMIT = 50;
 const POLL_MS = 15_000;
 
-function Box({ md }: { md: MarketData }) {
+/** Wochen-Ranking-Abgleich: bestätigt das Q5/Q1-Ranking die Linien-Richtung?
+ *  SHORT-Linie = Short-Trade, LONG-Linie = Long-Trade. Q2–Q4 = kein Badge. */
+function RankingBadge({ md, quintiles }: { md: MarketData; quintiles: Record<string, number> }) {
+  if (!md.near) return null;
+  const [base, quote] = md.pair.split("/");
+  if (!base || !quote) return null;
+  const bias = pairBias(quintiles[base], quintiles[quote]);
+  if (bias === "neutral") return null;
+  const lineDir = md.near === "LONG" ? "long" : "short";
+  const reason = biasReason(base, quote, quintiles[base], quintiles[quote]);
+  return bias === lineDir ? (
+    <div className="font-mono text-[10px] text-up mt-0.5">✓ {reason}</div>
+  ) : (
+    <div className="font-mono text-[10px] text-down/80 mt-0.5">✗ gegen Ranking ({reason})</div>
+  );
+}
+
+function Box({ md, quintiles }: { md: MarketData; quintiles: Record<string, number> }) {
   const hit = md.status === "HIT" || md.triggered;
   const cls = md.near === "LONG" ? "text-up" : "text-down";
   return (
@@ -23,11 +41,12 @@ function Box({ md }: { md: MarketData }) {
           </>
         )}
       </div>
+      <RankingBadge md={md} quintiles={quintiles} />
     </div>
   );
 }
 
-export default function NearGva() {
+export default function NearGva({ quintiles = {} }: { quintiles?: Record<string, number> }) {
   const [near, setNear] = useState<MarketData[]>([]);
   const [state, setState] = useState<"loading" | "ok" | "offline">("loading");
 
@@ -71,7 +90,7 @@ export default function NearGva() {
   return (
     <div className="flex flex-wrap gap-2">
       {near.map((md) => (
-        <Box key={md.pair} md={md} />
+        <Box key={md.pair} md={md} quintiles={quintiles} />
       ))}
     </div>
   );

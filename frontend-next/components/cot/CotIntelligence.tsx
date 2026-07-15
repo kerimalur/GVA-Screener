@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
+import { useCachedFetch } from "@/lib/hooks/useCachedFetch";
 import type { CotIntelData, HeatmapRow, ScanItem } from "@/lib/data/cotIntel";
 import type { CurrencySignal } from "@/lib/calc/cotIntel";
 import { CCY_FLAGS } from "@/lib/constants/flags";
@@ -26,16 +27,9 @@ function flag(ccy: string): string {
 }
 
 export default function CotIntelligence() {
-  const [data, setData] = useState<CotIntelData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Stale-first: letzter Stand aus localStorage sofort, Refresh im Hintergrund.
+  const { data, error } = useCachedFetch<CotIntelData>("cot-intel", "/api/cot/intelligence");
   const [tab, setTab] = useState<Tab>("signale");
-
-  useEffect(() => {
-    fetch("/api/cot/intelligence")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => (d.error ? Promise.reject(new Error(d.error)) : setData(d)))
-      .catch((e) => setError(e instanceof Error ? e.message : "Fehler"));
-  }, []);
 
   if (error) return <p className="text-down text-sm font-mono">Ladefehler: {error}</p>;
   if (!data) return <p className="text-muted text-sm font-mono animate-pulse">Lade COT-Positionierungsdaten …</p>;

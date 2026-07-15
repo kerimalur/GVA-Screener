@@ -9,6 +9,7 @@ erste Aufruf nach Kaltstart die Daten-Fetches, danach Lookups in ms.
 """
 from __future__ import annotations
 
+import time
 from functools import lru_cache
 
 import numpy as np
@@ -79,23 +80,53 @@ def ranking_series(instrument: str, date_from: str, date_to: str) -> list[dict]:
         return []
 
 
-def fundamental_track(instrument: str, weeks: int = 52) -> dict:
-    """Pro Pair: die letzten `weeks` Wochen-Q-Scores (as-of, Baseline) beider
-    Währungen + ob der Markt danach 1W/4W in Bias-Richtung lief. Reine
-    Inspektion (kein Backtest-Engine) — zeigt, wie gut der Score kalibriert war.
+# Ergebnis-Cache: die Rechnung (Panel-Lookups + OANDA-Fenster) ist pro Pair
+# teuer, die Daten ändern sich aber höchstens täglich → 1 h TTL reicht.
+_TRACK_TTL_S = 3600
+_TRACK_CACHE: dict[tuple, tuple[float, dict]] = {}
+
+
+def fundamental_track(
+    instrument: str,
+    weeks: int = 52,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
+    """Pro Pair: Wochen-Q-Scores (as-of, Baseline) beider Währungen + ob der
+    Markt danach 1W/4W in Bias-Richtung lief. Reine Inspektion (kein
+    Backtest-Engine) — zeigt, wie gut der Score kalibriert war.
+
+    Zeitraum: entweder die letzten `weeks` Wochen (Default) ODER ein explizites
+    Von/Bis-Fenster (`date_from`/`date_to`, ISO) — dann gilt `weeks` nicht.
 
     Bias-Richtung: _pair_bias(base_q, quote_q). ret = Close-to-Close des Pairs
     über 1 bzw. 4 Wochen ab Wochen-Start. Treffer = Vorzeichen passt zum Bias
     (neutral => kein Treffer-Zähler).
     """
+    key = (normalize_pair(instrument), weeks, date_from, date_to)
+    cached = _TRACK_CACHE.get(key)
+    if cached and time.time() - cached[0] < _TRACK_TTL_S:
+        return cached[1]
+    result = _fundamental_track_uncached(*key)
+    _TRACK_CACHE[key] = (time.time(), result)
+    return result
+
+
+def _fundamental_track_uncached(
+    inst: str, weeks: int, date_from: str | None, date_to: str | None
+) -> dict:
     from data_pipeline import fetch_daily_oanda
 
-    inst = normalize_pair(instrument)
     flat = inst.replace("_", "")
     base, quote = flat[:3], flat[3:6]
-    # Vorlauf für die 4W-Forward-Fenster der jüngsten Wochen
-    lo = (pd.Timestamp.today() - pd.Timedelta(weeks=weeks + 6)).normalize()
-    hi = pd.Timestamp.today().normalize()
+    explicit_range = bool(date_from and date_to)
+    if explicit_range:
+        lo = pd.Timestamp(date_from).normalize()
+        hi = min(pd.Timestamp(date_to), pd.Timestamp.today()).normalize()
+    else:
+        # Vorlauf für die 4W-Forward-Fenster der jüngsten Wochen
+        lo = (pd.Timestamp.today() - pd.Timedelta(weeks=weeks + 6)).normalize()
+        hi = pd.Timestamp.today().normalize()
     series = ranking_series(inst, str(lo.date()), str(hi.date()))
     if not series:
         return {"pair": inst, "base_ccy": base, "quote_ccy": quote, "weeks": [], "summary": {}}
@@ -138,7 +169,8 @@ def fundamental_track(instrument: str, weeks: int = 52) -> dict:
                 row[f"hit_{label}"] = None  # neutral zählt nicht
         rows.append(row)
 
-    rows = rows[-weeks:]
+    if not explicit_range:
+        rows = rows[-weeks:]
 
     def summarize(label: str) -> dict:
         decided = [r[f"hit_{label}"] for r in rows if r[f"hit_{label}"] is not None]

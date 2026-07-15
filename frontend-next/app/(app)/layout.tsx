@@ -1,5 +1,6 @@
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
+import Prefetcher from "@/components/layout/Prefetcher";
 
 // Shell für alle eingeloggten Seiten; /login und /auth/* bleiben ohne Chrome.
 export default function AppLayout({
@@ -9,6 +10,7 @@ export default function AppLayout({
 }>) {
   return (
     <div className="flex min-h-screen">
+      <Prefetcher />
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar />

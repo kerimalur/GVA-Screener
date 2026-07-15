@@ -56,6 +56,8 @@ export interface WeekPlanData {
   weekStart: string | null;
   pairs: WeekPlanPair[];
   groups: WeekPlanGroup[];
+  /** Konfidenz-Quintil je Währung (Champion) — für den Ranking-Abgleich an GVA-Linien */
+  quintiles: Record<string, number>;
 }
 
 const opposite = (d: Exclude<BiasDirection, "NEUTRAL">): Exclude<BiasDirection, "NEUTRAL"> =>
@@ -193,5 +195,8 @@ export async function loadWeekPlan(): Promise<WeekPlanData> {
     ideas: g.ideas.map((i) => ({ pair: i.pair, direction: i.direction })),
   }));
 
-  return { weekStart: ranking.weekStart, pairs, groups };
+  const quintiles: Record<string, number> = {};
+  for (const r of ranking.champion) quintiles[r.ccy] = r.confidence_quintile;
+
+  return { weekStart: ranking.weekStart, pairs, groups, quintiles };
 }

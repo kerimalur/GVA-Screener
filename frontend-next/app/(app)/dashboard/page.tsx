@@ -60,9 +60,9 @@ export default async function Page() {
       </Panel>
       <Panel
         title="Nahe GVA-Linien — ≤ 50 Pips"
-        subtitle="Live-Übersicht aller Pairs kurz vor einer Linie (wie Market-Scanner), unabhängig vom Wochenplan"
+        subtitle="Live-Übersicht aller Pairs kurz vor einer Linie (wie Market-Scanner), unabhängig vom Wochenplan · ✓ = Wochen-Ranking (Q5/Q1) bestätigt die Linien-Richtung, ✗ = widerspricht"
       >
-        <NearGva />
+        <NearGva quintiles={weekPlan.quintiles} />
       </Panel>
       <Panel
         title="Wirtschafts-News"

@@ -3,7 +3,33 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-14
+Stand: 2026-07-15
+
+## Performance-Paket + Track-Zeiträume + Q-Score an GVA-Linien (2026-07-15)
+Spec: `docs/superpowers/specs/2026-07-15-performance-fundamental-track-qscore-design.md`
+- **Keep-Alive:** `.github/workflows/keepalive.yml` pingt alle 10 min
+  `/api/health` → Render (Free) schläft nicht mehr ein. Zusätzlich Panel-Warmup
+  als Startup-Thread in `Backend/main.py` (baut das 25J-Panel beim Boot vor).
+- **Backend-Cache:** `fundamental_track` Ergebnis-TTL-Cache 1 h pro
+  (pair, weeks, from, to). Endpoint nimmt neu `from`/`to` (ISO) ODER
+  `weeks` (Limit 4…520 = 10 J).
+- **Frontend flüssig:** `loadRankingData` in `unstable_cache` (5 min, geteilt
+  von /ml/ranking + Dashboard-WeekPlan). Neuer `Prefetcher` im (app)-Layout:
+  weckt Render sofort nach Login + wärmt `/api/cot/intelligence`, `/api/ml/season`
+  und EURUSD-Track, prefetcht Analyse-Routen (1× pro Session). Stale-first-Hook
+  `lib/hooks/useCachedFetch.ts` (localStorage, quota-sicher) in COT Intelligence
+  + Fundamental-Track — letzter Stand erscheint sofort, Refresh im Hintergrund.
+  Season-Matrix bleibt ohne localStorage (zu gross), profitiert vom Warmup.
+- **Fundamental-Track Zeiträume:** UI-Presets 52 W / 2 J / 5 J / 10 J + eigener
+  Von–Bis-Zeitraum; funktioniert für alle 28 Pairs (Selector gab es schon,
+  Pair-Wechsel ist jetzt gecacht statt Timeout).
+- **Q-Score an GVA-Linien (Dashboard):** `lib/ml/pairBias.ts` (strikte
+  Q5/Q1-Regel, identisch Backend `_pair_bias`). NearGva-Boxen zeigen Badge:
+  ✓ grün „CHF Q1" wenn Ranking die Linien-Richtung bestätigt, ✗ „gegen Ranking"
+  bei Widerspruch, Q2–Q4 → kein Badge. Quintile kommen via WeekPlan (gecacht).
+- **OFFEN (manuell):** Workflow „Render Keep-Alive" erscheint nach Push;
+  einmal manuell dispatchen zum Test. GH-Cron kann sich um Minuten verzögern —
+  Login-Warmup fängt das ab.
 
 ## Replay — Fundamentale Konfluenz + Kalibrierung (2026-07-14)
 Der GVA-Replay ist nicht mehr rein technisch — er trägt jetzt die fundamentale

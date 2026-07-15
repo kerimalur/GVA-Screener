@@ -293,12 +293,25 @@ def _macro_loop():
         time.sleep(MACRO_INTERVAL)
 
 
+def _fundamentals_warmup():
+    """Baut das 25J-Feature-Panel einmal vor (Kaltstart), damit der erste
+    Fundamental-Track-/Replay-Bias-Request nicht minutenlang Daten zieht."""
+    try:
+        from replay.fundamentals import _panel
+        t0 = time.time()
+        panel = _panel()
+        print(f"Fundamental-Panel vorgewärmt: {len(panel)} Zeilen in {time.time() - t0:.1f}s")
+    except Exception as e:
+        print(f"Panel-Warmup Fehler (nicht fatal): {e}")
+
+
 @app.on_event("startup")
 def start_background_refresh():
     load_state()
     threading.Thread(target=_zones_loop, daemon=True).start()
     threading.Thread(target=_price_loop, daemon=True).start()
     threading.Thread(target=_macro_loop, daemon=True).start()
+    threading.Thread(target=_fundamentals_warmup, daemon=True).start()
 
 
 @app.get("/api/screener")

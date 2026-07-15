@@ -215,10 +215,13 @@ def get_trades(pair: str | None = Query(default=None)):
 @replay_router.get("/fundamental-track")
 def get_fundamental_track(
     pair: str = Query(...),
-    weeks: int = Query(default=52, ge=4, le=260),
+    weeks: int = Query(default=52, ge=4, le=520),
+    date_from: str | None = Query(default=None, alias="from"),
+    date_to: str | None = Query(default=None, alias="to"),
 ):
-    """Pair-Fundamental-Timeline: Wochen-Q-Scores + 1W/4W Forward-Treffer."""
-    return fundamental_track(pair, weeks)
+    """Pair-Fundamental-Timeline: Wochen-Q-Scores + 1W/4W Forward-Treffer.
+    Entweder letzte `weeks` Wochen ODER explizites from/to-Fenster (ISO)."""
+    return fundamental_track(pair, weeks, date_from, date_to)
 
 
 @replay_router.get("/rankings")

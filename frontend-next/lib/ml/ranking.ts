@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 
@@ -96,7 +97,13 @@ export function derivePairIdeas(rows: RankingRow[]): PairIdeas {
   return { best, groups };
 }
 
-export async function loadRankingData(): Promise<RankingData> {
+// Rankings ändern sich wöchentlich (Sa-Job) — 5 min Server-Cache spart die
+// ~7 Supabase-Roundtrips pro Seitenaufruf (Ranking-Seite + Dashboard-WeekPlan).
+export const loadRankingData = unstable_cache(loadRankingDataUncached, ["ml-ranking-v1"], {
+  revalidate: 300,
+});
+
+async function loadRankingDataUncached(): Promise<RankingData> {
   const sb = createServiceClient();
 
   const { data: latest } = await sb
