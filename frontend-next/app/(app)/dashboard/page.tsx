@@ -1,6 +1,7 @@
 import Panel from "@/components/layout/Panel";
 import NewsPanel from "@/components/dashboard/NewsPanel";
 import WeekPlan from "@/components/dashboard/WeekPlan";
+import NearGva from "@/components/dashboard/NearGva";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { tryQuery } from "@/lib/data/util";
@@ -56,6 +57,12 @@ export default async function Page() {
         subtitle="Handelbare Extrem-Paare mit Macro-Kontrolle und Live-GVA-Nähe"
       >
         <WeekPlan pairs={weekPlan.pairs} groups={weekPlan.groups} />
+      </Panel>
+      <Panel
+        title="Nahe GVA-Linien — ≤ 50 Pips"
+        subtitle="Live-Übersicht aller Pairs kurz vor einer Linie (wie Market-Scanner), unabhängig vom Wochenplan"
+      >
+        <NearGva />
       </Panel>
       <Panel
         title="Wirtschafts-News"

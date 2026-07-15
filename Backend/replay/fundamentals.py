@@ -52,18 +52,6 @@ def _pair_bias(bq: int, qq: int) -> str:
     return "neutral"
 
 
-def _pair_bias_wide(bq: int, qq: int) -> str:
-    """Weite Regel NUR für Replay-Hits (Kerims Vorgabe): auch Q2/Q4 zählen als
-    Richtung, nur Q3 ist neutral. Relativer Vergleich der beiden Quintile —
-    Basis stärker (höheres Q) => long, schwächer => short, gleich => neutral.
-    Das Währungs-Ranking bleibt bewusst bei der strikten Q5/Q1-Regel."""
-    if bq > qq:
-        return "long"
-    if bq < qq:
-        return "short"
-    return "neutral"
-
-
 def ranking_series(instrument: str, date_from: str, date_to: str) -> list[dict]:
     """Alle Wochen-Rankings eines Pairs im Zeitraum — fürs Vorab-Laden im
     Backtest-Lab (ein Request statt ein Lookup pro Trade-Datum)."""
@@ -189,8 +177,9 @@ def ranking_snapshot(instrument: str, hit_date: str) -> dict | None:
             "week_start": str(week.date()),
             "base": b,
             "quote": q,
-            # Replay-Hits: weite Regel (Q2/Q4 zählen, nur Q3 neutral)
-            "bias": _pair_bias_wide(b["quintile"], q["quintile"]),
+            # Replay-Hits: strikte Q5/Q1-Regel (Kerims Vorgabe) — nur die
+            # Extrem-Quintile geben Richtung, Q2–Q4 gelten als neutral.
+            "bias": _pair_bias(b["quintile"], q["quintile"]),
         }
     except Exception:
         return None  # Ranking ist Zusatzinfo — Hits müssen auch ohne laden

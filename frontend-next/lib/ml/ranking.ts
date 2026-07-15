@@ -36,6 +36,8 @@ export interface PairIdeas {
 
 export interface RankingData {
   weekStart: string | null;
+  /** Zeitpunkt des letzten Schreibens der aktuellen Wochen-Rankings (ISO) */
+  updatedAt: string | null;
   horizon: number | null;
   champion: RankingRow[];
   baseline: RankingRow[];
@@ -107,12 +109,16 @@ export async function loadRankingData(): Promise<RankingData> {
   const champion: RankingRow[] = [];
   const baseline: RankingRow[] = [];
   let horizon: number | null = null;
+  let updatedAt: string | null = null;
   if (weekStart) {
     const { data: rows } = await sb
       .from("ml_weekly_rankings")
-      .select("ccy,model,horizon,score,confidence_quintile,top_features")
+      .select("ccy,model,horizon,score,confidence_quintile,top_features,created_at")
       .eq("week_start", weekStart);
     for (const r of rows ?? []) {
+      if (r.created_at && (updatedAt === null || r.created_at > updatedAt)) {
+        updatedAt = r.created_at as string;
+      }
       const row: RankingRow = {
         ccy: r.ccy,
         score: r.score ?? 0,
@@ -157,6 +163,7 @@ export async function loadRankingData(): Promise<RankingData> {
 
   return {
     weekStart,
+    updatedAt,
     horizon,
     champion,
     baseline,

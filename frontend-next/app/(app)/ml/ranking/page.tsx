@@ -179,6 +179,9 @@ export default async function Page() {
     m && m.total > 0
       ? `${((m.hits / m.total) * 100).toFixed(1)} % (n=${m.total})`
       : "– noch keine gereiften Wochen";
+  const updated = d.updatedAt
+    ? new Date(d.updatedAt).toLocaleString("de-CH", { dateStyle: "medium", timeStyle: "short" })
+    : null;
 
   return (
     <div className="space-y-5 max-w-[1200px] mx-auto">
@@ -196,7 +199,7 @@ export default async function Page() {
       </Panel>
 
       <Panel
-        title={`Währungs-Ranking — Woche ${d.weekStart ?? "?"}`}
+        title={`Währungs-Ranking — Woche ${d.weekStart ?? "?"}${updated ? ` · zuletzt aktualisiert ${updated}` : ""}`}
         subtitle={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, stark long → stark short. Nur Q5-Signale gelten als handelbar (Labor-Regel: Edge lebt im obersten Konfidenz-Fünftel).`}
       >
         {d.champion.length > 0 ? (
