@@ -10,6 +10,8 @@ import { Select } from "@/components/ui/Field";
 import { toast } from "@/components/ui/Toaster";
 import TradeFormModal, { type TradePrefill } from "./TradeFormModal";
 import TradeDetailModal from "./TradeDetailModal";
+import AdherenceModal from "./AdherenceModal";
+import ExpectancyCard from "./ExpectancyCard";
 import { AccountSetupModal, AccountManageModal } from "./AccountModals";
 import type { AccountConfigs, AccountType, Trade, TradeFilters } from "@/lib/journal/types";
 import { PAIR_LIST, SETUP_DEFINITIONS } from "@/lib/journal/types";
@@ -41,6 +43,8 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
 
   const [showForm, setShowForm] = useState(!!prefillProp);
   const [editingTrade, setEditingTrade] = useState<Trade | undefined>();
+  // Adherence-Abfrage direkt nach dem Loggen eines neuen Trades
+  const [adherenceTrade, setAdherenceTrade] = useState<Trade | null>(null);
   const [viewingTrade, setViewingTrade] = useState<Trade | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [showManage, setShowManage] = useState(false);
@@ -130,6 +134,8 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       setShowForm(false);
       setEditingTrade(undefined);
       await reload();
+      // Neuer Trade → direkt die Plan-befolgt-Abfrage (Teil 2 Disziplin-System)
+      if (!tradeData.id) setAdherenceTrade(saved);
     } catch (err) {
       console.error(err);
       toast.error("Speichern fehlgeschlagen");
@@ -256,6 +262,9 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
           </div>
         ))}
       </div>
+
+      {/* Expectancy (alle Trades des Kontos, unabhängig von Filtern) */}
+      <ExpectancyCard trades={trades} />
 
       {/* Main: Filter panel + Table */}
       <div style={{ display: "grid", gridTemplateColumns: "212px 1fr", gap: "18px", alignItems: "start" }}>
@@ -407,6 +416,20 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       )}
       {viewingTrade && (
         <TradeDetailModal trade={viewingTrade} onClose={() => setViewingTrade(null)} onEdit={(t) => { setViewingTrade(null); setEditingTrade(t); setShowForm(true); }} onDelete={handleDeleteTrade} />
+      )}
+      {adherenceTrade && (
+        <AdherenceModal
+          tradeLabel={`${adherenceTrade.pair} · ${adherenceTrade.date}`}
+          onSkip={() => setAdherenceTrade(null)}
+          onSave={async (answers, scorePct) => {
+            try {
+              await tradeService.saveTrade({ ...adherenceTrade, adherenceAnswers: answers, adherenceScore: scorePct });
+              toast.success(`Adherence ${scorePct.toFixed(0)} % gespeichert`);
+              setAdherenceTrade(null);
+              await reload();
+            } catch { toast.error("Adherence speichern fehlgeschlagen"); }
+          }}
+        />
       )}
       {showSetup && (
         <AccountSetupModal accountType={accountType} onCreated={reload} onClose={() => setShowSetup(false)} />

@@ -20,6 +20,17 @@ import {
 } from "@/lib/journal/types";
 import { loadPref, savePref } from "@/lib/journal/prefs";
 import {
+  DEFAULT_EXPECTANCY_PARAMS,
+  expectancyPerMonth,
+  loadAplusCriteria,
+  loadAdherenceQuestions,
+  loadExpectancyParams,
+  saveAplusCriteria,
+  saveAdherenceQuestions,
+  saveExpectancyParams,
+  type ExpectancyParams,
+} from "@/lib/journal/discipline";
+import {
   hydrateAppSettings,
   loadAppSettings,
   saveAppSettings,
@@ -103,6 +114,9 @@ export default function SettingsView() {
   });
   const [exporting, setExporting] = useState(false);
   const [app, setApp] = useState<AppSettings>(() => loadAppSettings());
+  const [aplusCriteria, setAplusCriteria] = useState<string[]>([]);
+  const [adherenceQuestions, setAdherenceQuestions] = useState<string[]>([]);
+  const [expectancy, setExpectancy] = useState<ExpectancyParams>(DEFAULT_EXPECTANCY_PARAMS);
 
   const updateApp = (next: AppSettings) => {
     setApp(next);
@@ -143,7 +157,25 @@ export default function SettingsView() {
       }
     });
     loadTransactions().then(setTransactions).catch(() => {});
+    // Disziplin-System: Kriterien, Fragen, Expectancy-Parameter (user_preferences)
+    loadAplusCriteria().then(setAplusCriteria).catch(() => {});
+    loadAdherenceQuestions().then(setAdherenceQuestions).catch(() => {});
+    loadExpectancyParams().then(setExpectancy).catch(() => {});
   }, []);
+
+  const updateAplusCriteria = (next: string[]) => {
+    setAplusCriteria(next);
+    saveAplusCriteria(next).catch(() => {});
+  };
+  const updateAdherenceQuestions = (next: string[]) => {
+    setAdherenceQuestions(next);
+    saveAdherenceQuestions(next).catch(() => {});
+  };
+  const updateExpectancy = (patch: Partial<ExpectancyParams>) => {
+    const next = { ...expectancy, ...patch };
+    setExpectancy(next);
+    saveExpectancyParams(next).catch(() => {});
+  };
 
   const updateConfluences = (next: string[]) => {
     setConfluences(next);
@@ -385,6 +417,66 @@ export default function SettingsView() {
         items={snippets}
         onChange={updateSnippets}
       />
+
+      {/* Disziplin-System */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <TagListEditor
+          title="A+-Setup-Kriterien"
+          subtitle="Pflicht-Checkliste vor jedem neuen Trade — A+ nur wenn ALLE erfüllt"
+          items={aplusCriteria}
+          onChange={updateAplusCriteria}
+        />
+        <TagListEditor
+          title="Adherence-Fragen"
+          subtitle={'„Plan befolgt?"-Abfrage direkt nach dem Loggen'}
+          items={adherenceQuestions}
+          onChange={updateAdherenceQuestions}
+        />
+      </div>
+
+      <Panel
+        title="Expectancy-Parameter"
+        subtitle="Erwartetes Monats-Ergebnis: ((WR·RR·Risiko%) − (1−WR)·Risiko%) · Trades/Monat"
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Field label="Risiko % pro Trade">
+            <Input
+              type="number" step="0.1" min={0.1} max={10}
+              value={expectancy.riskPct}
+              onChange={(e) => updateExpectancy({ riskPct: parseFloat(e.target.value) || 1 })}
+            />
+          </Field>
+          <Field label="RR (1:x)">
+            <Input
+              type="number" step="0.5" min={0.5} max={20}
+              value={expectancy.rr}
+              onChange={(e) => updateExpectancy({ rr: parseFloat(e.target.value) || 4 })}
+            />
+          </Field>
+          <Field label="Trades / Monat">
+            <Input
+              type="number" step="1" min={1} max={100}
+              value={expectancy.tradesPerMonth}
+              onChange={(e) => updateExpectancy({ tradesPerMonth: parseInt(e.target.value) || 4 })}
+            />
+          </Field>
+          <Field label="Fallback-Winrate %">
+            <Input
+              type="number" step="1" min={0} max={100}
+              value={expectancy.fallbackWinrate}
+              onChange={(e) => updateExpectancy({ fallbackWinrate: parseFloat(e.target.value) || 40 })}
+            />
+          </Field>
+        </div>
+        <p className="text-[11px] text-muted mt-3 font-mono">
+          Mit Fallback-Winrate {expectancy.fallbackWinrate} %:{" "}
+          {(() => {
+            const v = expectancyPerMonth(expectancy.fallbackWinrate, expectancy);
+            return `${v >= 0 ? "+" : ""}${v.toFixed(1)} % / Monat`;
+          })()}
+          {" "}· Fallback greift, solange weniger als 20 Trades geloggt sind.
+        </p>
+      </Panel>
 
       <Panel title="Transaktionen" subtitle="Ein-/Auszahlungen und Payouts — fließen in die Balance-Baseline">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end mb-4">

@@ -42,6 +42,13 @@ export interface Trade {
   setup_weekly_gva?: boolean;
   setup_3day_gva?: boolean;
   confluences?: string[];
+  /** A+-Checkliste zum Log-Zeitpunkt; undefined = ohne Checkliste erfasst */
+  aplusCriteria?: { label: string; met: boolean }[];
+  /** true = alle Kriterien erfüllt (A+), false = nicht A+, undefined = keine Checkliste */
+  aplusVerdict?: boolean;
+  adherenceAnswers?: { label: string; yes: boolean }[];
+  /** Plan-Befolgung in %, undefined = nicht bewertet */
+  adherenceScore?: number;
   createdAt: string;
   updatedAt: string;
 }

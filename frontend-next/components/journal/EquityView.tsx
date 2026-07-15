@@ -11,6 +11,7 @@ import RMultipleChart from "./charts/RMultipleChart";
 import WinRateChart from "./charts/WinRateChart";
 import type { AccountConfigs, AccountType, Trade } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
+import ExpectancyCard from "./ExpectancyCard";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
 import { calculateTradeStatistics, calculateDrawdown, calculateStreaks } from "@/lib/journal/stats";
 
@@ -101,6 +102,9 @@ export default function EquityView() {
           <StreakDots trades={filteredTrades} />
         </div>
       </div>
+
+      {/* Expectancy (gefilterte Live-Trades des Kontos) */}
+      <ExpectancyCard trades={filteredTrades} />
 
       {/* 6 KPI Cards — 5-column like design (6 items, last wraps or stays) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "14px" }}>

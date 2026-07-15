@@ -15,6 +15,11 @@ import {
 } from "@/lib/journal/calculations";
 import { loadStrategies, type StrategyRecord } from "@/lib/journal/strategies";
 import { loadScreenshot } from "@/lib/journal/screenshots";
+import {
+  aplusVerdict,
+  loadAplusCriteria,
+  type AplusCriterion,
+} from "@/lib/journal/discipline";
 
 export interface TradePrefill {
   pair?: string;
@@ -80,6 +85,38 @@ export default function TradeFormModal({
   const [confluenceList, setConfluenceList] = useState<string[]>(() => getConfluences());
   const [addingConfluence, setAddingConfluence] = useState(false);
   const [newConfluence, setNewConfluence] = useState("");
+
+  // A+-Checkliste: label → true/false/null (null = unbeantwortet).
+  // Neue Trades: Pflicht. Bearbeiten: gespeicherte Antworten editierbar;
+  // Alt-Trades ohne Checkliste bleiben ohne Zwang (leer lassen erlaubt).
+  const [checklist, setChecklist] = useState<{ label: string; met: boolean | null }[]>([]);
+
+  useEffect(() => {
+    if (trade?.aplusCriteria?.length) {
+      setChecklist(trade.aplusCriteria.map((c) => ({ label: c.label, met: c.met })));
+    } else {
+      loadAplusCriteria()
+        .then((labels) => setChecklist(labels.map((label) => ({ label, met: null }))))
+        .catch(() => {});
+    }
+  }, [trade]);
+
+  const answeredCount = checklist.filter((c) => c.met !== null).length;
+  const checklistComplete = checklist.length > 0 && answeredCount === checklist.length;
+  const verdict = checklistComplete
+    ? aplusVerdict(checklist.map((c) => ({ label: c.label, met: c.met === true })))
+    : null;
+
+  const setCriterion = (label: string, met: boolean) => {
+    setChecklist((prev) => prev.map((c) => (c.label === label ? { ...c, met } : c)));
+    if (errors.checklist) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.checklist;
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     loadStrategies().then(setStrategies).catch(() => {});
@@ -192,6 +229,13 @@ export default function TradeFormModal({
 
   const validate = (): boolean => {
     const next: Record<string, string> = {};
+    // Neue Trades: Checkliste komplett Pflicht. Beim Bearbeiten nur dann,
+    // wenn angefangen wurde zu antworten (kein halbes Verdikt speichern).
+    if (!isEditing && !checklistComplete) {
+      next.checklist = "A+-Checkliste vollständig beantworten (jedes Kriterium Ja/Nein)";
+    } else if (isEditing && answeredCount > 0 && !checklistComplete) {
+      next.checklist = "Checkliste entweder komplett beantworten oder leer lassen";
+    }
     if (!formData.date) next.date = "Datum erforderlich";
     if (!formData.pair) next.pair = "Paar erforderlich";
     if (
@@ -218,6 +262,9 @@ export default function TradeFormModal({
       else if (formData.result === "breakeven") rMultiple = 0;
 
       const finalProfit = (formData.riskAmount || 0) * rMultiple;
+      const criteria: AplusCriterion[] | undefined = checklistComplete
+        ? checklist.map((c) => ({ label: c.label, met: c.met === true }))
+        : undefined;
       await onSave(
         {
           ...formData,
@@ -225,6 +272,9 @@ export default function TradeFormModal({
           rMultiple,
           profitAmount: Math.round(finalProfit * 100) / 100,
           type: accountType,
+          ...(criteria
+            ? { aplusCriteria: criteria, aplusVerdict: aplusVerdict(criteria) }
+            : {}),
           createdAt: trade?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         } as Omit<Trade, "id"> & { id?: string },
@@ -305,6 +355,65 @@ export default function TradeFormModal({
               ))}
             </Select>
           </Field>
+        </div>
+
+        {/* A+-Checkliste (Pflicht bei neuen Trades) */}
+        <div className="rounded-md border border-border2 bg-bg p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <Label hint={isEditing ? "editierbar" : "Pflicht vor dem Speichern"}>
+              A+-Setup-Checkliste
+            </Label>
+            <span className="text-[10px] font-mono text-faint">
+              {answeredCount}/{checklist.length} beantwortet
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {checklist.map((c) => (
+              <div key={c.label} className="flex items-center justify-between gap-3">
+                <span className="text-[12px] text-text">{c.label}</span>
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCriterion(c.label, true)}
+                    className={`px-3 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                      c.met === true
+                        ? "bg-up/15 text-up border-up/50"
+                        : "bg-surface text-muted border-border2 hover:text-text"
+                    }`}
+                  >
+                    Ja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCriterion(c.label, false)}
+                    className={`px-3 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                      c.met === false
+                        ? "bg-down/15 text-down border-down/50"
+                        : "bg-surface text-muted border-border2 hover:text-text"
+                    }`}
+                  >
+                    Nein
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {verdict !== null && (
+            <div
+              className={`mt-3 rounded-md border px-3 py-2 text-[12px] font-bold ${
+                verdict
+                  ? "bg-up/10 text-up border-up/40"
+                  : "bg-warn/10 text-warn border-warn/40"
+              }`}
+            >
+              {verdict
+                ? "✓ A+ SETUP — alle Kriterien erfüllt"
+                : "✗ NICHT A+ — Trade kann trotzdem geloggt werden, zählt aber als Nicht-A+"}
+            </div>
+          )}
+          {errors.checklist && (
+            <p className="text-[11px] text-down mt-2">{errors.checklist}</p>
+          )}
         </div>
 
         {/* Ergebnis */}

@@ -11,10 +11,59 @@ import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toaster";
 import EquityChart from "./charts/EquityChart";
+import ExpectancyCard from "./ExpectancyCard";
 import type { AccountConfigs, AccountType, Trade } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
 import { calculateTradeStatistics, calculateDrawdown, calculateStreaks } from "@/lib/journal/stats";
+import { payoffSplit, type PayoffBucket } from "@/lib/journal/discipline";
+
+/** A+ vs. Nicht-A+ — sichtbarer Beweis, ob die A+-Selektion die Winrate hebt.
+ *  Zählt nur Trades, die mit Checkliste geloggt wurden (Verdikt vorhanden). */
+function PayoffPanel({ trades }: { trades: Trade[] }) {
+  const split = useMemo(() => payoffSplit(trades), [trades]);
+  const col = (title: string, b: PayoffBucket, tone: "up" | "warn") => (
+    <div style={{ flex: 1, background: "var(--color-surface2)", border: "1px solid var(--color-border)", borderRadius: "12px", padding: "16px" }}>
+      <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", color: `var(--color-${tone})`, marginBottom: "10px" }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontFamily: "var(--font-mono)" }}>
+        <div>
+          <div style={{ fontSize: "10px", color: "var(--color-faint)", textTransform: "uppercase" }}>Trades</div>
+          <div style={{ fontSize: "18px", fontWeight: 700 }}>{b.n}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: "10px", color: "var(--color-faint)", textTransform: "uppercase" }}>Winrate</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: b.winratePct != null && b.winratePct >= 50 ? "var(--color-up)" : "var(--color-down)" }}>
+            {b.winratePct != null ? `${b.winratePct.toFixed(0)}%` : "—"}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: "10px", color: "var(--color-faint)", textTransform: "uppercase" }}>Ø Adherence</div>
+          <div style={{ fontSize: "18px", fontWeight: 700 }}>
+            {b.avgAdherence != null ? `${b.avgAdherence.toFixed(0)}%` : "—"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  const none = split.aplus.n === 0 && split.rest.n === 0;
+  return (
+    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px" }}>
+      <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "12px" }}>
+        A+ vs. Nicht-A+ — zahlt sich die Selektion aus?
+      </div>
+      {none ? (
+        <p style={{ fontSize: "12px", color: "var(--color-faint)" }}>
+          Noch keine Trades mit A+-Checkliste geloggt. Ab dem nächsten Trade füllt sich der Vergleich.
+        </p>
+      ) : (
+        <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
+          {col("A+ Setups", split.aplus, "up")}
+          {col("Nicht A+", split.rest, "warn")}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardView() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -125,6 +174,10 @@ export default function DashboardView() {
             <StatCard label="Profit Factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)} deltaLabel={`Expectancy ${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`} />
             <StatCard label="Max Drawdown" value={<span style={{ color: "var(--color-down)" }}>−{dd.maxDrawdown.toFixed(2)} R</span>} deltaLabel={`aktuell −${dd.currentDrawdown.toFixed(2)} R`} />
           </div>
+
+          {/* Disziplin-System: Expectancy + A+-Payoff */}
+          <ExpectancyCard trades={accountTrades} />
+          <PayoffPanel trades={accountTrades} />
 
           {/* Equity + Recent */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 288px", gap: "18px" }}>

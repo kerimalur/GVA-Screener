@@ -38,6 +38,10 @@ function mapDbToApp(row: Record<string, any>): Trade {
     setup_weekly_gva: row.setup_weekly_gva ?? false,
     setup_3day_gva: row.setup_3day_gva ?? false,
     confluences: Array.isArray(row.confluences) ? row.confluences : [],
+    aplusCriteria: Array.isArray(row.aplus_criteria) ? row.aplus_criteria : undefined,
+    aplusVerdict: row.aplus_verdict ?? undefined,
+    adherenceAnswers: Array.isArray(row.adherence_answers) ? row.adherence_answers : undefined,
+    adherenceScore: row.adherence_score != null ? Number(row.adherence_score) : undefined,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
     chapterId: row.chapter_id ?? undefined,
@@ -76,6 +80,12 @@ function mapAppToDb(trade: Partial<Trade>) {
     setup_weekly_gva: trade.setup_weekly_gva ?? false,
     setup_3day_gva: trade.setup_3day_gva ?? false,
     confluences: trade.confluences ?? [],
+    // Disziplin-Felder: undefined wird vom Caller entfernt → bestehende Werte
+    // in der DB bleiben bei Updates ohne Checkliste unangetastet.
+    aplus_criteria: trade.aplusCriteria,
+    aplus_verdict: trade.aplusVerdict,
+    adherence_answers: trade.adherenceAnswers,
+    adherence_score: trade.adherenceScore,
     chapter_id: trade.chapterId,
     strategy_id: trade.strategyId,
   };

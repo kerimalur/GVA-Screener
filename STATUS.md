@@ -3,7 +3,27 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-15
+Stand: 2026-07-16
+
+## Disziplin-System im Journal (2026-07-16)
+Spec: `docs/superpowers/specs/2026-07-15-disziplin-system-design.md`
+- **DB:** `trades` + 4 Nullable-Spalten (Migration `trades_discipline_columns`
+  angewandt): aplus_criteria/aplus_verdict/adherence_answers/adherence_score.
+  Alte Trades = NULL → zählen nicht in die A+-Auswertung.
+- **A+-Checkliste** (`lib/journal/discipline.ts` + TradeFormModal): Pflicht bei
+  neuen Trades (jedes Kriterium Ja/Nein), Verdikt-Banner live (A+ nur wenn ALLE
+  ja; Nicht-A+ trotzdem loggbar). Kriterien editierbar (Settings,
+  user_preferences.aplus_criteria), Seeds: GVA-Hit, BOS, Session, Q5/Q1.
+- **Adherence:** Nach Save eines neuen Trades öffnet JournalView das
+  AdherenceModal („Plan befolgt?", Fragen editierbar) → Score % auf den Trade.
+  Überspringen erlaubt.
+- **ExpectancyCard** (Journal, Journal-Dashboard, Equity): Monats-Expectancy
+  aus WR×RR×Risiko%×Trades/Mt; Live-Winrate ab 20 Trades, sonst Fallback
+  („manuell" gekennzeichnet). Parameter in Settings. Kontrollwerte verifiziert
+  (1 %/RR4/4: WR25→+1 %, WR50→+6 %).
+- **Payoff-Panel** (Journal-Dashboard): A+ vs. Nicht-A+ — n, Winrate,
+  Ø-Adherence (nur Trades mit Verdikt).
+- Rein additiv, Balance-/Statistik-Logik unverändert. Build sauber.
 
 ## Performance-Paket + Track-Zeiträume + Q-Score an GVA-Linien (2026-07-15)
 Spec: `docs/superpowers/specs/2026-07-15-performance-fundamental-track-qscore-design.md`
