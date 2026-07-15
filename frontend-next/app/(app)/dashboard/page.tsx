@@ -1,8 +1,10 @@
 import Panel from "@/components/layout/Panel";
 import NewsPanel from "@/components/dashboard/NewsPanel";
+import WeekPlan from "@/components/dashboard/WeekPlan";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { tryQuery } from "@/lib/data/util";
+import { loadWeekPlan } from "@/lib/dashboard/weekPlan";
 import type { CalendarEventRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +33,7 @@ const getNews = unstable_cache(
 );
 
 export default async function Page() {
-  const events = await getNews();
+  const [events, weekPlan] = await Promise.all([getNews(), loadWeekPlan()]);
 
   if (events === null) {
     return (
@@ -49,6 +51,12 @@ export default async function Page() {
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
+      <Panel
+        title={`Diese Woche — Q5/Q1 × GVA${weekPlan.weekStart ? ` · ${weekPlan.weekStart}` : ""}`}
+        subtitle="Handelbare Extrem-Paare mit Macro-Kontrolle und Live-GVA-Nähe"
+      >
+        <WeekPlan pairs={weekPlan.pairs} />
+      </Panel>
       <Panel
         title="Wirtschafts-News"
         subtitle="Mid- + High-Impact-Events — heute oder ganze Woche · Analyse im Macro Terminal, Setups im Weekly Outlook"

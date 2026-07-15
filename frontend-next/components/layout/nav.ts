@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Machine Learning",
     collapsible: true,
     items: [
+      { href: "/ml/engine-log", label: "Engine-Log (nächtlich)", icon: "ph-list-checks" },
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
     ],
@@ -100,6 +101,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/ml/ranking": "Währungs-Ranking — ML-Engine",
   "/ml/fundamental-track": "Fundamental-Track — Q-Score vs. Markt",
   "/ml/replay": "Backtest-Replay — GVA-Hits bewerten",
+  "/ml/engine-log": "Engine-Log — Nächtliche Experiment-Suche",
   "/ml/modell": "ML-Modell — Anleitung",
   "/ml/season": "Saisonalität 2.0 — Feature-Explorer",
   "/leitfaden": "Analyse-Leitfaden",
