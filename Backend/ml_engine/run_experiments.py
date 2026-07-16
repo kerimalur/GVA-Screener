@@ -13,6 +13,7 @@ import json
 import os
 import time
 import traceback
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -80,6 +81,39 @@ def _claim_next(rng: np.random.Generator) -> dict:
     })[0]
 
 
+def _write_night_summary() -> None:
+    """Nacht-Zusammenfassung dauerhaft nach ml_engine_nights (idempotent:
+    upsert nur auf die EIGENE Nacht — ältere Nächte bleiben unberührt)."""
+    night = datetime.now(timezone.utc).date().isoformat()
+    rows = db.select_all("ml_experiments", {
+        "select": "status,hall_score,runtime_s,config",
+        "created_at": f"gte.{night}T00:00:00Z",
+    })
+    if not rows:
+        return
+    best_hall, best_config = None, None
+    done = failed = 0
+    runtime_s = 0.0
+    for r in rows:
+        runtime_s += r["runtime_s"] or 0
+        if r["status"] == "done":
+            done += 1
+            if r["hall_score"] is not None and (best_hall is None or r["hall_score"] > best_hall):
+                best_hall = r["hall_score"]
+                best_config = r["config"] if isinstance(r["config"], dict) else json.loads(r["config"])
+        elif r["status"] == "failed":
+            failed += 1
+    db.insert("ml_engine_nights", {
+        "night": night,
+        "done": done,
+        "failed": failed,
+        "best_hall": best_hall,
+        "best_config": best_config,
+        "runtime_min": round(runtime_s / 60, 1),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }, upsert_on="night")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max", type=int, default=None, help="max. Experimente (Smoke-Test)")
@@ -121,6 +155,14 @@ def main() -> None:
             print(f"#{exp['id']} FAILED")
         done += 1
     print(f"Fertig: {done} Experimente in {(time.time() - t0) / 60:.1f} min")
+
+    try:
+        _write_night_summary()
+        print("Nacht-Zusammenfassung → ml_engine_nights geschrieben.")
+    except Exception:
+        # Zusammenfassung darf den Lauf nicht scheitern lassen — die Live-View
+        # ml_engine_nights_live deckt die Nacht notfalls ab.
+        print(f"WARNUNG: Nacht-Zusammenfassung fehlgeschlagen:\n{traceback.format_exc()[-800:]}")
 
 
 if __name__ == "__main__":

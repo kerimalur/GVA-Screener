@@ -81,7 +81,10 @@ export default function TimeSeriesChart({
   return (
     <div>
       {timeframes && (
-        <div className="flex gap-1 mb-2 justify-end">
+        <div className="flex gap-1 mb-2 items-center">
+          <span className="mr-auto text-[10px] font-mono text-muted">
+            {visible.length} von {data.length} Punkten
+          </span>
           {TIMEFRAMES.map((t) => (
             <button
               key={t}
@@ -97,6 +100,14 @@ export default function TimeSeriesChart({
           ))}
         </div>
       )}
+      {visible.length === 0 ? (
+        <div
+          style={{ height }}
+          className="flex items-center justify-center text-muted text-sm font-mono"
+        >
+          Keine Daten im gewählten Zeitraum
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={visible} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" />
@@ -166,6 +177,7 @@ export default function TimeSeriesChart({
           )}
         </ComposedChart>
       </ResponsiveContainer>
+      )}
     </div>
   );
 }

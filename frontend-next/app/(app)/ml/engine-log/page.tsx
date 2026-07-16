@@ -20,24 +20,55 @@ function HallDelta({ n }: { n: EngineNight }) {
   );
 }
 
+function ScoreExplainer() {
+  return (
+    <details className="mt-3 group">
+      <summary className="cursor-pointer text-xs font-bold text-muted hover:text-fg py-1">
+        Was bedeutet «bester Holdout-Score»?
+      </summary>
+      <div className="text-xs text-muted leading-relaxed space-y-2 pl-4 pt-1">
+        <p>
+          Jede Nacht testet die Engine hunderte Modell-Varianten. Jedes Modell wird nur auf
+          Vergangenheitsdaten trainiert und dann auf Wochen geprüft, die es beim Training{" "}
+          <span className="font-bold text-fg">nie gesehen hat</span> (out-of-sample). Der Score ist
+          die durchschnittliche Trefferquote in diesen Testfenstern, minus der Schwankung zwischen
+          ihnen — belohnt wird Konsistenz, nicht ein Glückstreffer in einer Marktphase. Hier steht
+          pro Nacht der beste Wert.
+        </p>
+        <p>
+          <span className="font-bold text-fg">Lesen:</span> 0.500 = Münzwurf, kein Vorteil. Je
+          höher und je stabiler die Linie über Wochen, desto näher ist ein Kandidat daran, zum
+          Champion befördert zu werden. Einzelne Ausreisser nach oben bedeuten wenig — der Trend
+          zählt. (Der strenge 104-Wochen-Holdout bleibt dabei unangetastet; den prüft erst die
+          manuelle Beförderung.)
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export default async function Page() {
   const { nights, chart, totalExperiments } = await loadEngineLog();
 
   return (
     <div className="space-y-5 max-w-[1100px] mx-auto">
       <Panel
-        title="Verlauf — bester Hall-Score pro Nacht"
-        subtitle={`${totalExperiments} Experimente gesamt · steigend = die Suche findet konsistentere Modelle`}
+        title="Verlauf — bester Holdout-Score pro Nacht"
+        subtitle={`${nights.length} Nächte · ${totalExperiments} Experimente gesamt · steigend/stabil = die Suche findet konsistentere Modelle`}
       >
         {chart.length === 0 ? (
           <p className="text-sm text-muted">Noch keine Experimente. Läuft der Nightly-Workflow?</p>
         ) : (
-          <TimeSeriesChart
-            data={chart}
-            series={[{ key: "bestHall", label: "Bester Hall-Score", color: "var(--color-up)" }]}
-            height={220}
-            yDigits={3}
-          />
+          <>
+            <TimeSeriesChart
+              data={chart}
+              series={[{ key: "bestHall", label: "Bester Holdout-Score", color: "var(--color-up)" }]}
+              height={220}
+              defaultTimeframe="Max"
+              yDigits={3}
+            />
+            <ScoreExplainer />
+          </>
         )}
       </Panel>
 
@@ -53,7 +84,8 @@ export default async function Page() {
                   <th className="pr-3">Fertig</th>
                   <th className="pr-3">Fehler</th>
                   <th className="pr-3">Offen</th>
-                  <th className="pr-3">Bester Hall (Δ)</th>
+                  <th className="pr-3">Bester Score (Δ)</th>
+                  <th className="pr-3">Bestes Modell</th>
                   <th>Laufzeit</th>
                 </tr>
               </thead>
@@ -69,6 +101,7 @@ export default async function Page() {
                     <td className="pr-3">
                       <HallDelta n={n} />
                     </td>
+                    <td className="pr-3 font-mono text-xs text-muted">{n.bestModel ?? "–"}</td>
                     <td className="font-mono text-muted">{n.runtimeMin} min</td>
                   </tr>
                 ))}

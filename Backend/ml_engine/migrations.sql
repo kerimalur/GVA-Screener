@@ -53,3 +53,33 @@ alter table ml_experiments enable row level security;
 alter table ml_champion enable row level security;
 alter table ml_weekly_rankings enable row level security;
 alter table ml_holdout_access enable row level security;
+
+-- Nacht-Historie (Migration ml_engine_nights, angewandt 2026-07-16):
+-- 1 Zeile pro Nacht, dauerhaft. Der Nightly-Runner upsertet nur die EIGENE
+-- Nacht — alte Nächte werden nie überschrieben.
+create table if not exists ml_engine_nights (
+  night date primary key,
+  done int not null default 0,
+  failed int not null default 0,
+  best_hall real,               -- bester hall_score der Nacht (OOS: mean_hitrate - std)
+  best_config jsonb,            -- Config des besten Kandidaten
+  runtime_min real,
+  updated_at timestamptz not null default now()
+);
+alter table ml_engine_nights enable row level security;
+
+-- Live-Sicht: aggregiert ml_experiments pro UTC-Nacht (deckt auch die laufende
+-- Nacht ab, bevor der Runner seine Zusammenfassung schreibt).
+create or replace view ml_engine_nights_live
+with (security_invoker = true) as
+select
+  (created_at at time zone 'utc')::date        as night,
+  count(*) filter (where status = 'done')      as done,
+  count(*) filter (where status = 'failed')    as failed,
+  count(*) filter (where status in ('queued', 'running')) as pending,
+  max(hall_score) filter (where status = 'done') as best_hall,
+  (array_agg(config order by hall_score desc nulls last)
+     filter (where status = 'done' and hall_score is not null))[1] as best_config,
+  round((coalesce(sum(runtime_s), 0) / 60.0)::numeric, 1) as runtime_min
+from ml_experiments
+group by 1;

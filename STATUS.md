@@ -5,6 +5,26 @@
 
 Stand: 2026-07-16
 
+## Engine-Log: Nacht-Historie + Erklärung + Zeitfilter (2026-07-16)
+Problem: `loadEngineLog` lud Rohzeilen aus `ml_experiments` (limit 5000) —
+PostgREST cappt bei 1000/Request, eine Nacht hat ~1200 Experimente → es war
+faktisch nur die letzte Nacht sichtbar, Zeitraum-Pills wirkten tot.
+- **DB** (Migration `ml_engine_nights`, angewandt): Tabelle `ml_engine_nights`
+  (PK night, done/failed, best_hall, best_config jsonb, runtime_min) +
+  View `ml_engine_nights_live` (security_invoker, aggregiert ml_experiments
+  pro UTC-Nacht inkl. pending). 4 bestehende Nächte (13.–16.07.) backfilled.
+- **Backend**: `run_experiments.py` → `_write_night_summary()` am Lauf-Ende:
+  upsert NUR der eigenen Nacht (idempotent, alte Nächte unberührt); Fehler
+  dort bricht den Lauf nicht ab (View deckt notfalls ab).
+- **Frontend** `lib/ml/engineLog.ts`: liest View (live) + Tabelle (Archiv,
+  überlebt späteres Aufräumen von ml_experiments) + failed-Details separat.
+  Neue Spalte «Bestes Modell» (algo · Horizont · Features).
+- **UI**: Explainer «Was bedeutet bester Holdout-Score?» (einfaches Deutsch,
+  OOS-Testfenster, 0.500 = Münzwurf, Konsistenz zählt). TimeSeriesChart zeigt
+  jetzt «X von Y Punkten» neben den Zeitraum-Pills + Hinweis bei leerem
+  Zeitraum; Engine-Log-Chart default «Max». Hinweis: mit erst 4 Nächten sehen
+  1M–Max noch identisch aus — ab >1 Monat Historie filtern sie sichtbar.
+
 ## Disziplin-System im Journal (2026-07-16)
 Spec: `docs/superpowers/specs/2026-07-15-disziplin-system-design.md`
 - **DB:** `trades` + 4 Nullable-Spalten (Migration `trades_discipline_columns`
