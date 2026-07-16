@@ -5,6 +5,33 @@
 
 Stand: 2026-07-16
 
+## Real-Yield-Valuation + BIS-Datenquelle (2026-07-16)
+Neue Seite **/makro/real-yield** (Nav: Diagnose) — fundamentales Bias-Display,
+fliesst NICHT in Q-Score/Baseline (rein additiv).
+- **Befund Schritt 0 (CPI-Blocker):** FRED-CSV-Transport (fredgraph.csv) ist
+  seit ~2026-07-03 tot — Timeouts auch lokal, 90/92 Serien heute is_stale,
+  fred_series-Writes stoppten Anfang Juli. Zusätzlich sind die Nicht-US-CPI-
+  Serien (OECD-Feed) dauerhaft eingestellt (JPY seit 2021!).
+  calendar_events.actual ist KEIN Ersatz (nur kommende Events, actual leer).
+- **Fix: BIS SDMX-API** (stats.bis.org, keyless, verifiziert): WS_LONG_CPI
+  (CPI YoY, Serie 771) + WS_CBPOL (Leitzinsen) für alle 8 Währungen.
+  `lib/sources/bis.ts` (Fetch+Parse, live getestet via scripts/bis-smoke.mts),
+  `lib/jobs/updateBis.ts` (rollierendes 4J-Fenster, upsert fred_series unter
+  BIS_CPI_YOY_*/BIS_CBPOL_*, Meta-Frische), im fundamentals-Cron als
+  "cron:bis" eingehängt. Seed ab 2023-01 per SQL eingespielt (16 Serien,
+  CPI-Stand: Mai 26 (USD/EUR/GBP/CHF/CAD), Apr 26 (JPY), Q1 26 (AUD/NZD)).
+- **View:** Ranking stark→schwach (Leitzins, CPI YoY, Real Yield, Trend
+  6M/12M, Frische-Badge: aktuell / älterer Stand / keine aktuellen Daten —
+  bei "dead" wird bewusst NICHT gerechnet). Paar-Ansicht: 2 Währungen wählbar,
+  RY-Differenz + 6M-Trend + Carry (Zinsdifferenz) + Risk-Regime-Badge
+  (bestehender riskGauge; VIX-Datum wird angezeigt, da FRED-VIX aktuell nur
+  bis 01.07.). Kennzeichnung "Bias/Kontext, realized CPI läuft nach".
+  `lib/calc/realYield.ts` (deterministisch, Kontrollwerte verifiziert).
+- **OFFEN:** FRED-Transport generell (10Y-Renditen, VIX etc. altern weiter) —
+  Fix wäre offizielle FRED-API mit FRED_API_KEY (kostenlos registrieren,
+  Vercel-Env) + Umbau lib/sources/fred.ts. Separates Thema, nicht Teil
+  dieser Aufgabe.
+
 ## Engine-Log: Nacht-Historie + Erklärung + Zeitfilter (2026-07-16)
 Problem: `loadEngineLog` lud Rohzeilen aus `ml_experiments` (limit 5000) —
 PostgREST cappt bei 1000/Request, eine Nacht hat ~1200 Experimente → es war

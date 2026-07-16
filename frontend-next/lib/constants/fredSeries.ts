@@ -59,7 +59,11 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   // — CPI —
   // Audit 2026-07: Nicht-US/EZ-CPI auf FRED tot (OECD-Feed eingestellt, letzte
   // Werte 2021–2025); auch CPALTT01…-Alternativen stale. Serien bleiben für
-  // Historie, is_stale markiert sie. Aktuelle CPI-Werte: calendar_events.actual.
+  // Historie, is_stale markiert sie. calendar_events.actual ist KEIN Ersatz
+  // (nur kommende Events, actual leer). Aktuelle CPI YoY aller 8 Währungen:
+  // BIS_CPI_YOY_* in fred_series (BIS-API, lib/jobs/updateBis.ts) — plus
+  // BIS_CBPOL_* als FRED-unabhängige Leitzinsen (fredgraph.csv seit ~2026-07
+  // blockiert/tot, siehe STATUS.md).
   { id: "CPIAUCSL", ccy: "USD", category: "cpi", label: "US CPI", isIndex: true },
   { id: "CP0000EZ19M086NEST", ccy: "EUR", category: "cpi", label: "Eurozone HICP", isIndex: true },
   { id: "GBRCPIALLMINMEI", ccy: "GBP", category: "cpi", label: "UK CPI", isIndex: true },

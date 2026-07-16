@@ -29,6 +29,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
+      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
       { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
       { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
     ],
@@ -86,6 +87,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/cot/intelligence": "COT Intelligence — Institutionelle Positionierung",
   "/makro/terminal": "Macro Terminal — G8 Currency Bias",
   "/makro/terminal/vergleich": "Macro Terminal — Währungsvergleich",
+  "/makro/real-yield": "Real Yield — Valuation-Bias (Zins − Inflation)",
   "/scanner/radar": "Visuelles Radar",
   "/scanner/signale": "Signals-Inbox",
   "/scanner/heatmap": "Heatmap 28",

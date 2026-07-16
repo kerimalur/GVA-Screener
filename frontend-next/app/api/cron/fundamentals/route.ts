@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runJob, type JobResult } from "@/lib/jobs/util";
 import { updateFred } from "@/lib/jobs/updateFred";
+import { updateBis } from "@/lib/jobs/updateBis";
 import { updateCalendar } from "@/lib/jobs/updateCalendar";
 import { snapshotSentiment } from "@/lib/jobs/snapshotSentiment";
 import { updateCot } from "@/lib/jobs/updateCot";
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
 
   const jobDefs: Array<[string, () => Promise<Record<string, unknown>>]> = [
     ["cron:fred",      () => updateFred(db)],
+    ["cron:bis",       () => updateBis(db)],
     ["cron:calendar",  () => updateCalendar(db)],
     ["cron:sentiment", () => snapshotSentiment(db)],
   ];
