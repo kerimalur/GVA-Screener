@@ -5,6 +5,7 @@ import threading
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from data_pipeline import fetch_and_resample_3d, fetch_live_prices
@@ -373,6 +374,14 @@ def get_calendar():
     if not MACRO_CACHE["calendar"]:
         return macro.CAL_FALLBACK
     return MACRO_CACHE["calendar"]
+
+
+@app.get("/health")
+@app.get("/doctor")  # Alias für bestehende Uptime-Pinger-Konfiguration
+def health_ping():
+    """Leichter Uptime-Ping (UptimeRobot/Render Keep-Alive): sofortiges 200,
+    keine Cache-/DB-/Engine-Zugriffe — /api/health bleibt der Detail-Status."""
+    return PlainTextResponse("ok")
 
 
 @app.get("/api/health")

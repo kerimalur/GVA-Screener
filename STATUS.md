@@ -5,6 +5,13 @@
 
 Stand: 2026-07-17
 
+## Backend: /health-Ping für UptimeRobot (2026-07-17)
+Root "/" gab 404 → UptimeRobot meldete Render fälschlich down. Neu in
+`Backend/main.py`: GET /health (+ Alias /doctor) → sofort 200 "ok",
+ohne Cache/DB/Engine. /api/health bleibt der Detail-Status. ASGI-Smoke-
+Test lokal: /health, /doctor, /api/health, /api/calendar alle 200.
+Nach Push/Deploy: UptimeRobot auf /health zeigen.
+
 ## Real-Yield-Verlaufs-Ansicht + Verdikt (2026-07-17)
 Erweiterung von /makro/real-yield, rein additiv (Q-Score unberührt):
 - **RealYieldHistoryChart** (`components/makro/RealYieldHistoryChart.tsx`,
