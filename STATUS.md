@@ -3,7 +3,27 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-16
+Stand: 2026-07-17
+
+## Real-Yield-Verlaufs-Ansicht + Verdikt (2026-07-17)
+Erweiterung von /makro/real-yield, rein additiv (Q-Score unberührt):
+- **RealYieldHistoryChart** (`components/makro/RealYieldHistoryChart.tsx`,
+  Recharts ComposedChart): Real Yield je Monat als Balken (grün ≥ 0 / rot < 0),
+  Leitzins + CPI YoY als Linien (weiß/warn), EINE Y-Achse (alles %/pp),
+  Fenster-Pills 12M/18M/Max (Default 18M), 0-Referenzlinie.
+- **Neues Panel «Verlauf je Währung»**: Währungs-Pills (dead → disabled,
+  bewusst keine Anzeige mit totem CPI), Chart + Datenstand-Zeile (FreshBadge,
+  Leitzins-/CPI-Monat, Quartals-Hinweis bei "old").
+- **Paar-Ansicht ergänzt**: gleicher Chart auf der Differenz-Serie A−B
+  (Balken = RY-Differenz, Linien = Zins-/CPI-Differenz) + Verdikt;
+  bestehender Linien-Chart + Kennzahlen unverändert.
+- **Verdikt** (`lib/calc/realYield.ts`: `realYieldVerdict`, `shortTrend`):
+  Level (Band ±0.25 %) + Kurz-Trend 2M (Fallback 1M, Band ±0.1 pp,
+  datums-basiert → quartals-tolerant), je −1/0/+1 → BULLISH / LEICHT BULLISH /
+  NEUTRAL / LEICHT BEARISH / BEARISH. Badge + Klartext (Level, Trend,
+  «dreht nach oben/unten»). Paar: BULLISH = spricht für Währung A.
+  9 Kontrollwerte via tsx verifiziert, Build sauber.
+- Visuell im Browser noch nicht gesichtet (Auth) — beim nächsten Login prüfen.
 
 ## Real-Yield-Valuation + BIS-Datenquelle (2026-07-16)
 Neue Seite **/makro/real-yield** (Nav: Diagnose) — fundamentales Bias-Display,

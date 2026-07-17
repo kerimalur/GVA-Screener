@@ -123,6 +123,83 @@ export function buildCcyRealYield(
   };
 }
 
+/* ── Verdikt für die Verlaufs-Ansicht (reines Display, kein Q-Score-Faktor) ── */
+
+/** Neutralband fürs Level: |Real Yield| ≤ Band zählt nicht als Richtung. */
+export const VERDICT_LEVEL_BAND = 0.25;
+/** Neutralband für den Kurz-Trend (pp) — identisch zur Slope-Anzeige (flat < 0.1). */
+export const VERDICT_TREND_BAND = 0.1;
+
+export type RealYieldVerdictLabel =
+  | "bullish"
+  | "leicht-bullish"
+  | "neutral"
+  | "leicht-bearish"
+  | "bearish";
+
+export interface RealYieldVerdict {
+  verdict: RealYieldVerdictLabel;
+  /** letzter Real Yield bzw. letzte Paar-Differenz (%/pp) */
+  level: number;
+  /** Δ Real Yield über die letzten ~1–2 Monate (pp); null wenn Serie zu kurz */
+  trend: number | null;
+  trendMonths: 1 | 2 | null;
+}
+
+/** Δ Real Yield vs. dem Punkt ~n Monate vor dem letzten (Datums-basiert,
+ *  tolerant gegen CPI-Lücken bei Quartalsländern). */
+export function shortTrend(series: RealYieldPoint[], months: number): number | null {
+  if (series.length < 2) return null;
+  const last = series[series.length - 1];
+  const target = new Date(last.date);
+  target.setMonth(target.getMonth() - months);
+  const targetMs = target.getTime();
+  let best: RealYieldPoint | null = null;
+  let bestGap = Infinity;
+  for (const p of series) {
+    if (p.date === last.date) continue;
+    const gap = Math.abs(new Date(p.date).getTime() - targetMs);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = p;
+    }
+  }
+  if (!best || bestGap / 86_400_000 > months * 31 + 20) return null;
+  return Number((last.realYield - best.realYield).toFixed(3));
+}
+
+/**
+ * Verdikt aus Level + Kurz-Trend (2M, Fallback 1M). Level und Trend zählen je
+ * −1/0/+1; Summe +2 → bullish, +1 → leicht-bullish, 0 → neutral, usw.
+ * Für Paare: Serie = Differenz A−B, bullish = spricht für Währung A.
+ */
+export function realYieldVerdict(series: RealYieldPoint[]): RealYieldVerdict | null {
+  const last = series[series.length - 1];
+  if (!last) return null;
+  let trendMonths: 1 | 2 | null = 2;
+  let trend = shortTrend(series, 2);
+  if (trend === null) {
+    trend = shortTrend(series, 1);
+    trendMonths = trend !== null ? 1 : null;
+  }
+  const levelScore =
+    last.realYield > VERDICT_LEVEL_BAND ? 1 : last.realYield < -VERDICT_LEVEL_BAND ? -1 : 0;
+  const trendScore =
+    trend === null ? 0 : trend > VERDICT_TREND_BAND ? 1 : trend < -VERDICT_TREND_BAND ? -1 : 0;
+  const sum = levelScore + trendScore;
+  const verdict: RealYieldVerdictLabel =
+    sum >= 2
+      ? "bullish"
+      : sum === 1
+        ? "leicht-bullish"
+        : sum === 0
+          ? "neutral"
+          : sum === -1
+            ? "leicht-bearish"
+            : "bearish";
+  return { verdict, level: last.realYield, trend, trendMonths };
+}
+
 /** stark → schwach; Währungen ohne belastbare Daten ans Ende. */
 export function rankRealYield(list: CcyRealYield[]): CcyRealYield[] {
   return [...list].sort((a, b) => {
