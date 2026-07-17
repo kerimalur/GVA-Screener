@@ -86,6 +86,14 @@ export default function RegionCompare({ a, b }: RegionCompareProps) {
               <tr key={row.category} className="border-b border-border/40">
                 <td className="py-2 font-medium">
                   {meta?.label ?? row.category}
+                  {(row.data?.cadence === "quarterly" || other?.data?.cadence === "quarterly") && (
+                    <span
+                      className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-mono bg-border/40 text-muted"
+                      title="Quartalsweise Veröffentlichung — älterer Stichtag ist release-bedingt, nicht stale"
+                    >
+                      quartalsweise
+                    </span>
+                  )}
                   {(row.data?.isStale || other?.data?.isStale) && (
                     <span className="ml-2"><StaleBadge /></span>
                   )}

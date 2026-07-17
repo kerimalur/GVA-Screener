@@ -17,61 +17,85 @@ export type FredCategory =
   | "business_confidence" // Business Tendency Survey (Manufacturing)
   | "market";       // Marktdaten (VIX, Dollar-Indizes, FX)
 
+export type FredCadence = "daily" | "weekly" | "monthly" | "quarterly";
+
 export interface FredSeriesDef {
   id: string;
   ccy: string | null; // G8-Währung oder null (Marktdaten)
   category: FredCategory;
   label: string;
-  /** true = Wert ist Indexstand, YoY muss berechnet werden (CPI-Indizes) */
+  /** true = Wert ist Indexstand, YoY muss berechnet werden (CPI-/BIP-Indizes) */
   isIndex?: boolean;
+  /** Publikations-Rhythmus: steuert Stale-Schwelle + Quartals-Kennzeichnung im UI */
+  cadence?: FredCadence;
+  /** "bis" = Serie wird von updateBis gepflegt — updateFred fetcht sie NICHT bei FRED */
+  source?: "fred" | "bis";
+}
+
+/**
+ * Max. Alter des letzten Werts (Tage) bevor eine Serie als stale gilt —
+ * inkl. Publikationslag: Quartalsdaten sind mit Stichtag Quartalsbeginn
+ * gestempelt und erscheinen ~3–6 Monate später (NZ/AU CPI: release-bedingt,
+ * nicht kaputt). Ohne cadence nur wirklich tote Serien markieren.
+ */
+export function staleAllowanceDays(def: FredSeriesDef): number {
+  switch (def.cadence) {
+    case "daily": return 14;
+    case "weekly": return 30;
+    case "monthly": return 100;
+    case "quarterly": return 220;
+    default: return 400;
+  }
 }
 
 // Hinweis: einige OECD-Serien wurden auf FRED eingestellt (2023/24).
 // Der Backfill probt jede ID und markiert tote Serien in fred_series_meta.is_stale.
 export const FRED_CATALOG: FredSeriesDef[] = [
   // — Leitzins / kurzfristig —
-  { id: "FEDFUNDS", ccy: "USD", category: "policy_rate", label: "Fed Funds Rate" },
-  { id: "ECBDFR", ccy: "EUR", category: "policy_rate", label: "EZB Einlagensatz" },
-  { id: "IRSTCI01GBM156N", ccy: "GBP", category: "policy_rate", label: "UK Geldmarktsatz" },
-  { id: "IRSTCI01JPM156N", ccy: "JPY", category: "policy_rate", label: "Japan Geldmarktsatz" },
+  { id: "FEDFUNDS", ccy: "USD", category: "policy_rate", label: "Fed Funds Rate", cadence: "monthly" },
+  { id: "ECBDFR", ccy: "EUR", category: "policy_rate", label: "EZB Einlagensatz", cadence: "daily" },
+  { id: "IRSTCI01GBM156N", ccy: "GBP", category: "policy_rate", label: "UK Geldmarktsatz", cadence: "monthly" },
+  { id: "IRSTCI01JPM156N", ccy: "JPY", category: "policy_rate", label: "Japan Geldmarktsatz", cadence: "monthly" },
   // CH/NZ: IRSTCI01…-Serien seit 2024 tot -> 3M-Interbank als Proxy (Audit 2026-07)
-  { id: "IR3TIB01CHM156N", ccy: "CHF", category: "policy_rate", label: "Schweiz 3M-Geldmarktsatz" },
-  { id: "IRSTCI01AUM156N", ccy: "AUD", category: "policy_rate", label: "Australien Geldmarktsatz" },
-  { id: "IR3TIB01NZM156N", ccy: "NZD", category: "policy_rate", label: "Neuseeland 3M-Geldmarktsatz" },
-  { id: "IRSTCI01CAM156N", ccy: "CAD", category: "policy_rate", label: "Kanada Geldmarktsatz" },
-  { id: "DGS2", ccy: "USD", category: "rate_2y", label: "US 2Y Treasury" },
+  { id: "IR3TIB01CHM156N", ccy: "CHF", category: "policy_rate", label: "Schweiz 3M-Geldmarktsatz", cadence: "monthly" },
+  { id: "IRSTCI01AUM156N", ccy: "AUD", category: "policy_rate", label: "Australien Geldmarktsatz", cadence: "monthly" },
+  { id: "IR3TIB01NZM156N", ccy: "NZD", category: "policy_rate", label: "Neuseeland 3M-Geldmarktsatz", cadence: "monthly" },
+  { id: "IRSTCI01CAM156N", ccy: "CAD", category: "policy_rate", label: "Kanada Geldmarktsatz", cadence: "monthly" },
+  { id: "DGS2", ccy: "USD", category: "rate_2y", label: "US 2Y Treasury", cadence: "daily" },
 
   // — Realrendite + Inflationserwartung (US; Treiber für Gold/BTC-Flüsse) —
-  { id: "DFII10", ccy: "USD", category: "real_10y", label: "US 10Y TIPS (Realrendite)" },
-  { id: "T10YIE", ccy: "USD", category: "breakeven", label: "US 10Y Breakeven-Inflation" },
-  { id: "T5YIE", ccy: "USD", category: "breakeven", label: "US 5Y Breakeven-Inflation" },
+  { id: "DFII10", ccy: "USD", category: "real_10y", label: "US 10Y TIPS (Realrendite)", cadence: "daily" },
+  { id: "T10YIE", ccy: "USD", category: "breakeven", label: "US 10Y Breakeven-Inflation", cadence: "daily" },
+  { id: "T5YIE", ccy: "USD", category: "breakeven", label: "US 5Y Breakeven-Inflation", cadence: "daily" },
 
-  // — 10Y-Renditen (US täglich, Rest OECD monatlich; DE = EUR-Proxy) —
-  { id: "DGS10", ccy: "USD", category: "yield_10y", label: "US 10Y (täglich)" },
-  { id: "IRLTLT01DEM156N", ccy: "EUR", category: "yield_10y", label: "Deutschland 10Y" },
-  { id: "IRLTLT01GBM156N", ccy: "GBP", category: "yield_10y", label: "UK 10Y" },
-  { id: "IRLTLT01JPM156N", ccy: "JPY", category: "yield_10y", label: "Japan 10Y" },
-  { id: "IRLTLT01CHM156N", ccy: "CHF", category: "yield_10y", label: "Schweiz 10Y" },
-  { id: "IRLTLT01AUM156N", ccy: "AUD", category: "yield_10y", label: "Australien 10Y" },
-  { id: "IRLTLT01NZM156N", ccy: "NZD", category: "yield_10y", label: "Neuseeland 10Y" },
-  { id: "IRLTLT01CAM156N", ccy: "CAD", category: "yield_10y", label: "Kanada 10Y" },
+  // — 10Y-Renditen (US täglich, Rest OECD monatlich mit ~2M Publikationslag;
+  //   DE = EUR-Proxy. DB-Check 2026-07-17: IRLTLT01* liefern bis Mai 26 →
+  //   Serien leben, nur der CSV-Transport war tot) —
+  { id: "DGS10", ccy: "USD", category: "yield_10y", label: "US 10Y (täglich)", cadence: "daily" },
+  { id: "IRLTLT01DEM156N", ccy: "EUR", category: "yield_10y", label: "Deutschland 10Y", cadence: "monthly" },
+  { id: "IRLTLT01GBM156N", ccy: "GBP", category: "yield_10y", label: "UK 10Y", cadence: "monthly" },
+  { id: "IRLTLT01JPM156N", ccy: "JPY", category: "yield_10y", label: "Japan 10Y", cadence: "monthly" },
+  { id: "IRLTLT01CHM156N", ccy: "CHF", category: "yield_10y", label: "Schweiz 10Y", cadence: "monthly" },
+  { id: "IRLTLT01AUM156N", ccy: "AUD", category: "yield_10y", label: "Australien 10Y", cadence: "monthly" },
+  { id: "IRLTLT01NZM156N", ccy: "NZD", category: "yield_10y", label: "Neuseeland 10Y", cadence: "monthly" },
+  { id: "IRLTLT01CAM156N", ccy: "CAD", category: "yield_10y", label: "Kanada 10Y", cadence: "monthly" },
 
-  // — CPI —
-  // Audit 2026-07: Nicht-US/EZ-CPI auf FRED tot (OECD-Feed eingestellt, letzte
-  // Werte 2021–2025); auch CPALTT01…-Alternativen stale. Serien bleiben für
-  // Historie, is_stale markiert sie. calendar_events.actual ist KEIN Ersatz
-  // (nur kommende Events, actual leer). Aktuelle CPI YoY aller 8 Währungen:
-  // BIS_CPI_YOY_* in fred_series (BIS-API, lib/jobs/updateBis.ts) — plus
-  // BIS_CBPOL_* als FRED-unabhängige Leitzinsen (fredgraph.csv seit ~2026-07
-  // blockiert/tot, siehe STATUS.md).
-  { id: "CPIAUCSL", ccy: "USD", category: "cpi", label: "US CPI", isIndex: true },
-  { id: "CP0000EZ19M086NEST", ccy: "EUR", category: "cpi", label: "Eurozone HICP", isIndex: true },
-  { id: "GBRCPIALLMINMEI", ccy: "GBP", category: "cpi", label: "UK CPI", isIndex: true },
-  { id: "JPNCPIALLMINMEI", ccy: "JPY", category: "cpi", label: "Japan CPI", isIndex: true },
-  { id: "CHECPIALLMINMEI", ccy: "CHF", category: "cpi", label: "Schweiz CPI", isIndex: true },
-  { id: "AUSCPIALLQINMEI", ccy: "AUD", category: "cpi", label: "Australien CPI (Q)", isIndex: true },
-  { id: "NZLCPIALLQINMEI", ccy: "NZD", category: "cpi", label: "Neuseeland CPI (Q)", isIndex: true },
-  { id: "CANCPIALLMINMEI", ccy: "CAD", category: "cpi", label: "Kanada CPI", isIndex: true },
+  // — CPI (YoY %, Quelle BIS) —
+  // Audit 2026-07: OECD-CPI-Indizes auf FRED dauerhaft eingestellt (letzte
+  // Werte 2021–2025) — auch über die offizielle API nicht wiederbelebbar.
+  // Aktive Quelle: BIS WS_LONG_CPI (lib/jobs/updateBis.ts) schreibt
+  // BIS_CPI_YOY_* in fred_series; source:"bis" ⇒ updateFred überspringt den
+  // FRED-Fetch. Werte sind bereits YoY % (kein isIndex). AUD/NZD publizieren
+  // quartalsweise — cadence:"quarterly" kennzeichnet das (kein Fehler).
+  // Alte OECD-Zeilen (CPIAUCSL, JPNCPIALLMINMEI, …) bleiben als Historie in der DB.
+  { id: "BIS_CPI_YOY_USD", ccy: "USD", category: "cpi", label: "US CPI YoY (BIS)", source: "bis", cadence: "monthly" },
+  { id: "BIS_CPI_YOY_EUR", ccy: "EUR", category: "cpi", label: "Eurozone CPI YoY (BIS)", source: "bis", cadence: "monthly" },
+  { id: "BIS_CPI_YOY_GBP", ccy: "GBP", category: "cpi", label: "UK CPI YoY (BIS)", source: "bis", cadence: "monthly" },
+  { id: "BIS_CPI_YOY_JPY", ccy: "JPY", category: "cpi", label: "Japan CPI YoY (BIS)", source: "bis", cadence: "monthly" },
+  { id: "BIS_CPI_YOY_CHF", ccy: "CHF", category: "cpi", label: "Schweiz CPI YoY (BIS)", source: "bis", cadence: "monthly" },
+  { id: "BIS_CPI_YOY_AUD", ccy: "AUD", category: "cpi", label: "Australien CPI YoY (BIS, quartalsweise)", source: "bis", cadence: "quarterly" },
+  { id: "BIS_CPI_YOY_NZD", ccy: "NZD", category: "cpi", label: "Neuseeland CPI YoY (BIS, quartalsweise)", source: "bis", cadence: "quarterly" },
+  { id: "BIS_CPI_YOY_CAD", ccy: "CAD", category: "cpi", label: "Kanada CPI YoY (BIS)", source: "bis", cadence: "monthly" },
 
   // — Arbeitslosenquote —
   { id: "UNRATE", ccy: "USD", category: "unemployment", label: "US Arbeitslosenquote" },
@@ -115,7 +139,7 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "XTNTVA01CAM667S", ccy: "CAD", category: "trade", label: "Kanada Handelsbilanz" },
 
   // — Yield Curve (nur USA; Rezessions-Signal bei Inversion) —
-  { id: "T10Y2Y", ccy: "USD", category: "yield_curve", label: "US 10-2Y Spread" },
+  { id: "T10Y2Y", ccy: "USD", category: "yield_curve", label: "US 10-2Y Spread", cadence: "daily" },
 
   // — PMI (nur USA; Rest nutzt OECD CLI + BCI als Doppel-Proxy) —
   { id: "NAPM", ccy: "USD", category: "pmi", label: "ISM Manufacturing PMI" },
@@ -150,14 +174,14 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "SLRTTO01CHM659S", ccy: "CHF", category: "retail_sales", label: "Retail Trade Volume CHF" },
 
   // — Zentralbank-Bilanzsummen (Fed/EZB/BoJ decken >80% globaler ZB-Liquidität) —
-  { id: "WALCL", ccy: "USD", category: "balance_sheet", label: "Fed Total Assets" },
-  { id: "ECBASSETSW", ccy: "EUR", category: "balance_sheet", label: "ECB Total Assets" },
-  { id: "JPNASSETS", ccy: "JPY", category: "balance_sheet", label: "BoJ Total Assets" },
+  { id: "WALCL", ccy: "USD", category: "balance_sheet", label: "Fed Total Assets", cadence: "weekly" },
+  { id: "ECBASSETSW", ccy: "EUR", category: "balance_sheet", label: "ECB Total Assets", cadence: "weekly" },
+  { id: "JPNASSETS", ccy: "JPY", category: "balance_sheet", label: "BoJ Total Assets", cadence: "monthly" },
 
   // — Marktdaten —
-  { id: "VIXCLS", ccy: null, category: "market", label: "VIX" },
-  { id: "DTWEXBGS", ccy: null, category: "market", label: "Broad Dollar Index" },
-  { id: "DEXSDUS", ccy: null, category: "market", label: "USD/SEK (für DXY-Formel)" },
+  { id: "VIXCLS", ccy: null, category: "market", label: "VIX", cadence: "daily" },
+  { id: "DTWEXBGS", ccy: null, category: "market", label: "Broad Dollar Index", cadence: "daily" },
+  { id: "DEXSDUS", ccy: null, category: "market", label: "USD/SEK (für DXY-Formel)", cadence: "daily" },
 ];
 
 export const FRED_BY_ID = new Map(FRED_CATALOG.map((s) => [s.id, s]));

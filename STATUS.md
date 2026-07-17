@@ -5,6 +5,34 @@
 
 Stand: 2026-07-17
 
+## FRED auf offizielle API umgestellt (2026-07-17)
+`lib/sources/fred.ts`: fredgraph.csv (seit ~03.07. blockiert, Timeouts) →
+offizielle FRED-API (series/observations, JSON). Key NUR aus Env
+`FRED_API_KEY` (nie im Code/Log; Fehlerlog nennt Serie+Status, nie die URL).
+Gleiche Schnittstelle (`fetchSeries` → Observations|null), 1 Retry bei
+429/5xx/Netzfehler, ~80 Serien/Lauf bleiben unter dem Limit (120/min).
+- **Befund DB (17.07.):** Daily-Serien (DGS10, VIXCLS, DFII10, T10YIE, DGS2,
+  Dollar-Indizes) letzter Stand 26.06.–02.07. → reiner Transport-Ausfall,
+  API-Umbau fixt sie. IRLTLT01* (10Y non-US): Mai-Stand = normaler ~2M-Lag,
+  Serien leben. T10Y2Y war nie geladen → füllt sich beim ersten Lauf.
+- **CPI je Währung:** OECD-Indizes auf FRED endgültig tot (2021–2025) → Katalog
+  zeigt jetzt auf die BIS-Serien (`BIS_CPI_YOY_*`, source:"bis", updateFred
+  überspringt sie — updateBis pflegt sie). Werte sind direkt YoY %.
+  JPY monatlich frisch (Apr 26); AUD/NZD quartalsweise = release-bedingt,
+  gekennzeichnet (cadence:"quarterly", Chip im Vergleich statt Stale-Badge).
+  Alte OECD-Zeilen bleiben als DB-Historie.
+- **Stale neu:** is_stale = Fetch-Fehler ODER Alter > Kadenz-Schwelle
+  (`staleAllowanceDays`: daily 14 / weekly 30 / monthly 100 / quarterly 220 /
+  unbekannt 400 Tage) — Quartalsserien flappen nicht mehr als "stale".
+- terminal.ts rechnet YoY nur noch für isIndex-Serien (BIS ist schon YoY).
+- Tests: 10 Mock-Kontrollwerte (Parser, 400/429/Retry, Key-Pfade) grün; Build sauber.
+- **OFFEN (Kerim, manuell):** FRED_API_KEY kostenlos registrieren
+  (fred.stlouisfed.org/docs/api/api_key.html) → als `FRED_API_KEY` in
+  Vercel-Env (Production) + optional lokal `.env.local` eintragen. Danach:
+  `npx tsx scripts/fred-api-smoke.mts` (lokal) oder fundamentals-Cron manuell
+  laufen lassen → Daily-Serien springen auf aktuell. Render braucht den Key
+  NICHT (FRED läuft nur im Vercel-Cron).
+
 ## Backend: /health-Ping für UptimeRobot (2026-07-17)
 Root "/" gab 404 → UptimeRobot meldete Render fälschlich down. Neu in
 `Backend/main.py`: GET /health (+ Alias /doctor) → sofort 200 "ok",

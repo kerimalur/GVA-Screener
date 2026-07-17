@@ -226,10 +226,14 @@ export async function loadTerminalData(db: SupabaseClient): Promise<TerminalData
     if (pid) policyByCcy.set(ccy, rateSeries.get(pid) ?? []);
     if (yid) yield10ByCcy.set(ccy, rateSeries.get(yid) ?? []);
 
-    // CPI-Index → YoY % (Quartalsserien: 4 Lags, sonst 12) — reine Anzeige
+    // CPI: BIS-Serien sind bereits YoY %; nur Index-Serien (isIndex) werden
+    // umgerechnet (Quartalsserien: 4 Lags, sonst 12) — reine Anzeige
     const cpiDef = seriesFor(ccy, "cpi");
-    const cpiIndex = cpiDef ? (rateSeries.get(cpiDef.id) ?? []) : [];
-    const cpiYoY = cpiIndex.length > 0 ? yoyFromIndex(cpiIndex, cpiDef?.id.includes("Q") ? 4 : 12) : [];
+    const cpiSeries = cpiDef ? (rateSeries.get(cpiDef.id) ?? []) : [];
+    const cpiYoY =
+      cpiDef?.isIndex && cpiSeries.length > 0
+        ? yoyFromIndex(cpiSeries, cpiDef.cadence === "quarterly" || cpiDef.id.includes("Q") ? 4 : 12)
+        : cpiSeries;
     cpiYoYByCcy.set(ccy, latest(cpiYoY));
 
     const cliDef = seriesFor(ccy, "cli");

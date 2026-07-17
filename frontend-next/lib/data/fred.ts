@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { pagedSelect } from "./util";
 import type { SeriesPoint } from "@/lib/calc/seriesMath";
 import { yoyFromIndex } from "@/lib/calc/seriesMath";
-import { seriesFor, FRED_BY_ID, type FredCategory } from "@/lib/constants/fredSeries";
+import { seriesFor, FRED_BY_ID, type FredCategory, type FredCadence } from "@/lib/constants/fredSeries";
 
 /** Zeitreihe aus fred_series (chronologisch, nur non-null). */
 export async function getFredSeries(
@@ -47,6 +47,8 @@ export interface CategoryValue {
   spark: SeriesPoint[];
   isStale: boolean;
   isYoY: boolean;
+  /** Publikations-Rhythmus (Quartalsserien sind release-bedingt älter, nicht stale) */
+  cadence: FredCadence | null;
 }
 
 /**
@@ -82,6 +84,7 @@ export async function getCategoryValue(
     spark: series.slice(-24),
     isStale: staleFlags.get(def.id) ?? series.length === 0,
     isYoY,
+    cadence: def.cadence ?? null,
   };
 }
 
