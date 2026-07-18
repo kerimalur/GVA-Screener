@@ -19,6 +19,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
       { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
       { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
+      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
     ],
   },
   {
@@ -102,6 +103,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/ml/training": "ML-Training — Modell & Predictions",
   "/ml/ranking": "Währungs-Ranking — ML-Engine",
   "/ml/fundamental-track": "Fundamental-Track — Q-Score vs. Markt",
+  "/ml/setup-finder": "Setup-Finder — Ranking vs. Outlook-Konfluenz",
   "/ml/replay": "Backtest-Replay — GVA-Hits bewerten",
   "/ml/engine-log": "Engine-Log — Nächtliche Experiment-Suche",
   "/ml/modell": "ML-Modell — Anleitung",

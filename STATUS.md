@@ -5,6 +5,31 @@
 
 Stand: 2026-07-17
 
+## Setup-Finder — Ranking ↔ Outlook-Konfluenz in EINEM Tool (2026-07-17)
+Neue Seite **/ml/setup-finder** (Nav: Analyse). Führt die zwei bestehenden
+Backtest-Hälften zusammen, wiederverwendet statt dupliziert:
+- **Umschalter Signalquelle:** WÄHRUNGSRANKING (Q5/Q1, bestehender
+  /replay/fundamental-track-Endpoint — jetzt über alle 28 Pairs, Concurrency 4,
+  Fortschritt x/28, Fehler je Pair einzeln) ↔ WEEKLY-OUTLOOK (Konfluenz über
+  die Outlook-Faktoren).
+- **Gemeinsame Steuerung:** Zeitraum 52W/2J/5J/10J/eigener (RANGE_PRESETS
+  jetzt in `lib/ml/fundamentalTrackApi.ts`, FundamentalTrack nutzt dieselbe
+  Quelle), alle 28 Pairs. Gleiche Konfiguration treibt LIVE-Setups UND Backtest.
+- **Outlook-Modus:** Faktoren an-/abwählbar (Retail mit «ab 2026-07»-Badge =
+  kurze Historie), Schwelle 3/4/5 live (steuert Live-Liste + Pair-Tabelle);
+  Backtest-Tabelle zeigt bewusst ALLE Schwellen 2/3/4/5 (kein nachträgliches
+  Besten-Picking). 2v2-Patt bei Schwelle 2 → kein Signal. Effektiver Zeitraum
+  + Faktor-Startdaten sichtbar; fehlende Daten zählen nicht (kein Hochrechnen).
+- **Datenweg:** `lib/ml/backtest.ts` refaktoriert — gemeinsamer Loader
+  (`loadSnapshotsAndPrices`) + `forwardReturns()` (kein Lookahead), neu
+  exportiert `loadOutlookRows()` → Route `/api/ml/setup-finder`
+  (unstable_cache 30 min, kompakte Rows); Client rechnet Faktor-/Schwellen-
+  Kombis live in `lib/ml/confluence.ts` (15 Kontrollwerte grün).
+  BucketTable (BacktestPanel) + RateTile (FundamentalTrack) exportiert und
+  wiederverwendet. loadBacktest-Verhalten unverändert; rein additiv,
+  Q-Score/Baseline unberührt. Build sauber.
+- Visuell hinter Auth noch nicht gesichtet — beim nächsten Login prüfen.
+
 ## Backend-CPI aus BIS — Real-Zins im Makro-Terminal wieder live (2026-07-17, Teil 3)
 `fundamentals.cpi_yoy()` holte CPI aus CPALTT01* (OECD via FRED, endgültig
 tot) → realRate/score in `macro.py` (6h-Loop, Macro-Terminal) blieben auf

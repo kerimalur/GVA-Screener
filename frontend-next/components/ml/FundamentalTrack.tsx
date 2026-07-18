@@ -6,45 +6,20 @@ import Panel from "@/components/layout/Panel";
 import { Field, Select } from "@/components/ui/Field";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useCachedFetch } from "@/lib/hooks/useCachedFetch";
+import {
+  RANGE_PRESETS,
+  trackUrl,
+  type RangeKey,
+  type Track,
+  type TrackSummary as Summary,
+} from "@/lib/ml/fundamentalTrackApi";
 
 /**
  * Pair-Fundamental-Track: für ein Pair die letzten 52 Wochen-Q-Scores (Baseline,
  * as-of) beider Währungen + ob der Markt danach 1W/4W in Bias-Richtung lief.
  * Reine Inspektion — zeigt, wie gut der Score kalibriert war (nicht der
- * ML-Backtest, den macht die Engine selbst).
+ * ML-Backtest, den macht die Engine selbst). Typen/URL: lib/ml/fundamentalTrackApi.
  */
-
-const API = (process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com").replace(
-  /\/+$/,
-  "",
-);
-
-interface Week {
-  week_start: string;
-  base_q: number;
-  base_score: number;
-  quote_q: number;
-  quote_score: number;
-  bias: "long" | "short" | "neutral";
-  ret_1w: number | null;
-  hit_1w: boolean | null;
-  ret_4w: number | null;
-  hit_4w: boolean | null;
-}
-
-interface Summary {
-  n: number;
-  hits: number;
-  rate: number | null;
-}
-
-interface Track {
-  pair: string;
-  base_ccy: string;
-  quote_ccy: string;
-  weeks: Week[];
-  summary: { h1?: Summary; h4?: Summary };
-}
 
 function QCell({ ccy, q, score }: { ccy: string; q: number; score: number }) {
   const cls = q === 5 ? "text-up" : q === 1 ? "text-down" : "text-muted";
@@ -71,7 +46,7 @@ function HitCell({ ret, hit }: { ret: number | null; hit: boolean | null }) {
   );
 }
 
-function RateTile({ label, s }: { label: string; s?: Summary }) {
+export function RateTile({ label, s }: { label: string; s?: Summary }) {
   const rate = s?.rate ?? null;
   const cls = rate === null ? "text-muted" : rate >= 50 ? "text-up" : "text-down";
   return (
@@ -89,29 +64,14 @@ function RateTile({ label, s }: { label: string; s?: Summary }) {
   );
 }
 
-const RANGE_PRESETS = [
-  { key: "52", label: "52 Wochen", weeks: 52 },
-  { key: "104", label: "2 Jahre", weeks: 104 },
-  { key: "260", label: "5 Jahre", weeks: 260 },
-  { key: "520", label: "10 Jahre", weeks: 520 },
-  { key: "custom", label: "Eigener Zeitraum", weeks: 0 },
-] as const;
-
 export default function FundamentalTrack() {
   const [pair, setPair] = useState("EUR_USD");
-  const [range, setRange] = useState<(typeof RANGE_PRESETS)[number]["key"]>("52");
+  const [range, setRange] = useState<RangeKey>("52");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
   // Custom-Range erst laden, wenn beide Daten gesetzt sind (url=null = warten).
-  const url = useMemo(() => {
-    if (range === "custom") {
-      return from && to
-        ? `${API}/replay/fundamental-track?pair=${pair}&from=${from}&to=${to}`
-        : null;
-    }
-    return `${API}/replay/fundamental-track?pair=${pair}&weeks=${range}`;
-  }, [pair, range, from, to]);
+  const url = useMemo(() => trackUrl(pair, range, from, to), [pair, range, from, to]);
 
   // Stale-first: letzter Stand sofort aus localStorage, Refresh im Hintergrund.
   const { data: track, error, loading } = useCachedFetch<Track>(`ft:${url}`, url);

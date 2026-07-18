@@ -32,7 +32,7 @@ function HorizonCells({ h }: { h: HorizonStat }) {
   );
 }
 
-function BucketTable({
+export function BucketTable({
   label,
   rows,
   firstCol,

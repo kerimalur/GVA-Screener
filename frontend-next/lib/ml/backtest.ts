@@ -22,6 +22,8 @@ export const HORIZONS = [1, 2, 3, 4] as const;
 
 /** Faktoren mit durchgehender Historie (Retail fehlt vor Jul 2026 → nicht in Kombis). */
 export const COMBO_FACTORS = ["Zinsdifferenz", "COT-Flow", "Saisonalität", "Yield-Spread"] as const;
+/** Alle Outlook-Faktoren in fester Reihenfolge (Index = Position in SetupFinderRow.d). */
+export const OUTLOOK_FACTORS = [...COMBO_FACTORS, "Retail-Sentiment"] as const;
 export const FACTOR_SHORT: Record<string, string> = {
   Zinsdifferenz: "Zins",
   "COT-Flow": "COT",
@@ -69,15 +71,15 @@ export interface BacktestResult {
   note: string;
 }
 
-interface Acc {
+export interface Acc {
   n: number;
   hits: number;
   sumRet: number;
 }
-const emptyAcc = (): Acc => ({ n: 0, hits: 0, sumRet: 0 });
+export const emptyAcc = (): Acc => ({ n: 0, hits: 0, sumRet: 0 });
 const horizonAccs = () => new Map<number, Acc>(HORIZONS.map((h) => [h, emptyAcc()]));
 
-function accToStat(horizon: number, a: Acc): HorizonStat {
+export function accToStat(horizon: number, a: Acc): HorizonStat {
   return {
     horizon,
     n: a.n,
@@ -87,7 +89,7 @@ function accToStat(horizon: number, a: Acc): HorizonStat {
 }
 
 /** Signal der Richtung `dir` (+1/-1) mit roher Pair-Rendite verbuchen. */
-function record(acc: Acc, dir: number, rawRetPct: number) {
+export function record(acc: Acc, dir: number, rawRetPct: number) {
   const signed = dir * rawRetPct;
   acc.n++;
   if (signed > 0) acc.hits++;
@@ -122,16 +124,26 @@ interface FactorObj {
   dir: -1 | 0 | 1;
 }
 
-export async function loadBacktest(db: SupabaseClient): Promise<BacktestResult> {
-  // ALLE Snapshots (auch NEUTRAL) — die Faktor-/Kombi-Analyse ist verdict-unabhängig.
-  const snaps = await pagedSelect<{
+interface SnapshotsAndPrices {
+  rows: Array<{
     week_start: string;
     instrument: string;
     direction: string | null;
     aligned_count: number;
     factors: FactorObj[];
-  }>(db, "weekly_outlook_snapshots", "week_start, instrument, direction, aligned_count, factors", (q) =>
-    q.order("week_start"),
+  }>;
+  pricesByInstrument: Map<string, Array<{ date: string; close: number }>>;
+  priceFrom: string | null;
+  priceTo: string | null;
+}
+
+/** Gemeinsamer Loader: alle Snapshots (auch NEUTRAL) + Preise ab erster Woche. */
+async function loadSnapshotsAndPrices(db: SupabaseClient): Promise<SnapshotsAndPrices> {
+  const snaps = await pagedSelect<SnapshotsAndPrices["rows"][number]>(
+    db,
+    "weekly_outlook_snapshots",
+    "week_start, instrument, direction, aligned_count, factors",
+    (q) => q.order("week_start"),
   );
 
   const fxSet = new Set(FX_INSTRUMENTS.map((i) => i.instrument));
@@ -157,6 +169,98 @@ export async function loadBacktest(db: SupabaseClient): Promise<BacktestResult> 
     if (!priceFrom || r.date < priceFrom) priceFrom = r.date;
     if (!priceTo || r.date > priceTo) priceTo = r.date;
   }
+  return { rows, pricesByInstrument, priceFrom, priceTo };
+}
+
+/** Rohe Pair-Rendite je Horizont ab Wochen-Start (kein Lookahead: nur Closes >= Datum). */
+function forwardReturns(
+  series: Array<{ date: string; close: number }>,
+  weekStart: string,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  const week0 = new Date(weekStart + "T00:00:00Z").getTime();
+  const c0 = closeAtOrAfter(series, week0, 5);
+  if (c0 === null || c0 === 0) return out;
+  for (const h of HORIZONS) {
+    const cN = closeAtOrAfter(series, week0 + h * 7 * 86_400_000, 7);
+    if (cN !== null) out.set(h, ((cN - c0) / c0) * 100);
+  }
+  return out;
+}
+
+/** Kompakte Zeile für den Setup-Finder (Client rechnet Konfluenz/Schwellen live). */
+export interface SetupFinderRow {
+  /** Wochen-Start 'YYYY-MM-DD' */
+  w: string;
+  /** Instrument 'EUR_USD' */
+  i: string;
+  /** Faktor-Richtung je OUTLOOK_FACTORS-Index: 1/-1/0, null = Faktor fehlt im Snapshot */
+  d: Array<-1 | 0 | 1 | null>;
+  /** Forward-Rendite % je HORIZONS-Index (roh, Pair-Richtung), null = Kurs fehlt */
+  r: Array<number | null>;
+}
+
+export interface SetupFinderData {
+  factors: string[]; // OUTLOOK_FACTORS
+  horizons: number[]; // HORIZONS
+  rows: SetupFinderRow[];
+  /** erste Woche mit Daten je Faktor (Datenehrlichkeit: kurze Historien kennzeichnen) */
+  factorFirstWeek: Record<string, string | null>;
+  priceFrom: string | null;
+  priceTo: string | null;
+}
+
+/**
+ * Rohdaten für den Setup-Finder: je Snapshot Faktor-Richtungen + Forward-Moves.
+ * Nutzt denselben Loader/Return-Rechner wie loadBacktest — kein Lookahead
+ * (Forward-Fenster beginnen am Wochen-Start, Faktoren sind as-of Snapshot).
+ */
+export async function loadOutlookRows(db: SupabaseClient): Promise<SetupFinderData> {
+  const { rows, pricesByInstrument, priceFrom, priceTo } = await loadSnapshotsAndPrices(db);
+
+  const out: SetupFinderRow[] = [];
+  const factorFirstWeek: Record<string, string | null> = {};
+  for (const f of OUTLOOK_FACTORS) factorFirstWeek[f] = null;
+
+  for (const s of rows) {
+    const series = pricesByInstrument.get(s.instrument);
+    if (!series || series.length === 0) continue;
+    const rawByH = forwardReturns(series, s.week_start);
+
+    const dirByFactor = new Map<string, -1 | 0 | 1>();
+    for (const f of s.factors ?? []) dirByFactor.set(f.name, f.dir);
+    const d = OUTLOOK_FACTORS.map((f) => {
+      const dir = dirByFactor.get(f);
+      if (dir === undefined) return null;
+      if (factorFirstWeek[f] === null || s.week_start < factorFirstWeek[f]!) {
+        factorFirstWeek[f] = s.week_start;
+      }
+      return dir;
+    });
+
+    out.push({
+      w: s.week_start,
+      i: s.instrument,
+      d,
+      r: HORIZONS.map((h) => {
+        const v = rawByH.get(h);
+        return v === undefined ? null : Number(v.toFixed(3));
+      }),
+    });
+  }
+
+  return {
+    factors: [...OUTLOOK_FACTORS],
+    horizons: [...HORIZONS],
+    rows: out,
+    factorFirstWeek,
+    priceFrom,
+    priceTo,
+  };
+}
+
+export async function loadBacktest(db: SupabaseClient): Promise<BacktestResult> {
+  const { rows, pricesByInstrument, priceFrom, priceTo } = await loadSnapshotsAndPrices(db);
 
   // — Verdict-Aggregatoren —
   const overall = horizonAccs();
@@ -191,16 +295,8 @@ export async function loadBacktest(db: SupabaseClient): Promise<BacktestResult> 
   for (const s of rows) {
     const series = pricesByInstrument.get(s.instrument);
     if (!series || series.length === 0) continue;
-    const week0 = new Date(s.week_start + "T00:00:00Z").getTime();
-    const c0 = closeAtOrAfter(series, week0, 5);
-    if (c0 === null || c0 === 0) continue;
-
     // Rohe Pair-Rendite je Horizont (einmal pro Snapshot)
-    const rawByH = new Map<number, number>();
-    for (const h of HORIZONS) {
-      const cN = closeAtOrAfter(series, week0 + h * 7 * 86_400_000, 7);
-      if (cN !== null) rawByH.set(h, ((cN - c0) / c0) * 100);
-    }
+    const rawByH = forwardReturns(series, s.week_start);
     if (rawByH.size === 0) continue;
     weeks.add(s.week_start);
 
