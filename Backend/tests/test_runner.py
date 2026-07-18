@@ -9,6 +9,7 @@ import ml_engine.run_experiments as runner
 class FakeDB:
     def __init__(self):
         self.rows: list[dict] = []
+        self.nights: list[dict] = []  # ml_engine_nights (Nacht-Zusammenfassung)
 
     def select_all(self, table, params):
         assert table == "ml_experiments"
@@ -24,6 +25,9 @@ class FakeDB:
         return [dict(r) for r in out]
 
     def insert(self, table, row, **kw):
+        if table == "ml_engine_nights":
+            self.nights.append(dict(row))
+            return
         self.rows.append({"id": len(self.rows) + 1, **row})
 
     def update(self, table, match, patch):
@@ -62,6 +66,7 @@ def test_runner_seedet_baseline_und_schreibt_metrics(fake_env, monkeypatch):
     for r in done:
         assert "mean_hitrate" in r["metrics"]
         assert r["hall_score"] is None or isinstance(r["hall_score"], float)
+    assert len(fake_env.nights) == 1  # Nacht-Zusammenfassung genau einmal geschrieben
 
 
 def test_holdout_wird_abgeschnitten(monkeypatch):
