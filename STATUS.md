@@ -5,6 +5,29 @@
 
 Stand: 2026-07-17
 
+## FRED-API auch im Python-Backend (2026-07-17, Teil 2)
+Das Backend zog FRED an ZWEI Stellen weiter über fredgraph.csv:
+`fundamentals.py` (OECD-10Y + CPI für den 6h-Makro-Loop auf Render) und
+`macro_features/data_sources.py` (Leitzinsen + H.10-FX-Kurse fürs ML-Panel —
+Render-Warmup + GitHub Actions). Beide nutzen jetzt `Backend/fred_api.py`
+(offizielle API, Key aus Env FRED_API_KEY, 1 Retry bei 429/5xx/Netz,
+Log nennt Serie+Status, nie die URL). Fallbacks unverändert: fundamentals →
+Faktor neutral, data_sources → alter CSV-Cache. Workflows ml-nightly/ml-weekly
+reichen `secrets.FRED_API_KEY` durch. 5 neue pytest (Parser/Fehlerpfade),
+Suite 32/32 grün (test_runner-Fix: FakeDB kannte ml_engine_nights nicht —
+vorbestehend seit 16.07., separater Commit).
+- Hinweis fundamentals.py: CPI-Quelle dort ist CPALTT01* (OECD, tot) — Real-
+  Zins-Teil degradiert weiter neutral wie bisher; echter CPI-Fix wäre BIS auch
+  im Backend (separates Thema, Frontend-Ranking nutzt BIS bereits).
+- **OFFEN (Kerim, manuell):**
+  1. FRED_API_KEY zusätzlich in die **Render-Env** (gva-screener-backend)
+     eintragen → Makro-Loop + Panel-Warmup ziehen wieder frische Zinsen.
+  2. FRED_API_KEY als **GitHub-Repo-Secret** anlegen (Settings → Secrets →
+     Actions) → nächtliche ML-Suche bekommt frische Daten (bis dahin: alter
+     Actions-Cache, kein Crash).
+  3. Vercel-seitig liegt der Key schon — einmal Cron "fundamentals" manuell
+     laufen lassen und /makro/terminal prüfen (Daily-Serien wieder aktuell).
+
 ## FRED auf offizielle API umgestellt (2026-07-17)
 `lib/sources/fred.ts`: fredgraph.csv (seit ~03.07. blockiert, Timeouts) →
 offizielle FRED-API (series/observations, JSON). Key NUR aus Env

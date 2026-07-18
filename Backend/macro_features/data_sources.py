@@ -1,10 +1,11 @@
-"""Rohdaten-Fetcher mit lokalem CSV-Cache (kein API-Key nötig).
+"""Rohdaten-Fetcher mit lokalem CSV-Cache.
 
 Quellen:
   - CFTC Socrata API (publicreporting.cftc.gov): Legacy futures-only +
-    Traders in Financial Futures (TFF) — volle Historie je Contract-Code.
-  - FRED CSV-Export (fredgraph.csv): Leitzins-/Geldmarktserien UND
-    FX-Tageskurse (Fed H.10, DEX*-Serien, >17 Jahre).
+    Traders in Financial Futures (TFF) — volle Historie je Contract-Code (keyless).
+  - Offizielle FRED-API (fred_api.py, Key aus Env FRED_API_KEY):
+    Leitzins-/Geldmarktserien UND FX-Tageskurse (Fed H.10, DEX*-Serien,
+    >17 Jahre). fredgraph.csv ist seit ~2026-07 fuer Cloud-IPs blockiert.
 
 Alle Funktionen liefern ROHE Historie (chronologisch); as-of-Filter passiert
 bewusst erst in den Faktor-Modulen, damit dieselben gecachten Daten für jeden
@@ -12,17 +13,17 @@ Backtest-Zeitpunkt wiederverwendbar sind.
 """
 from __future__ import annotations
 
-import io
 import time
 
 import pandas as pd
 import requests
 
+from fred_api import fred_observations
+
 from .config import CACHE_DIR, CACHE_MAX_AGE_HOURS
 
 SOCRATA_LEGACY = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 SOCRATA_TFF = "https://publicreporting.cftc.gov/resource/gpe5-46if.json"
-FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 
 _SOCRATA_PAGE = 5000
 _TIMEOUT_S = 90
@@ -137,9 +138,11 @@ def fetch_fred(sid: str) -> pd.DataFrame:
     """FRED-Serie → DataFrame[date, value] (nur numerische Beobachtungen)."""
 
     def load() -> pd.DataFrame:
-        r = _get_with_retry(FRED_CSV.format(sid=sid))
-        df = pd.read_csv(io.StringIO(r.text))
-        df.columns = ["date", "value"]
+        obs = fred_observations(sid, timeout=_TIMEOUT_S)
+        if not obs:
+            # Fehler hochwerfen -> _cached faellt auf den alten CSV-Cache zurueck
+            raise RuntimeError(f"FRED {sid}: keine Daten (API-Fehler oder Key fehlt)")
+        df = pd.DataFrame(obs, columns=["date", "value"])
         df["date"] = pd.to_datetime(df["date"])
         df["value"] = pd.to_numeric(df["value"], errors="coerce")
         return df.dropna(subset=["value"]).reset_index(drop=True)

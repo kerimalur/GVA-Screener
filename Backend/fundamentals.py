@@ -1,17 +1,18 @@
 """Fundamental-Bias je Waehrung -> je Pair.
 
-Quellen (alle gratis, kein API-Key):
-  - FRED CSV  : Langfristzins (OECD 10Y) + CPI-Index -> Real-Zins, Zins-Drehung
+Quellen:
+  - FRED API  : Langfristzins (OECD 10Y) + CPI-Index -> Real-Zins, Zins-Drehung
+                (offizielle API, Key aus Env FRED_API_KEY — fredgraph.csv ist
+                seit ~2026-07 fuer Cloud-IPs blockiert, siehe fred_api.py)
   - CFTC COT  : Netto-Positionierung Non-Commercials -> Z-Score (Umkehr-Warnung)
   - OANDA     : Risk-Regime (SPX/AUDJPY/Gold) + Oel-Trend (CAD/AUD/NZD) + Saisonalitaet
 
 Design: pro Waehrung Sub-Scores -> Pair-Bias = Base - Quote.
 Fehlende Daten -> Faktor neutral (degradiert sauber, kein Crash).
 """
-import csv
-import io
 import time
-import requests
+
+from fred_api import fred_observations
 
 CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF"]
 
@@ -21,31 +22,9 @@ FRED_CC = {
     "AUD": "AU", "NZD": "NZ", "CAD": "CA", "CHF": "CH",
 }
 
-FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
-
-
 def fred_series(sid: str):
     """FRED-Serie als Liste (datum_str, float), neueste zuletzt. '.' = fehlend."""
-    try:
-        r = requests.get(FRED_CSV.format(sid=sid), timeout=15)
-        r.raise_for_status()
-    except Exception as e:
-        print(f"FRED Fehler {sid}: {e}")
-        return []
-    out = []
-    reader = csv.reader(io.StringIO(r.text))
-    rows = list(reader)
-    for row in rows[1:]:  # Header ueberspringen
-        if len(row) < 2:
-            continue
-        date, val = row[0], row[1].strip()
-        if val in (".", "", "NaN"):
-            continue
-        try:
-            out.append((date, float(val)))
-        except ValueError:
-            continue
-    return out
+    return fred_observations(sid)
 
 
 def long_term_rate(ccy: str):
