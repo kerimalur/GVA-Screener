@@ -5,6 +5,23 @@
 
 Stand: 2026-07-17
 
+## Backend-CPI aus BIS — Real-Zins im Makro-Terminal wieder live (2026-07-17, Teil 3)
+`fundamentals.cpi_yoy()` holte CPI aus CPALTT01* (OECD via FRED, endgültig
+tot) → realRate/score in `macro.py` (6h-Loop, Macro-Terminal) blieben auf
+STATIC-Fallback eingefroren. Jetzt: neues `Backend/bis_api.py` — spiegelt
+das Frontend (bis.ts/updateBis.ts): WS_LONG_CPI Serie 771 (fertiges YoY %),
+Area-Mapping US/XM/GB/JP/CH/AU/NZ/CA, keyless.
+- EIN Request für alle 8 Währungen + 6h-In-Prozess-Cache (Rate-Limit-schonend,
+  passt zum Loop). Fetch-Fehler → alter Cache, ohne Cache → None → Faktor
+  neutral (wie bisher, kein Crash). Rückgabeformat unverändert (float %/None).
+- AUD/NZD quartalsweise = release-bedingt gültig; erst >400 Tage gilt eine
+  Serie als tot (identisch Frontend-freshnessOf). macro.py unverändert —
+  realRate/score rechnen automatisch wieder, sobald cpi nicht None ist.
+- Verifiziert: 5 neue pytest (Parser/Cache/Frische/Fallback/Delegation),
+  Suite 37/37 grün; Live-Check gegen stats.bis.org lieferte aktuelle Werte
+  für alle 8 Währungen (USD 4.25 / JPY 1.35 / AUD 4.09 / NZD 3.08 …).
+- Damit ist der frühere Vermerk «fundamentals.py CPI = CPALTT01* tot» behoben.
+
 ## FRED-API auch im Python-Backend (2026-07-17, Teil 2)
 Das Backend zog FRED an ZWEI Stellen weiter über fredgraph.csv:
 `fundamentals.py` (OECD-10Y + CPI für den 6h-Makro-Loop auf Render) und
@@ -16,9 +33,6 @@ Faktor neutral, data_sources → alter CSV-Cache. Workflows ml-nightly/ml-weekly
 reichen `secrets.FRED_API_KEY` durch. 5 neue pytest (Parser/Fehlerpfade),
 Suite 32/32 grün (test_runner-Fix: FakeDB kannte ml_engine_nights nicht —
 vorbestehend seit 16.07., separater Commit).
-- Hinweis fundamentals.py: CPI-Quelle dort ist CPALTT01* (OECD, tot) — Real-
-  Zins-Teil degradiert weiter neutral wie bisher; echter CPI-Fix wäre BIS auch
-  im Backend (separates Thema, Frontend-Ranking nutzt BIS bereits).
 - **OFFEN (Kerim, manuell):**
   1. FRED_API_KEY zusätzlich in die **Render-Env** (gva-screener-backend)
      eintragen → Makro-Loop + Panel-Warmup ziehen wieder frische Zinsen.

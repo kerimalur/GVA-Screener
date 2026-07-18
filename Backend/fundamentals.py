@@ -1,9 +1,11 @@
 """Fundamental-Bias je Waehrung -> je Pair.
 
 Quellen:
-  - FRED API  : Langfristzins (OECD 10Y) + CPI-Index -> Real-Zins, Zins-Drehung
+  - FRED API  : Langfristzins (OECD 10Y) -> Zins-Drehung
                 (offizielle API, Key aus Env FRED_API_KEY — fredgraph.csv ist
                 seit ~2026-07 fuer Cloud-IPs blockiert, siehe fred_api.py)
+  - BIS API   : CPI YoY je Waehrung (keyless, siehe bis_api.py) -> Real-Zins.
+                Die alte OECD-Quelle CPALTT01* auf FRED ist endgueltig tot.
   - CFTC COT  : Netto-Positionierung Non-Commercials -> Z-Score (Umkehr-Warnung)
   - OANDA     : Risk-Regime (SPX/AUDJPY/Gold) + Oel-Trend (CAD/AUD/NZD) + Saisonalitaet
 
@@ -12,11 +14,12 @@ Fehlende Daten -> Faktor neutral (degradiert sauber, kein Crash).
 """
 import time
 
+from bis_api import bis_cpi_yoy
 from fred_api import fred_observations
 
 CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF"]
 
-# FRED OECD-Laendercodes je Waehrung (fuer IRLTLT01xx / CPALTT01xx Serien).
+# FRED OECD-Laendercodes je Waehrung (fuer IRLTLT01xx-10Y-Serien).
 FRED_CC = {
     "USD": "US", "EUR": "EZ", "GBP": "GB", "JPY": "JP",
     "AUD": "AU", "NZD": "NZ", "CAD": "CA", "CHF": "CH",
@@ -41,18 +44,12 @@ def long_term_rate(ccy: str):
 
 
 def cpi_yoy(ccy: str):
-    """CPI YoY % aus OECD-Index-Serie (selbst gerechnet, robuster als YoY-Serie)."""
-    cc = FRED_CC.get(ccy)
-    if not cc:
-        return None
-    data = fred_series(f"CPALTT01{cc}M661N")  # Index, monatlich
-    if len(data) < 13:
-        return None
-    latest = data[-1][1]
-    year_ago = data[-13][1]
-    if year_ago == 0:
-        return None
-    return (latest / year_ago - 1) * 100
+    """CPI YoY % aus BIS (WS_LONG_CPI Serie 771, fertiges YoY) oder None.
+
+    AUD/NZD publizieren quartalsweise — release-bedingt aelterer Stichtag,
+    innerhalb der 400-Tage-Schwelle gueltig (siehe bis_api.py).
+    """
+    return bis_cpi_yoy(ccy)
 
 
 def selftest():
