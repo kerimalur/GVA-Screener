@@ -68,8 +68,21 @@ create table if not exists ml_engine_nights (
 );
 alter table ml_engine_nights enable row level security;
 
+-- Migration ml_engine_nights_stability (angewandt 2026-07-19, additiv):
+-- Transparenz + stabile Linie (Spec 2026-07-19-ml-engine-stabilisierung).
+-- mean/std gehoeren zum ROHEN Nacht-Besten (hall = mean - std);
+-- stable_* ist die Hysterese-Linie (wechselt nur bei Marge ueber N Naechte).
+alter table ml_engine_nights
+  add column if not exists mean_hitrate real,
+  add column if not exists std_hitrate real,
+  add column if not exists stable_config jsonb,
+  add column if not exists stable_score real;
+
 -- Live-Sicht: aggregiert ml_experiments pro UTC-Nacht (deckt auch die laufende
 -- Nacht ab, bevor der Runner seine Zusammenfassung schreibt).
+-- 2026-07-19: mean_/std_hitrate des besten Experiments hinten angehaengt
+-- (create or replace erlaubt nur Anfuegen). stable_* kann die View nicht
+-- liefern (Hysterese ist zustandsbehaftet) — nur Tabelle.
 create or replace view ml_engine_nights_live
 with (security_invoker = true) as
 select
@@ -80,6 +93,12 @@ select
   max(hall_score) filter (where status = 'done') as best_hall,
   (array_agg(config order by hall_score desc nulls last)
      filter (where status = 'done' and hall_score is not null))[1] as best_config,
-  round((coalesce(sum(runtime_s), 0) / 60.0)::numeric, 1) as runtime_min
+  round((coalesce(sum(runtime_s), 0) / 60.0)::numeric, 1) as runtime_min,
+  ((array_agg(metrics order by hall_score desc nulls last)
+     filter (where status = 'done' and hall_score is not null))[1]
+     ->> 'mean_hitrate')::real as mean_hitrate,
+  ((array_agg(metrics order by hall_score desc nulls last)
+     filter (where status = 'done' and hall_score is not null))[1]
+     ->> 'std_hitrate')::real as std_hitrate
 from ml_experiments
 group by 1;

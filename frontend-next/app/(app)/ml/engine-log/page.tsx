@@ -24,23 +24,31 @@ function ScoreExplainer() {
   return (
     <details className="mt-3 group">
       <summary className="cursor-pointer text-xs font-bold text-muted hover:text-fg py-1">
-        Was bedeutet «bester Holdout-Score»?
+        Was bedeuten Score, Ø-Trefferquote und σ?
       </summary>
       <div className="text-xs text-muted leading-relaxed space-y-2 pl-4 pt-1">
         <p>
           Jede Nacht testet die Engine hunderte Modell-Varianten. Jedes Modell wird nur auf
           Vergangenheitsdaten trainiert und dann auf Wochen geprüft, die es beim Training{" "}
-          <span className="font-bold text-fg">nie gesehen hat</span> (out-of-sample). Der Score ist
-          die durchschnittliche Trefferquote in diesen Testfenstern, minus der Schwankung zwischen
-          ihnen — belohnt wird Konsistenz, nicht ein Glückstreffer in einer Marktphase. Hier steht
-          pro Nacht der beste Wert.
+          <span className="font-bold text-fg">nie gesehen hat</span> (out-of-sample). Der Score ist{" "}
+          <span className="font-mono text-fg">Ø-Trefferquote − σ</span>: die durchschnittliche
+          Trefferquote über die Testfenster, minus deren Schwankung — belohnt wird Konsistenz,
+          nicht ein Glückstreffer in einer Marktphase.
         </p>
         <p>
-          <span className="font-bold text-fg">Lesen:</span> 0.500 = Münzwurf, kein Vorteil. Je
-          höher und je stabiler die Linie über Wochen, desto näher ist ein Kandidat daran, zum
-          Champion befördert zu werden. Einzelne Ausreisser nach oben bedeuten wenig — der Trend
-          zählt. (Der strenge 104-Wochen-Holdout bleibt dabei unangetastet; den prüft erst die
-          manuelle Beförderung.)
+          <span className="font-bold text-fg">Ø und σ getrennt lesen:</span> Ø ≈ 0.51 bei kleiner σ
+          = <span className="text-fg">keine Edge</span> (Münzwurf). Ø ≈ 0.55+ bei hoher σ ={" "}
+          <span className="text-fg">instabile Edge</span> — funktioniert nur in manchen
+          Marktphasen. Erst Ø deutlich über 0.5 UND kleine σ ist ein belastbarer Kandidat.
+        </p>
+        <p>
+          <span className="font-bold text-fg">Stabile Linie:</span> der «Beste der Nacht» ist ein
+          rohes Maximum über ~1200 Läufe und springt bei schwachem Signal zufällig zwischen
+          Modell-Familien. Die stabile Linie folgt einer festen Familie und wechselt nur, wenn ein
+          Herausforderer sie mehrere Nächte in Folge um eine Mindest-Marge schlägt (Hysterese).
+          Das reduziert Auswahl-Rauschen — es{" "}
+          <span className="font-bold text-fg">verbessert das Signal nicht</span>. (Der strenge
+          104-Wochen-Holdout bleibt unangetastet; den prüft erst die manuelle Beförderung.)
         </p>
       </div>
     </details>
@@ -53,8 +61,8 @@ export default async function Page() {
   return (
     <div className="space-y-5 max-w-[1100px] mx-auto">
       <Panel
-        title="Verlauf — bester Holdout-Score pro Nacht"
-        subtitle={`${nights.length} Nächte · ${totalExperiments} Experimente gesamt · steigend/stabil = die Suche findet konsistentere Modelle`}
+        title="Verlauf — Score & Trefferquote pro Nacht"
+        subtitle={`${nights.length} Nächte · ${totalExperiments} Experimente gesamt · Score = Ø-Trefferquote − σ · stabile Linie wechselt nur mit Marge über mehrere Nächte`}
       >
         {chart.length === 0 ? (
           <p className="text-sm text-muted">Noch keine Experimente. Läuft der Nightly-Workflow?</p>
@@ -62,7 +70,11 @@ export default async function Page() {
           <>
             <TimeSeriesChart
               data={chart}
-              series={[{ key: "bestHall", label: "Bester Holdout-Score", color: "var(--color-up)" }]}
+              series={[
+                { key: "bestHall", label: "Bester Score (roh)", color: "var(--color-up)" },
+                { key: "stableScore", label: "Stabile Linie", color: "var(--color-accent)" },
+                { key: "meanHitrate", label: "Ø Trefferquote (roh)", dashed: true },
+              ]}
               height={220}
               defaultTimeframe="Max"
               yDigits={3}
@@ -85,7 +97,9 @@ export default async function Page() {
                   <th className="pr-3">Fehler</th>
                   <th className="pr-3">Offen</th>
                   <th className="pr-3">Bester Score (Δ)</th>
+                  <th className="pr-3">Hit Ø ± σ</th>
                   <th className="pr-3">Bestes Modell</th>
+                  <th className="pr-3">Stabiles Modell</th>
                   <th>Laufzeit</th>
                 </tr>
               </thead>
@@ -101,7 +115,26 @@ export default async function Page() {
                     <td className="pr-3">
                       <HallDelta n={n} />
                     </td>
+                    <td className="pr-3 font-mono text-xs">
+                      {n.meanHitrate !== null ? (
+                        <>
+                          {n.meanHitrate.toFixed(3)}
+                          <span className="text-muted">
+                            {" "}
+                            ±{(n.stdHitrate ?? 0).toFixed(3)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-muted">–</span>
+                      )}
+                    </td>
                     <td className="pr-3 font-mono text-xs text-muted">{n.bestModel ?? "–"}</td>
+                    <td className="pr-3 font-mono text-xs text-muted">
+                      {n.stableModel ?? "–"}
+                      {n.stableScore !== null && (
+                        <span className="text-fg"> · {n.stableScore.toFixed(3)}</span>
+                      )}
+                    </td>
                     <td className="font-mono text-muted">{n.runtimeMin} min</td>
                   </tr>
                 ))}

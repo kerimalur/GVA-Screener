@@ -3,7 +3,41 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-17
+Stand: 2026-07-20
+
+## ML-Engine stabilisiert + Trefferquote transparent (2026-07-20)
+Spec: `docs/superpowers/specs/2026-07-19-ml-engine-stabilisierung-design.md`
+Problem: nächtlicher «Bester» war roher max(hall_score) über ~1200 Zufalls-Configs
+→ sprang jede Nacht (lgbm·4W·scores ↔ logreg·4W·rates+scores ↔ lgbm·1W·cot).
+Und: hall_score (= mean_hitrate − std_hitrate) zeigte nicht, ob «keine Edge»
+oder «instabile Edge». **Stabilisierung reduziert Auswahl-Rauschen, verbessert
+das Signal NICHT.** Holdout-Disziplin unangetastet (promote.py/ml_holdout_access).
+- **Kern-Suchraum** (search.py, VORAB fixiert aus Nacht-Siegern 13.–19.07.,
+  4/7 logreg·4W·[rates,scores], 6/7 Horizont 4): Default 80 % der Draws aus
+  logreg · 4W · Teilmengen{rates,scores}, 20 % Exploration voller Raum.
+  Env: ML_CORE_ALGOS / ML_CORE_HORIZONS / ML_CORE_FEATURE_GROUPS /
+  ML_EXPLORE_FRAC. Configs tragen `space: core|explore`.
+- **Seed-Robustheit** (run_experiments._reseed_top_configs): nach dem Budget-
+  Loop Top-5-Configs mit insgesamt 3 Seeds wiederholen (ML_TOPK_RESEED /
+  ML_SEED_REPEATS / ML_RESEED_BUDGET_S=300s-Deckel); Kandidat der Nacht =
+  bester Seed-MITTELWERT, nicht der Einzel-Glückslauf. (Im --max-Smoke übersprungen.)
+- **Hysterese** (neu ml_engine/stability.py, pure functions): stabile Linie
+  je Modell-Familie (algo·horizont·features). Wechsel NUR wenn Herausforderer
+  die stabile Familie ML_STABLE_NIGHTS (3) Nächte in Folge um ML_STABLE_MARGIN
+  (0.005) schlägt. best_hall/best_config bleiben ROH.
+- **DB** (Migration `ml_engine_nights_stability` angewandt, additiv):
+  ml_engine_nights + mean_hitrate, std_hitrate, stable_config, stable_score;
+  View ml_engine_nights_live liefert zusätzlich mean/std des Nacht-Besten.
+  mean/std der 7 Alt-Nächte backfilled (Befund: mean ≈ 0.52–0.54, std ≈
+  0.005–0.033 → schwache, leicht instabile Edge — nicht «keine Edge»).
+- **Engine-Log**: Tabelle + «Hit Ø±σ» und «Stabiles Modell»; Chart 3 Linien
+  (roher Bester, stabile Linie, Ø-Trefferquote gestrichelt); Explainer erklärt
+  mean−std, «keine Edge» vs. «instabile Edge», Hysterese. Alte Nächte ohne
+  Felder zeigen «–».
+- Tests: 56 pytest grün (neu: test_search_space, test_stability, Runner-
+  Durchreichen + Re-Seed), Frontend-Build sauber.
+- Hinweis Laufzeit: Nightly-Budget 50 min + Re-Seed ≤5 min bleibt unter dem
+  60-min-Workflow-Timeout.
 
 ## Setup-Finder — Ranking ↔ Outlook-Konfluenz in EINEM Tool (2026-07-17)
 Neue Seite **/ml/setup-finder** (Nav: Analyse). Führt die zwei bestehenden

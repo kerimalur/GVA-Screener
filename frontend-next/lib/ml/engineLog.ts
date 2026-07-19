@@ -26,13 +26,26 @@ export interface EngineNight {
   bestHall: number | null;
   deltaHall: number | null; // vs. Vornacht (nur wenn beide bestHall haben)
   bestModel: string | null; // Kurz-Info des besten Kandidaten, z.B. "lgbm · 4W · rates+seasonal"
+  /** rohe Ø-Trefferquote des besten Experiments (hall = mean − std) */
+  meanHitrate: number | null;
+  /** Streuung der Trefferquote über die Walk-Forward-Folds (hohe σ = instabil) */
+  stdHitrate: number | null;
+  /** stabile Linie (Hysterese): Familie + deren Score in dieser Nacht */
+  stableModel: string | null;
+  stableScore: number | null;
   runtimeMin: number;
   failures: EngineFailure[];
 }
 
 export interface EngineLogData {
   nights: EngineNight[]; // absteigend (neueste zuerst) — für die Tabelle
-  chart: { date: string; bestHall: number | null }[]; // aufsteigend — für den Verlauf
+  /** aufsteigend — Verlauf: roher Bestwert, stabile Linie, rohe Ø-Trefferquote */
+  chart: {
+    date: string;
+    bestHall: number | null;
+    stableScore: number | null;
+    meanHitrate: number | null;
+  }[];
   totalExperiments: number;
 }
 
@@ -44,6 +57,11 @@ interface NightRow {
   best_hall: number | null;
   best_config: Record<string, unknown> | null;
   runtime_min: number | null;
+  // additiv seit 2026-07-19 (fehlen in alten Zeilen / teils in der Live-View → «–»)
+  mean_hitrate?: number | null;
+  std_hitrate?: number | null;
+  stable_config?: Record<string, unknown> | null; // nur Tabelle, nicht Live-View
+  stable_score?: number | null;
 }
 
 interface FailedRow {
@@ -66,8 +84,12 @@ export async function loadEngineLog(): Promise<EngineLogData> {
   const [{ data: live }, { data: archive }, { data: failedRows }] = await Promise.all([
     sb
       .from("ml_engine_nights_live")
-      .select("night,done,failed,pending,best_hall,best_config,runtime_min"),
-    sb.from("ml_engine_nights").select("night,done,failed,best_hall,best_config,runtime_min"),
+      .select("night,done,failed,pending,best_hall,best_config,runtime_min,mean_hitrate,std_hitrate"),
+    sb
+      .from("ml_engine_nights")
+      .select(
+        "night,done,failed,best_hall,best_config,runtime_min,mean_hitrate,std_hitrate,stable_config,stable_score",
+      ),
     sb
       .from("ml_experiments")
       .select("created_at,config,error")
@@ -76,11 +98,14 @@ export async function loadEngineLog(): Promise<EngineLogData> {
       .limit(300),
   ]);
 
-  // Archiv zuerst, Live-View überschreibt gleiche Nächte (frischer: enthält
-  // auch queued/running der laufenden Nacht).
+  // Archiv zuerst; Live-View mergt darüber (frischer: enthält queued/running
+  // der laufenden Nacht). Feld-weise mergen: stable_* kennt nur die Tabelle —
+  // die Live-View darf sie nicht wegwischen.
   const byNight = new Map<string, NightRow>();
   for (const r of (archive ?? []) as NightRow[]) byNight.set(r.night, r);
-  for (const r of (live ?? []) as NightRow[]) byNight.set(r.night, r);
+  for (const r of (live ?? []) as NightRow[]) {
+    byNight.set(r.night, { ...byNight.get(r.night), ...r });
+  }
 
   // Fehler-Details je Nacht (max 10 pro Nacht)
   const failuresByNight = new Map<string, EngineFailure[]>();
@@ -117,6 +142,10 @@ export async function loadEngineLog(): Promise<EngineLogData> {
       bestHall: r.best_hall,
       deltaHall,
       bestModel: modelInfo(r.best_config),
+      meanHitrate: r.mean_hitrate ?? null,
+      stdHitrate: r.std_hitrate ?? null,
+      stableModel: modelInfo(r.stable_config ?? null),
+      stableScore: r.stable_score ?? null,
       runtimeMin: Math.round(r.runtime_min ?? 0),
       failures: failuresByNight.get(day) ?? [],
     });
@@ -124,7 +153,12 @@ export async function loadEngineLog(): Promise<EngineLogData> {
 
   return {
     nights: [...nightsAsc].reverse(),
-    chart: nightsAsc.map((n) => ({ date: n.date, bestHall: n.bestHall })),
+    chart: nightsAsc.map((n) => ({
+      date: n.date,
+      bestHall: n.bestHall,
+      stableScore: n.stableScore,
+      meanHitrate: n.meanHitrate,
+    })),
     totalExperiments,
   };
 }

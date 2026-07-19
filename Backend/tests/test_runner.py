@@ -12,12 +12,18 @@ class FakeDB:
         self.nights: list[dict] = []  # ml_engine_nights (Nacht-Zusammenfassung)
 
     def select_all(self, table, params):
+        if table == "ml_engine_nights":
+            # Hysterese-Historie: Naechte VOR heute, absteigend
+            return [dict(n) for n in sorted(self.nights, key=lambda n: n["night"], reverse=True)
+                    if not params.get("night") or n["night"] < params["night"].split("lt.")[1]]
         assert table == "ml_experiments"
         out = self.rows
         if params.get("status") == "eq.queued":
             out = [r for r in out if r["status"] == "queued"]
         if params.get("status") == "eq.running":
             out = [r for r in out if r["status"] == "running"]
+        if params.get("status") == "eq.done":
+            out = [r for r in out if r["status"] == "done"]
         if params.get("order") == "id.desc":
             out = sorted(out, key=lambda r: r["id"], reverse=True)
         if "limit" in params:
@@ -62,11 +68,39 @@ def test_runner_seedet_baseline_und_schreibt_metrics(fake_env, monkeypatch):
     baselines = [r for r in fake_env.rows if r["config"]["algo"] == "baseline"]
     assert len(baselines) == 3  # je Horizont eins geseedet
     done = [r for r in fake_env.rows if r.get("status") == "done"]
-    assert len(done) == 4  # --max 4 abgearbeitet
+    assert len(done) == 4  # --max 4 abgearbeitet (kein Re-Seed im Smoke-Test)
     for r in done:
         assert "mean_hitrate" in r["metrics"]
         assert r["hall_score"] is None or isinstance(r["hall_score"], float)
     assert len(fake_env.nights) == 1  # Nacht-Zusammenfassung genau einmal geschrieben
+
+    # Durchreichen (Spec 2026-07-19): mean/std des ROHEN Besten + stabile Linie
+    night = fake_env.nights[0]
+    best = max((r for r in done if r["hall_score"] is not None), key=lambda r: r["hall_score"])
+    assert night["mean_hitrate"] == pytest.approx(best["metrics"]["mean_hitrate"], abs=1e-6)
+    assert night["std_hitrate"] == pytest.approx(best["metrics"]["std_hitrate"], abs=1e-6)
+    assert night["best_hall"] == pytest.approx(best["hall_score"], abs=1e-6)  # roh unveraendert
+    assert night["stable_config"] is not None  # Initialisierung in Nacht 1
+    assert night["stable_config"]["algo"] != "baseline"
+
+
+def test_reseed_wiederholt_top_configs_mit_neuen_seeds(fake_env, monkeypatch):
+    monkeypatch.setenv("ML_SEED_REPEATS", "3")
+    monkeypatch.setenv("ML_TOPK_RESEED", "1")
+    panel = runner._search_panel()
+    rng = np.random.default_rng(7)
+
+    cfg = {"algo": "logreg", "horizon": 4, "features": ["scores"],
+           "params": {"C": 1.0}, "seed": 1, "space": "core"}
+    fake_env.insert("ml_experiments", {"status": "done", "config": cfg, "seed": 1,
+                                       "hall_score": 0.52, "metrics": {}})
+    runner._reseed_top_configs(panel, rng, "test")
+
+    same = [r for r in fake_env.rows
+            if r["config"].get("algo") == "logreg" and r["config"].get("params") == {"C": 1.0}]
+    assert len(same) == 3  # 1 Original + 2 zusaetzliche Seeds
+    assert len({r["config"]["seed"] for r in same}) == 3  # wirklich verschiedene Seeds
+    assert all(r["status"] == "done" for r in same)
 
 
 def test_holdout_wird_abgeschnitten(monkeypatch):
