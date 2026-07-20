@@ -57,8 +57,7 @@ export interface WeekPlanData {
   pairs: WeekPlanPair[];
   groups: WeekPlanGroup[];
   /** Stärke-Quintil je Währung (Champion) — Position des Scores in der eigenen
-   *  156W-Verteilung. NB: das DB-Feld heisst historisch `confidence_quintile`,
-   *  ist aber ein Stärke-Mass, keine Konfidenz. Für den Ranking-Abgleich an GVA-Linien. */
+   *  156W-Verteilung (Q5 = stärkstes Fünftel). Für den Ranking-Abgleich an GVA-Linien. */
   quintiles: Record<string, number>;
 }
 
@@ -118,7 +117,7 @@ export function evaluateControl(
 
 function quintileTag(row: RankingRow | undefined): string {
   if (!row) return "?";
-  const q = row.confidence_quintile;
+  const q = row.strength_quintile;
   const sign = row.score > 0 ? "+" : row.score < 0 ? "−" : "";
   const val = Math.abs(row.score).toFixed(2);
   return `Q${q} (${sign}${val})`;
@@ -198,7 +197,7 @@ export async function loadWeekPlan(): Promise<WeekPlanData> {
   }));
 
   const quintiles: Record<string, number> = {};
-  for (const r of ranking.champion) quintiles[r.ccy] = r.confidence_quintile;
+  for (const r of ranking.champion) quintiles[r.ccy] = r.strength_quintile;
 
   return { weekStart: ranking.weekStart, pairs, groups, quintiles };
 }

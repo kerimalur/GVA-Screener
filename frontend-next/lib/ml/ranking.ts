@@ -6,10 +6,9 @@ import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 export interface RankingRow {
   ccy: string;
   score: number;
-  /** STÄRKE-Quintil 1..5 (Score vs. eigene 156W-Verteilung, Q5 = stärkstes
-   *  Fünftel). Feldname historisch/Misnomer — KEINE Konfidenz. In UI immer als
-   *  „Stärke-Quintil" labeln. Rename = separate strukturelle Migration. */
-  confidence_quintile: number;
+  /** Stärke-Quintil 1..5: Position des Scores in seiner eigenen 156W-Verteilung
+   *  (Q5 = stärkstes Fünftel, Q1 = schwächstes). KEINE Konfidenz/Trefferquote. */
+  strength_quintile: number;
   top_features: { feature: string; value: number }[];
 }
 
@@ -55,8 +54,8 @@ export interface RankingData {
  *  (Q5-Währungen nach Score absteigend zuerst, dann Q1 aufsteigend);
  *  innerhalb des Blocks erst CCY als Basis, dann CCY als Quote. */
 export function derivePairIdeas(rows: RankingRow[]): PairIdeas {
-  const q5 = new Set(rows.filter((r) => r.confidence_quintile === 5).map((r) => r.ccy));
-  const q1 = new Set(rows.filter((r) => r.confidence_quintile === 1).map((r) => r.ccy));
+  const q5 = new Set(rows.filter((r) => r.strength_quintile === 5).map((r) => r.ccy));
+  const q1 = new Set(rows.filter((r) => r.strength_quintile === 1).map((r) => r.ccy));
   const isExtreme = (c: string) => q5.has(c) || q1.has(c);
 
   const best: PairIdea[] = [];
@@ -123,7 +122,11 @@ async function loadRankingDataUncached(): Promise<RankingData> {
   if (weekStart) {
     const { data: rows } = await sb
       .from("ml_weekly_rankings")
-      .select("ccy,model,horizon,score,confidence_quintile,top_features,created_at")
+      // Transitional während des Spalten-Renames confidence_quintile →
+      // strength_quintile: `*` bleibt gültig, egal welcher der beiden Namen
+      // gerade existiert. Nach der Migration (Phase 2) zurück auf die schlanke
+      // explizite Liste mit `strength_quintile`.
+      .select("*")
       .eq("week_start", weekStart);
     for (const r of rows ?? []) {
       if (r.created_at && (updatedAt === null || r.created_at > updatedAt)) {
@@ -132,7 +135,9 @@ async function loadRankingDataUncached(): Promise<RankingData> {
       const row: RankingRow = {
         ccy: r.ccy,
         score: r.score ?? 0,
-        confidence_quintile: r.confidence_quintile ?? 3,
+        // Rename-tolerant: liest neue Spalte, fällt bis zur Migration auf die alte
+        // zurück. Fallback (+ `select("*")`) entfällt in Phase 2.
+        strength_quintile: r.strength_quintile ?? r.confidence_quintile ?? 3,
         top_features: (r.top_features as RankingRow["top_features"]) ?? [],
       };
       if (r.model === "champion") champion.push(row);

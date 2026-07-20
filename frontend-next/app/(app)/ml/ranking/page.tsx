@@ -63,7 +63,7 @@ function RankingTable({ rows }: { rows: RankingRow[] }) {
                 <ScoreBar score={r.score} />
               </td>
               <td className="pr-3">
-                <QuintileBadge q={r.confidence_quintile} />
+                <QuintileBadge q={r.strength_quintile} />
               </td>
               <td className="text-xs text-muted font-mono">
                 {r.top_features
