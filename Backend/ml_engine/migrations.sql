@@ -45,6 +45,23 @@ create table if not exists ml_weekly_rankings (
   primary key (week_start, ccy, model)
 );
 
+-- Factor-Track (Projekt B): ein Faktor je Woche × Währung × Horizont, forward
+-- gereift. Generalisiert ml_weekly_rankings. Insert-only, kein Repaint.
+create table if not exists factor_track (
+  week_start date not null,
+  factor text not null,          -- 'cot' | 'rates' | 'season' | 'ranking_baseline'
+  ccy text not null,
+  horizon int not null,          -- 1 | 4
+  score real,                    -- Faktor-Score der Woche (Vorzeichen = Richtung)
+  direction text,                -- 'long' | 'short' | 'neutral'
+  realized_return real,          -- fwd_ret_{h}w (nachgetragen bei Reife)
+  hit boolean,                   -- (realized_return > 0) == (score > 0)
+  source text not null,          -- 'seed' | 'live'
+  created_at timestamptz not null default now(),
+  primary key (week_start, factor, ccy, horizon)
+);
+create index if not exists factor_track_factor_idx on factor_track (factor, horizon);
+
 create table if not exists ml_holdout_access (
   id bigint generated always as identity primary key,
   accessed_at timestamptz not null default now(),
@@ -57,6 +74,7 @@ alter table ml_experiments enable row level security;
 alter table ml_champion enable row level security;
 alter table ml_weekly_rankings enable row level security;
 alter table ml_holdout_access enable row level security;
+alter table factor_track enable row level security;
 
 -- Nacht-Historie (Migration ml_engine_nights, angewandt 2026-07-16):
 -- 1 Zeile pro Nacht, dauerhaft. Der Nightly-Runner upsertet nur die EIGENE
