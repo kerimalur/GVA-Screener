@@ -14,25 +14,11 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Analyse",
+    // Täglicher Weg: was du wirklich tradest — GVA-Setups + fundamentale Konfluenz.
+    title: "Trading",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: "ph-gauge" },
+      { href: "/cockpit", label: "Cockpit", icon: "ph-crosshair" },
       { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
-      { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
-      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
-    ],
-  },
-  {
-    // Faktor-Detail-Ansichten: erklären das "Warum" hinter dem Ranking,
-    // sind aber keine Entscheidungsquelle (Labor: Gleichgewichtung ~50 %).
-    title: "Diagnose",
-    collapsible: true,
-    items: [
-      { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
-      { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
-      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
-      { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
-      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
     ],
   },
   {
@@ -64,9 +50,20 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Machine Learning",
+    // Faktor-Detail-Ansichten + Auto-News: erklären das "Warum", sind aber keine
+    // tägliche Entscheidungsquelle (Labor: Gleichgewichtung ~50 %). Laufen weiter
+    // fürs spätere Faktor-Labor (Projekt B), bewusst aus dem täglichen Weg genommen.
+    title: "Labor · versteckt",
     collapsible: true,
     items: [
+      { href: "/dashboard", label: "News-Dashboard", icon: "ph-gauge" },
+      { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
+      { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
+      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
+      { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
+      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
+      { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
+      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
       { href: "/ml/engine-log", label: "Engine-Log (nächtlich)", icon: "ph-list-checks" },
       { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
       { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
@@ -83,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
+  "/cockpit": "Cockpit — Trades der Woche",
   "/dashboard": "Dashboard — Wirtschafts-News",
   "/weekly": "Weekly Outlook — Sonntags-Cockpit",
   "/cot/intelligence": "COT Intelligence — Institutionelle Positionierung",

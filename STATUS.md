@@ -5,6 +5,32 @@
 
 Stand: 2026-07-20
 
+## Trade-Cockpit — neue Startseite (2026-07-20)
+Konsolidierung: statt fundamentalem Sprawl (Weekly Outlook, Setup-Finder,
+Fundamental-Track, Macro Terminal, COT, Season) ein GVA-zentrisches Cockpit.
+Nur GVA-Setups werden getradet; Fundamentales ist Konfluenz, kein Gate.
+- **Seite** `/cockpit` (Startseite; Landing-Redirects `app/page.tsx` +
+  `app/(app)/page.tsx` → `/cockpit`). 3 Lanes: **Wartend** (Scanner `PREPARE`,
+  Distanz ≤ 100 Pips) · **Aktiv** (`signals.status='new'`, frischer HIT) ·
+  **In Arbeit** (`signals.status='watchlist'`).
+- **Reuse, kaum neuer Code:** Lanes = `fetchScreener()` (live) + `signals`-Tabelle
+  (Backend füllt bei HIT, `supabase_signals.record_hit_async`) + Stärke-Quintil-
+  Ranking. Konfluenz via `pairBias`/`biasReason` (✓ Rückenwind / ✗ Gegenwind).
+- **c-clean:** jeder HIT erscheint automatisch im Board; nur „Genommen" schreibt
+  einen Journal-Trade (`sessionStorage.tradePrefill` → `/journal`, Signal→`journaled`).
+  Beobachten→`watchlist`, Verwerfen→`dismissed`. Winrate bleibt sauber.
+- **Popup** (Klick auf Pair): Verdikt + beide Quintile (Score + Top-Faktoren) +
+  Linien-Info + High-Impact-Kalender der Woche.
+- **Nav:** neue Gruppe „Trading" (Cockpit, Währungs-Ranking) oben; alles
+  Fundamentale in eingeklappte Gruppe „Labor · versteckt" (= Basis für Projekt B,
+  Faktor-Tracking über ~1 Jahr — noch offen).
+- **Neue Files:** `lib/cockpit/board.ts` (pure Lane-Assembly), `components/cockpit/
+  {CockpitBoard,FundamentalModal}.tsx`, `app/(app)/cockpit/page.tsx`.
+- **Verifiziert:** tsc + ESLint grün. **Nicht** lokal lauffähig (braucht FastAPI-
+  Backend + Supabase-Session) → Live-Check nach Vercel-Deploy.
+- **Offen (Projekt B):** Silent Factor Lab — jeden Faktor separat auf Forward-
+  Trefferquote tracken; Design noch nicht gemacht.
+
 ## ⭐ Kanonische Zielgrösse & Vokabular (VERBINDLICH, 2026-07-20)
 Damit «Q5» und «Trefferquote» nie wieder zwei Dinge bedeuten:
 
