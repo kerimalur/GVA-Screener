@@ -56,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Labor · versteckt",
     collapsible: true,
     items: [
+      { href: "/ml/factor-lab", label: "Factor-Lab", icon: "ph-flask" },
       { href: "/dashboard", label: "News-Dashboard", icon: "ph-gauge" },
       { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
@@ -102,6 +103,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/ml/ranking": "Währungs-Ranking — ML-Engine",
   "/ml/fundamental-track": "Fundamental-Track — Q-Score vs. Markt",
   "/ml/setup-finder": "Setup-Finder — Ranking vs. Outlook-Konfluenz",
+  "/ml/factor-lab": "Factor-Lab — welcher Faktor trifft?",
   "/ml/replay": "Backtest-Replay — GVA-Hits bewerten",
   "/ml/engine-log": "Engine-Log — Nächtliche Experiment-Suche",
   "/ml/modell": "ML-Modell — Anleitung",
