@@ -58,3 +58,22 @@ def test_build_rows_struktur():
     eur_cot_4w = next(r for r in rows if r["factor"] == "cot" and r["ccy"] == "EUR" and r["horizon"] == 4)
     assert eur_cot_4w["realized_return"] is None
     assert eur_cot_4w["hit"] is None
+
+
+def test_build_rows_nan_score_neutral():
+    # NaN-Faktor-Score → score None, direction neutral, hit None (nicht bewertbar).
+    week = pd.Timestamp("2026-07-27")
+    panel = pd.DataFrame({
+        "week_start": [week],
+        "ccy": ["EUR"],
+        "cot_score": [np.nan],
+        "rates_score": [0.2],
+        "season_score": [0.1],
+        "fwd_ret_1w": [0.01],
+        "fwd_ret_4w": [np.nan],
+    })
+    rows = build_rows(panel, week, source="seed", horizons=[1])
+    cot = next(r for r in rows if r["factor"] == "cot")
+    assert cot["score"] is None
+    assert cot["direction"] == "neutral"
+    assert cot["hit"] is None

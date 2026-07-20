@@ -62,6 +62,18 @@ create table if not exists factor_track (
 );
 create index if not exists factor_track_factor_idx on factor_track (factor, horizon);
 
+-- Aggregat für /ml/factor-lab: Trefferquote je (factor,horizon,source). Winzig
+-- (≤ Faktoren×Horizonte×2 Zeilen) → umgeht die PostgREST-1000-Zeilen-Kappung,
+-- sonst würden die wenigen source='live'-Zeilen nie im Roh-Response landen.
+create or replace view factor_track_stats
+with (security_invoker = true) as
+select factor, horizon, source,
+       count(*) filter (where hit) as hits,
+       count(*) as n
+from factor_track
+where hit is not null
+group by factor, horizon, source;
+
 create table if not exists ml_holdout_access (
   id bigint generated always as identity primary key,
   accessed_at timestamptz not null default now(),

@@ -29,7 +29,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      # always(): ein Fehler im run_weekly-Step (SystemExit bei stale/Fehlschlag)
+      # darf den Faktor-Snapshot nicht überspringen — forward-only, kein Backfill.
       - run: python -m ml_engine.run_factors
+        if: always()
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

@@ -49,7 +49,10 @@ export default async function FactorLabPage() {
                 </tr>
               )}
               {stats.map((s: FactorStat) => (
-                <tr key={`${s.factor}-${s.horizon}`} className="border-t border-border/40">
+                <tr
+                  key={`${s.factor}-${s.horizon}`}
+                  className={`border-t border-border/40 ${s.factor === "ranking_baseline" ? "bg-surface2/40" : ""}`}
+                >
                   <td className="py-2 pr-3 font-semibold">{FACTOR_LABEL[s.factor] ?? s.factor}</td>
                   <td className="pr-3 font-mono">{s.horizon}W</td>
                   <td className="pr-3 font-mono">{rate(s.liveHits, s.liveN)}</td>

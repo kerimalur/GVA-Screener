@@ -15,17 +15,18 @@ export interface FactorStat {
 function agg(rows: any[]): FactorStat[] {
   const map = new Map<string, FactorStat>();
   for (const r of rows) {
-    if (r.hit === null || r.hit === undefined) continue; // neutral / unreif
     const key = `${r.factor}|${r.horizon}`;
     const s =
       map.get(key) ??
       { factor: r.factor, horizon: r.horizon, liveHits: 0, liveN: 0, seedHits: 0, seedN: 0 };
+    const hits = Number(r.hits) || 0;
+    const n = Number(r.n) || 0;
     if (r.source === "live") {
-      s.liveN += 1;
-      if (r.hit) s.liveHits += 1;
+      s.liveHits += hits;
+      s.liveN += n;
     } else {
-      s.seedN += 1;
-      if (r.hit) s.seedHits += 1;
+      s.seedHits += hits;
+      s.seedN += n;
     }
     map.set(key, s);
   }
@@ -36,10 +37,11 @@ function agg(rows: any[]): FactorStat[] {
 export const loadFactorStats = unstable_cache(
   async (): Promise<FactorStat[]> => {
     const sb = createServiceClient();
+    // Aggregat-View (winzig) statt Rohzeilen — umgeht die PostgREST-1000-Zeilen-
+    // Kappung; sonst würden die wenigen source='live'-Zeilen nie im Response landen.
     const { data } = await sb
-      .from("factor_track")
-      .select("factor,horizon,source,hit")
-      .not("hit", "is", null);
+      .from("factor_track_stats")
+      .select("factor,horizon,source,hits,n");
     return agg(data ?? []);
   },
   ["factor-lab-v1"],
