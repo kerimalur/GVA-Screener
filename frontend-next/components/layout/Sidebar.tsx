@@ -162,7 +162,9 @@ export default function Sidebar() {
                       }`}
                     >
                       <span>{item.label}</span>
-                      {item.href === "/scanner/signale" && <SignalsBadge />}
+                      {/* Unentschiedene GVA-Hits landen seit dem Umbau direkt
+                          im Cockpit — der Zähler hängt deshalb dort. */}
+                      {item.href === "/cockpit" && <SignalsBadge />}
                     </Link>
                   );
                 })}

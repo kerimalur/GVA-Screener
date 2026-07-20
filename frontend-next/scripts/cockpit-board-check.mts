@@ -18,6 +18,7 @@ import {
 } from "../lib/cockpit/board";
 import { toSnapshot, type MarketData } from "../lib/gva/api";
 import type { SignalRecord } from "../lib/journal/signals";
+import type { OutlookRecord } from "../lib/journal/outlooks";
 
 let fails = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -108,15 +109,58 @@ const lanes = assembleLanes(
   [sig({ detectedLate: true }), sig({ id: "s2", pair: "USDJPY", status: "watchlist" })],
   {},
 );
-check("Wartend zeigt nur nicht-getriggerte Pairs", lanes.wartend.map((c) => c.pair), ["EURUSD"]);
-check("Wartend-Karte erbt stale -> '~' vor der Distanz", lanes.wartend[0].stale, true);
-check("Aktiv-Karte trägt 'nachträglich erkannt'", lanes.aktiv[0].detectedLate, true);
+check("«Nähert sich» zeigt nur nicht-getriggerte Pairs", lanes.naehert.map((c) => c.pair), ["EURUSD"]);
+check("«Nähert sich»-Karte erbt stale -> '~' vor der Distanz", lanes.naehert[0].stale, true);
+check("Getroffen-Karte trägt 'nachträglich erkannt'", lanes.getroffen[0].detectedLate, true);
 check("In-Arbeit-Karte ohne Flag", lanes.inArbeit[0].detectedLate, false);
-check("HIT-Karten zeigen keine Live-Distanz", lanes.aktiv[0].stale, false);
+check("HIT-Karten zeigen keine Live-Distanz", lanes.getroffen[0].stale, false);
 
 // Punkt 5: Bildungsdatum landet auf beiden Kartenquellen
-check("Wartend-Karte erbt short_date vom Scanner", lanes.wartend[0].lineFormedDate, "01.07.2026");
-check("Aktiv-Karte erbt lineFormedDate aus signals", lanes.aktiv[0].lineFormedDate, "2026-07-02");
+check("«Nähert sich» erbt short_date vom Scanner", lanes.naehert[0].lineFormedDate, "01.07.2026");
+check("Getroffen-Karte erbt lineFormedDate aus signals", lanes.getroffen[0].lineFormedDate, "2026-07-02");
+
+// --- Vereinheitlichter Status + Outlook-Anreicherung -------------------------
+const out = (over: Partial<OutlookRecord>): OutlookRecord => ({
+  id: "o1", symbol: "USDJPY", direction: "long", thesis: "", confidence: 3,
+  status: "observation", signalId: "s2", source: "gva", ...over,
+});
+
+// Ein Signal auf 'watchlist' mit Outlook auf 'active' bleibt in "In Arbeit"
+// und zeigt dort den feineren Zustand des Outlooks.
+const angereichert = assembleLanes(
+  [],
+  [sig({ id: "s2", pair: "USDJPY", status: "watchlist" })],
+  {},
+  {
+    s2: out({
+      status: "active",
+      thesis: "Rücklauf in die Zone",
+      isStarred: true,
+      strategyChecklist: [
+        { ruleId: "r1", text: "BOS", checked: true },
+        { ruleId: "r2", text: "Session", checked: true },
+        { ruleId: "r3", text: "Konfluenz", checked: false },
+      ],
+    }),
+  },
+);
+check("Outlook 'active' bleibt in der In-Arbeit-Lane", angereichert.inArbeit.length, 1);
+check("Karte übernimmt den feineren Outlook-Zustand", angereichert.inArbeit[0].status, "aktiv");
+check("Karte kennt den verknüpften Outlook", angereichert.inArbeit[0].outlookId, "o1");
+check("Stern wandert ins Cockpit", angereichert.inArbeit[0].isStarred, true);
+check("These wird als vorhanden gemeldet", angereichert.inArbeit[0].hasThesis, true);
+check(
+  "Checklisten-Fortschritt landet auf der Karte",
+  [angereichert.inArbeit[0].checklistDone, angereichert.inArbeit[0].checklistTotal],
+  [2, 3],
+);
+
+// Signal ohne Outlook (Altbestand): Cockpit funktioniert, Anreicherung entfällt
+const ohneOutlook = assembleLanes([], [sig({ id: "s3", status: "watchlist" })], {}, {});
+check("Altbestand landet trotzdem in der Lane", ohneOutlook.inArbeit.length, 1);
+check("Altbestand ohne Outlook-Verknüpfung", ohneOutlook.inArbeit[0].outlookId, null);
+check("Altbestand fällt auf den Signal-Zustand zurück", ohneOutlook.inArbeit[0].status, "beobachtung");
+check("Scanner-Karten sind ephemer -> 'naehert'", lanes.naehert[0].status, "naehert");
 
 // --- Rückwärtskompatibilität des Screener-Vertrags ---------------------------
 const legacy = toSnapshot([md({})]);

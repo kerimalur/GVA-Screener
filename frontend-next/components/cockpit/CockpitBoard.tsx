@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/Toaster";
 import FreshBadge from "@/components/ui/FreshBadge";
+import { fetchScreener, PAIRS_TOTAL, type MarketData } from "@/lib/gva/api";
+import { loadSignals, type SignalRecord } from "@/lib/journal/signals";
 import {
-  fetchScreener,
-  markPair,
-  PAIRS_TOTAL,
-  type MarketData,
-} from "@/lib/gva/api";
-import { loadSignals, setSignalStatus, type SignalRecord } from "@/lib/journal/signals";
+  loadGvaOutlooks,
+  outlooksBySignal,
+  type OutlookRecord,
+} from "@/lib/journal/outlooks";
+import { setSetupStatus } from "@/lib/setup/setStatus";
+import { setupLabel, type SetupStatus } from "@/lib/setup/lifecycle";
 import {
   assembleLanes,
   boardStateOf,
@@ -18,7 +20,7 @@ import {
   zonesLabel,
   SNAPSHOT_FRESH_MIN,
   SNAPSHOT_STALE_MIN,
-  WARTEND_PIP_LIMIT,
+  NAEHERT_PIP_LIMIT,
   type BoardState,
   type CockpitCard,
   type CockpitLanes,
@@ -30,12 +32,25 @@ import FundamentalModal, {
 
 const POLL_MS = 15_000;
 
-const EMPTY: CockpitLanes = { wartend: [], aktiv: [], inArbeit: [] };
+const EMPTY: CockpitLanes = { naehert: [], getroffen: [], inArbeit: [] };
 
+/**
+ * Lane-Beschriftungen kommen aus dem gemeinsamen Vokabular — keine
+ * hartkodierten Statusnamen mehr. „In Arbeit" ist bewusst ein Lane-Name und
+ * kein Status: die Bahn fasst drei Zustände zusammen.
+ */
 const LANES: { id: keyof CockpitLanes; label: string; hint: string }[] = [
-  { id: "wartend", label: "Wartend", hint: `Linie ≤ ${WARTEND_PIP_LIMIT}p` },
-  { id: "aktiv", label: "Aktiv · gehittet", hint: "frischer GVA-HIT" },
-  { id: "inArbeit", label: "In Arbeit", hint: "beobachtet" },
+  {
+    id: "naehert",
+    label: setupLabel("naehert"),
+    hint: `Linie ≤ ${NAEHERT_PIP_LIMIT}p`,
+  },
+  { id: "getroffen", label: setupLabel("getroffen"), hint: "frischer GVA-HIT" },
+  {
+    id: "inArbeit",
+    label: "In Arbeit",
+    hint: [setupLabel("beobachtung"), setupLabel("wartend"), setupLabel("aktiv")].join(" · "),
+  },
 ];
 
 /** Kopfzeilen-Farben: ≤2 min normal, >2 min grau, >5 min warn. */
@@ -65,8 +80,27 @@ function Confluence({ card }: { card: CockpitCard }) {
   );
 }
 
+/**
+ * Anreicherung aus dem verknüpften Outlook. Fehlt der Outlook (Altbestand oder
+ * fehlgeschlagener Insert), wird schlicht nichts gezeigt.
+ */
+function OutlookHinweise({ card }: { card: CockpitCard }) {
+  if (!card.outlookId) return null;
+  const teile: string[] = [];
+  if (card.hasThesis) teile.push("These");
+  if (card.checklistTotal > 0) teile.push(`${card.checklistDone}/${card.checklistTotal}`);
+  if (!card.isStarred && teile.length === 0) return null;
+  return (
+    <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-faint">
+      {card.isStarred && <i className="ph-fill ph-star text-warn" title="Favorit" />}
+      {teile.length > 0 && <span>{teile.join(" · ")}</span>}
+    </div>
+  );
+}
+
 function Card({ card, onClick }: { card: CockpitCard; onClick: () => void }) {
-  const dirCls = card.lineDir === "long" ? "text-up" : card.lineDir === "short" ? "text-down" : "text-muted";
+  const dirCls =
+    card.lineDir === "long" ? "text-up" : card.lineDir === "short" ? "text-down" : "text-muted";
   const dir = card.lineDir ? card.lineDir.toUpperCase() : "";
   return (
     <button
@@ -95,7 +129,14 @@ function Card({ card, onClick }: { card: CockpitCard; onClick: () => void }) {
           <>● HIT · {dir}</>
         )}
       </div>
+      {/* In-Arbeit-Karten tragen drei mögliche Zustände — der genaue steht drauf. */}
+      {card.status !== "naehert" && card.status !== "getroffen" && (
+        <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+          {setupLabel(card.status)}
+        </div>
+      )}
       <Confluence card={card} />
+      <OutlookHinweise card={card} />
     </button>
   );
 }
@@ -142,6 +183,7 @@ export default function CockpitBoard({
   const router = useRouter();
   const [scanner, setScanner] = useState<MarketData[]>([]);
   const [signals, setSignals] = useState<SignalRecord[]>([]);
+  const [outlooks, setOutlooks] = useState<Record<string, OutlookRecord>>({});
   const [meta, setMeta] = useState({
     loaded: false,
     offline: false,
@@ -159,12 +201,17 @@ export default function CockpitBoard({
 
   const loadSignalsSafe = useCallback(async () => {
     try {
-      // 'new' + 'watchlist' = Aktiv- und In-Arbeit-Lane.
-      const [fresh, watch] = await Promise.all([
+      // 'new' + 'watchlist' = die beiden offenen Signalzustände. Die feinere
+      // Einordnung (Beobachtung / Wartend / Aktiv) kommt aus dem Outlook.
+      const [fresh, watch, gvaOutlooks] = await Promise.all([
         loadSignals("new"),
         loadSignals("watchlist"),
+        // Anreicherung ist optional: schlägt sie fehl, bleiben die Karten roh.
+        loadGvaOutlooks().catch(() => [] as OutlookRecord[]),
       ]);
-      if (aliveRef.current) setSignals([...fresh, ...watch]);
+      if (!aliveRef.current) return;
+      setSignals([...fresh, ...watch]);
+      setOutlooks(outlooksBySignal(gvaOutlooks));
     } catch {
       /* Signals optional — Board bleibt aus Scanner nutzbar */
     }
@@ -220,7 +267,7 @@ export default function CockpitBoard({
   const lanes =
     state === "loading" || state === "warmup"
       ? EMPTY
-      : assembleLanes(scanner, signals, quintiles);
+      : assembleLanes(scanner, signals, quintiles, outlooks);
 
   const freshness = snapshotFreshness(meta.updated);
   const zonesTxt = zonesLabel(state, meta.zones, meta.pairsTotal);
@@ -237,29 +284,36 @@ export default function CockpitBoard({
   };
 
   /**
-   * Schliesst den Lebenszyklus im Backend. Ohne diesen Aufruf bleibt das Paar
-   * für immer sticky auf HIT — kein neuer Alert, keine nächste Linie.
-   * Fehler werden bewusst nur geloggt: sie dürfen weder die Supabase-
-   * Statusänderung noch die UI-Aktion blockieren (markPair wirft nicht).
+   * Einziger Schreibpfad des Cockpits. `setSetupStatus` setzt Signal, spiegelt
+   * den verknüpften Outlook und schliesst den Backend-Lebenszyklus in einem
+   * Aufruf — ohne diesen letzten Schritt bliebe das Paar sticky auf HIT.
    */
-  const releaseBackend = useCallback(async (pair: string, action: "pending" | "done") => {
-    const ok = await markPair(pair, action);
-    if (!ok) console.warn(`Cockpit: Backend-Lebenszyklus für ${pair} nicht bestätigt (${action})`);
-  }, []);
+  const applyStatus = useCallback(
+    async (c: CockpitCard, next: SetupStatus): Promise<boolean> => {
+      try {
+        await setSetupStatus({
+          signalId: c.signalId,
+          outlookId: c.outlookId,
+          pair: c.pair,
+          next,
+        });
+        return true;
+      } catch {
+        // Der Signal-Status steht bereits (er wird nie zurückgerollt) — was
+        // hier scheitert, ist die Outlook-Spiegelung. Sichtbar machen.
+        toast.error("Outlook konnte nicht gespiegelt werden");
+        return false;
+      }
+    },
+    [],
+  );
 
   const onTake = useCallback(
     async (c: CockpitCard) => {
       if (!c.signalId) return;
       setBusy(true);
-      try {
-        await setSignalStatus(c.signalId, "journaled");
-      } catch {
-        toast.error("Status-Update fehlgeschlagen");
-        setBusy(false);
-        return;
-      }
-      // Linie verbrauchen — der nächste Hit trifft dann die NÄCHSTE Linie.
-      await releaseBackend(c.pair, "done");
+      // Linie verbrauchen ('done') + Outlook auf „Ausgeführt".
+      await applyStatus(c, "ausgefuehrt");
       sessionStorage.setItem(
         "tradePrefill",
         JSON.stringify({
@@ -269,36 +323,25 @@ export default function CockpitBoard({
           notes: notesFor(c),
           setups: ["setup_3day_gva"],
           signalId: c.signalId,
+          outlookId: c.outlookId,
         }),
       );
       router.push("/journal");
     },
-    [router, releaseBackend],
+    [router, applyStatus],
   );
 
   const mutateStatus = useCallback(
-    async (
-      c: CockpitCard,
-      status: "watchlist" | "dismissed",
-      backendAction: "pending" | "done",
-      okMsg: string,
-    ) => {
+    async (c: CockpitCard, next: SetupStatus, okMsg: string) => {
       if (!c.signalId) return;
       setBusy(true);
-      try {
-        await setSignalStatus(c.signalId, status);
-        // Verwerfen verbraucht die Linie ('done'), Beobachten nur 'pending'.
-        await releaseBackend(c.pair, backendAction);
-        toast.success(okMsg);
-        setSelected(null);
-        await loadSignalsSafe();
-      } catch {
-        toast.error("Aktion fehlgeschlagen");
-      } finally {
-        setBusy(false);
-      }
+      const ok = await applyStatus(c, next);
+      if (ok) toast.success(okMsg);
+      setSelected(null);
+      await loadSignalsSafe();
+      setBusy(false);
     },
-    [loadSignalsSafe, releaseBackend],
+    [loadSignalsSafe, applyStatus],
   );
 
   return (
@@ -381,8 +424,8 @@ export default function CockpitBoard({
         busy={busy}
         onClose={() => setSelected(null)}
         onTake={onTake}
-        onWatch={(c) => mutateStatus(c, "watchlist", "pending", "Als beobachtet markiert")}
-        onDismiss={(c) => mutateStatus(c, "dismissed", "done", "Verworfen")}
+        onWatch={(c) => mutateStatus(c, "beobachtung", "Als beobachtet markiert")}
+        onDismiss={(c) => mutateStatus(c, "verworfen", "Verworfen")}
       />
     </div>
   );

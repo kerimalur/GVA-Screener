@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
+import { SETUP_STATUS_CONFIG } from "@/lib/setup/lifecycle";
 import type { CockpitCard } from "@/lib/cockpit/board";
 
 /** Ranking-Detail je Währung (Champion) für das Popup. */
@@ -110,7 +112,9 @@ export default function FundamentalModal({
     ...(eventsByCcy[card.quote] ?? []),
   ].sort((a, b) => a.when.localeCompare(b.when));
 
+  const statusCfg = SETUP_STATUS_CONFIG[card.status];
   const subtitleParts = [
+    statusCfg.label,
     card.lineDir ? `${dirTxt}-Linie` : null,
     card.lineLevel != null ? String(card.lineLevel) : null,
     card.distance != null ? `${card.distance.toFixed(0)}p entfernt` : null,
@@ -200,6 +204,30 @@ export default function FundamentalModal({
             </div>
           )}
         </div>
+
+        {/* Detailebene: Cockpit und Outlook zeigen dasselbe Setup. Fehlt der
+            Outlook (Altbestand oder fehlgeschlagener Insert), entfällt der
+            Block still — das Cockpit funktioniert unverändert. */}
+        {card.outlookId && (
+          <div className="rounded-md border border-border/60 p-3 flex flex-wrap items-center gap-2 text-[11px]">
+            {card.isStarred && <i className="ph-fill ph-star text-warn" title="Favorit" />}
+            <span className="text-muted">
+              {card.hasThesis ? "These hinterlegt" : "noch keine These"}
+            </span>
+            {card.checklistTotal > 0 && (
+              <span className="font-mono text-muted">
+                Checkliste {card.checklistDone}/{card.checklistTotal}
+              </span>
+            )}
+            <Link
+              href={`/journal/outlook?outlook=${card.outlookId}`}
+              className="ml-auto inline-flex items-center gap-1 text-accent hover:underline"
+            >
+              <i className="ph-bold ph-binoculars" />
+              Im Outlook öffnen
+            </Link>
+          </div>
+        )}
 
         {events.length > 0 && (
           <div className="rounded-md border border-warn/30 bg-warn/5 p-3">

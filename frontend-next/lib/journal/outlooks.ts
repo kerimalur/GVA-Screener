@@ -4,8 +4,12 @@
  */
 
 import { fetchAll, upsertOne, deleteOne, updateOne } from "./supabase-crud";
+import { SETUP_STATUS_CONFIG, fromOutlookStatus } from "@/lib/setup/lifecycle";
 
 export type OutlookStatus = "observation" | "waiting" | "active" | "cancelled" | "executed";
+
+/** Herkunft eines Outlooks: automatisch aus einem GVA-Hit oder von Hand angelegt. */
+export type OutlookSource = "gva" | "manual";
 
 export interface ChecklistItem {
   ruleId: string;
@@ -37,23 +41,55 @@ export interface OutlookRecord {
   setupId?: string | null;
   strategyChecklist?: ChecklistItem[];
   fundamentalOutlook?: string;
+  /** Verknüpftes GVA-Signal (`signals.id`), null bei manuell angelegten Thesen. */
+  signalId?: string | null;
+  /** 'gva' = vom Backend beim Line-Hit angelegt, 'manual' = von Hand. */
+  source?: OutlookSource;
   createdAt?: string;
   updatedAt?: string;
 }
 
+/**
+ * Label und Farbton je Outlook-Status — abgeleitet aus dem gemeinsamen
+ * Vokabular in `lib/setup/lifecycle.ts`. Hier stehen bewusst KEINE eigenen
+ * deutschen Statusnamen mehr: „Wartend" muss im Outlook dasselbe bedeuten wie
+ * im Cockpit.
+ */
 export const OUTLOOK_STATUS_CONFIG: Record<
   OutlookStatus,
   { label: string; tone: "neutral" | "warn" | "up" | "down" | "accent" }
 > = {
-  observation: { label: "Beobachtung", tone: "neutral" },
-  waiting: { label: "Wartend", tone: "warn" },
-  active: { label: "Aktiv", tone: "up" },
-  cancelled: { label: "Abgebrochen", tone: "down" },
-  executed: { label: "Ausgeführt", tone: "accent" },
+  observation: SETUP_STATUS_CONFIG[fromOutlookStatus("observation")],
+  waiting: SETUP_STATUS_CONFIG[fromOutlookStatus("waiting")],
+  active: SETUP_STATUS_CONFIG[fromOutlookStatus("active")],
+  cancelled: SETUP_STATUS_CONFIG[fromOutlookStatus("cancelled")],
+  executed: SETUP_STATUS_CONFIG[fromOutlookStatus("executed")],
 };
 
 export async function loadOutlooks(): Promise<OutlookRecord[]> {
   return fetchAll<OutlookRecord>({ table: "outlooks", orderBy: "created_at" });
+}
+
+/**
+ * Nur die automatisch aus GVA-Hits erzeugten Outlooks — das Cockpit reichert
+ * damit seine Karten an (Stern, These, Checklisten-Fortschritt) und braucht die
+ * manuellen Thesen dafür nicht.
+ */
+export async function loadGvaOutlooks(): Promise<OutlookRecord[]> {
+  return fetchAll<OutlookRecord>({
+    table: "outlooks",
+    orderBy: "created_at",
+    filters: { source: "gva" },
+  });
+}
+
+/** Index signal_id → Outlook. Zeilen ohne Signal (manuell) fallen raus. */
+export function outlooksBySignal(rows: OutlookRecord[]): Record<string, OutlookRecord> {
+  const map: Record<string, OutlookRecord> = {};
+  for (const o of rows) {
+    if (o.signalId) map[o.signalId] = o;
+  }
+  return map;
 }
 
 export async function saveOutlook(data: OutlookRecord): Promise<OutlookRecord> {

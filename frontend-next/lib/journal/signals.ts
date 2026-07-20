@@ -57,6 +57,13 @@ export async function loadSignals(status?: SignalStatus): Promise<SignalRecord[]
   return (data || []).map(rowToSignal);
 }
 
+/** Index id → Signal. Der Outlook zeigt damit die Herkunft eines GVA-Hits. */
+export function signalsById(rows: SignalRecord[]): Record<string, SignalRecord> {
+  const map: Record<string, SignalRecord> = {};
+  for (const s of rows) map[s.id] = s;
+  return map;
+}
+
 export async function countNewSignals(): Promise<number> {
   const supabase = createBrowserSupabase();
   const user = await requireSession();

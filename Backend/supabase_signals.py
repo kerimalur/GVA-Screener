@@ -6,10 +6,24 @@ für den Screener-Zustand (siehe lifecycle_state.py):
   - status 'new' / 'watchlist'      -> Linie ist TRIGGERED (offener HIT)
   - status 'journaled' / 'dismissed'-> Linie ist CONSUMED (verbraucht)
 
+Seit dem Setup-Umbau erzeugt jeder HIT zusaetzlich einen Outlook (Tabelle
+`outlooks`, source='gva', verknuepft ueber outlooks.signal_id). Der Outlook ist
+die Detailebene UEBER dem Signal: dieselbe Sache, nur mit These, Checkliste und
+Zielen. Das passiert hier im Backend und nicht im Frontend, damit es auch dann
+geschieht, wenn der Browser tagelang nicht geoeffnet wird.
+
+Bewusst KEIN Backfill fuer historische Signale: ein einmaliger Lauf ueber die
+Signal-Historie wuerde den Outlook mit alten, laengst erledigten Setups fluten
+und die Ansicht unbrauchbar machen. Nur neue Hits ab Deploy legen einen an;
+Altbestand bleibt ohne Outlook und funktioniert im Cockpit unveraendert weiter
+(die Anreicherung entfaellt dort einfach).
+
 Schreibpfade bleiben entkoppelt vom Screener-Kern:
   - HIT-Inserts laufen fire-and-forget in einem eigenen Thread.
   - Fehlt die Konfiguration (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY),
     passiert schlicht nichts — Telegram & Co. bleiben unberührt.
+  - Schlaegt der Outlook-Insert fehl, wird nur geloggt; Signal und Alert
+    bleiben davon unberuehrt.
 
 user_id: Single-User-App. Entweder explizit via SIGNALS_USER_ID gesetzt oder
 einmalig über die Auth-Admin-API ermittelt (erster User) und gecacht.
@@ -121,6 +135,84 @@ def to_iso_date(value) -> str | None:
         return None
 
 
+def _de_date(iso: str | None) -> str | None:
+    """ISO 'YYYY-MM-DD' -> 'DD.MM.YYYY' für Texte, die Kerim liest."""
+    if not iso or len(iso) < 10:
+        return None
+    jahr, monat, tag = iso[:4], iso[5:7], iso[8:10]
+    return f"{tag}.{monat}.{jahr}"
+
+
+def _thesis_text(pair: str, side: str, level: float, iso_date: str | None,
+                 detected_late: bool) -> str:
+    """Vorbelegte These des automatisch erzeugten Outlooks.
+
+    Bewusst nur die harten Fakten des Hits — die eigene Einschätzung schreibt
+    Kerim selbst dazu. Beispiel:
+      "GVA SHORT-Linie @ 1.08421 getroffen (Linie vom 12.07.2026)"
+    """
+    stufe = f"{round(float(level), 5):g}"
+    text = f"GVA {side.upper()}-Linie @ {stufe} getroffen"
+    tag = _de_date(iso_date)
+    if tag:
+        text += f" (Linie vom {tag})"
+    if detected_late:
+        text += " — nachträglich erkannt (Backend war offline)"
+    return text
+
+
+def _insert_outlook(url: str, key: str, user_id: str, signal_id: str, pair: str,
+                    side: str, level: float, snapshot: dict | None,
+                    detected_late: bool, iso_date: str | None):
+    """Zum Signal gehörenden Outlook anlegen (Detailebene über dem Signal).
+
+    Läuft im Backend und nicht im Frontend, damit auch dann ein Outlook
+    entsteht, wenn der Browser tagelang nicht geöffnet wird.
+
+    status='observation': Das gemeinsame Vokabular (frontend-next/lib/setup/
+    lifecycle.ts) kennt für den frischen Hit den Zustand `getroffen` — der hat
+    aber bewusst KEINE Outlook-Entsprechung, weil er der Moment vor jeder
+    Entscheidung ist. Der nächstgelegene speicherbare Outlook-Zustand ist
+    'observation' (= `beobachtung`, "gesehen, wird beobachtet"). Der
+    Lebenszyklus selbst hängt weiterhin am Signal ('new' = TRIGGERED), der
+    Outlook-Status wird erst durch eine echte Entscheidung führend.
+
+    Alle NOT-NULL-Spalten werden explizit mit leeren Werten belegt, damit die
+    Zeile unabhängig von den DB-Defaults gültig ist.
+
+    Fehler werden nur geloggt: Der Signal-Insert und der Telegram-Alert sind
+    bereits durch und dürfen davon nicht berührt werden.
+    """
+    row = {
+        "user_id": user_id,
+        "signal_id": signal_id,
+        "source": "gva",
+        "symbol": pair,
+        "direction": side.lower(),          # 'short' | 'long'
+        "thesis": _thesis_text(pair, side, level, iso_date, detected_late),
+        "confidence": 3,                    # neutral — Kerim bewertet selbst
+        "status": "observation",
+        "cot_bias": snapshot,               # bereits gebauter fundamental_snapshot
+        "interesting_zone": level,
+        "confluences": [],
+        "tags": [],
+        "journaled_to": [],
+        "strategy_checklist": [],
+        "fundamental_outlook": "",
+    }
+    try:
+        r = requests.post(
+            f"{url}/rest/v1/outlooks",
+            json=row,
+            headers=_headers(key, {"Prefer": "return=minimal"}),
+            timeout=10,
+        )
+        if r.status_code >= 300:
+            print(f"outlooks: Insert fehlgeschlagen ({r.status_code}): {r.text[:200]}")
+    except Exception as e:
+        print(f"outlooks: Insert-Fehler: {e}")
+
+
 def _insert(pair: str, side: str, level: float, snapshot: dict | None,
             detected_late: bool = False, line_formed_date=None):
     url, key, user_id = _context()
@@ -128,6 +220,7 @@ def _insert(pair: str, side: str, level: float, snapshot: dict | None,
         if is_configured():
             print("signals: keine user_id (SIGNALS_USER_ID setzen oder erst einloggen) -> übersprungen")
         return
+    iso_date = to_iso_date(line_formed_date)
     row = {
         "user_id": user_id,
         "source": "gva",
@@ -137,19 +230,38 @@ def _insert(pair: str, side: str, level: float, snapshot: dict | None,
         "fundamental_snapshot": snapshot,
         "status": "new",
         "detected_late": bool(detected_late),
-        "line_formed_date": to_iso_date(line_formed_date),
+        "line_formed_date": iso_date,
     }
+    signal_id = None
     try:
+        # return=representation statt minimal: die neue Signal-ID wird als
+        # Fremdschlüssel für den Outlook gebraucht.
         r = requests.post(
             f"{url}/rest/v1/signals",
             json=row,
-            headers=_headers(key, {"Prefer": "return=minimal"}),
+            headers=_headers(key, {"Prefer": "return=representation"}),
             timeout=10,
         )
         if r.status_code >= 300:
             print(f"signals: Insert fehlgeschlagen ({r.status_code}): {r.text[:200]}")
+            return
+        data = r.json()
+        if isinstance(data, list) and data:
+            signal_id = data[0].get("id")
+        elif isinstance(data, dict):
+            signal_id = data.get("id")
     except Exception as e:
         print(f"signals: Insert-Fehler: {e}")
+        return
+
+    if not signal_id:
+        # Signal steht, nur die ID fehlt (z.B. Prefer wurde ignoriert). Ohne ID
+        # kein Outlook — das Cockpit funktioniert dann eben ohne Anreicherung.
+        print("signals: Insert ohne zurückgegebene ID -> kein Outlook angelegt")
+        return
+
+    _insert_outlook(url, key, user_id, signal_id, pair, side, level, snapshot,
+                    bool(detected_late), iso_date)
 
 
 def build_snapshot(pair: str, macro_currencies: list) -> dict | None:
@@ -173,7 +285,7 @@ def build_snapshot(pair: str, macro_currencies: list) -> dict | None:
 
 def record_hit_async(pair: str, side: str, level: float, snapshot: dict | None,
                      detected_late: bool = False, line_formed_date=None):
-    """Fire-and-forget: INSERT in eigenem Daemon-Thread."""
+    """Fire-and-forget: INSERT (Signal + zugehoeriger Outlook) im Daemon-Thread."""
     threading.Thread(
         target=_insert,
         args=(pair, side, level, snapshot, detected_late, line_formed_date),

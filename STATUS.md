@@ -5,6 +5,58 @@
 
 Stand: 2026-07-20
 
+## Cockpit + Outlook zusammengeführt (2026-07-20, Teil 3)
+Vorher zwei getrennte Welten für dasselbe Konzept „Setup, das ich beobachte":
+`signals` (Backend, Cockpit) und `outlooks` (manuell, Journal) — ohne
+Fremdschlüssel, ohne gemeinsames Feld, ohne gemeinsamen Code-Pfad. Vier
+Vokabulare für einen Lebenszyklus, und „Wartend" bedeutete im Cockpit das
+Gegenteil von „Wartend" im Outlook.
+
+**Ein Vokabular.** `frontend-next/lib/setup/lifecycle.ts` ist die einzige Stelle
+mit Status-Labels und Mappings: `naehert` · `getroffen` · `beobachtung` ·
+`wartend` · `aktiv` · `ausgefuehrt` · `verworfen`, plus `fromSignalStatus` /
+`toSignalStatus`, `fromOutlookStatus` / `toOutlookStatus`, `toBackendAction`.
+`OUTLOOK_STATUS_CONFIG` und die Lane-Labels leiten sich daraus ab. Die
+Cockpit-Lane „Wartend" heisst jetzt **„Nähert sich"** (ephemer, aus dem Scanner).
+`signals.status` behält seine vier technischen Werte — `TRIGGERED_STATUSES` /
+`CONSUMED_STATUSES` lesen unverändert weiter.
+
+**Ein Schreibpfad.** `lib/setup/setStatus.ts` → `setSetupStatus()` setzt Signal,
+spiegelt den verknüpften Outlook und ruft `markPair` in einem Aufruf. Cockpit
+und Outlook rufen ausschliesslich diese Funktion. Ohne den Backend-Teil blieb
+ein im Outlook abgeschlossenes Setup sticky auf HIT — genau der Fehler, der die
+Software verstummen liess. Scheitert die Outlook-Spiegelung, wird der
+Signal-Status nicht zurückgerollt, das Backend trotzdem freigegeben und der
+Fehler danach geworfen (Toast).
+
+**Outlook = Detailebene über dem Signal.** DB additiv erweitert
+(`supabase/outlook_signal_link.sql`, identisch als Block „3b" in `schema.sql`):
+`outlooks.signal_id` (FK, `on delete set null`), `outlooks.source`
+('gva' | 'manual'), partieller Unique-Index auf `signal_id`.
+`Backend/supabase_signals.py` legt bei jedem Hit zusätzlich einen Outlook an
+(source='gva', vorbelegte These, `cot_bias` = Snapshot, `interesting_zone` =
+Level) — im Backend, damit es auch ohne offenen Browser passiert.
+Fire-and-forget: schlägt es fehl, bleiben Signal und Alert unberührt.
+**Kein Backfill** über die Historie (würde den Outlook mit alten Setups fluten).
+
+**Oberfläche.** Cockpit-Karten zeigen Stern, These und Checklisten-Fortschritt
+aus dem Outlook; das FundamentalModal verlinkt „Im Outlook öffnen"
+(`/journal/outlook?outlook=<id>`). Der Outlook zeigt bei `source='gva'` Badge,
+Linien-Level, Hit-Zeitpunkt und „nachträglich erkannt".
+`/scanner/signale` + `SignalsInbox` sind entfallen (reine Dublette der
+`signals`-Tabelle); der Zähler-Badge hängt jetzt am Cockpit. Outlook hat ein
+eigenes Nav-Icon (`ph-binoculars`) und heisst „Outlook — Details & eigene
+Thesen".
+
+**Kontrollwerte.** `npx tsx scripts/setup-lifecycle-check.mts` (Mapping in beide
+Richtungen, `setSetupStatus` mit/ohne Signal, Spiegel-Fehler),
+`scripts/cockpit-board-check.mts` (Lanes + Anreicherung),
+`Backend/tests/test_outlook_insert.py`.
+
+⚠️ **Offener manueller Schritt:** `supabase/outlook_signal_link.sql` einmalig im
+Supabase-SQL-Editor ausführen. Bis dahin läuft alles wie bisher, nur ohne
+Verknüpfung (das Cockpit fängt die fehlenden Spalten ab).
+
 ## Nachschärfung des Kern-Workflows — 5 Review-Restpunkte (2026-07-20, Teil 2)
 Review von `341d425`. Architektur unverändert (Supabase = Wahrheit, `state.json`
 = Cache, keine Disk in `render.yaml`, `collect_hits` = einzige Hit-Logik,

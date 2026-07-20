@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { countNewSignals } from "@/lib/journal/signals";
 
-/** Zähler neuer Scanner-Signale neben dem Nav-Eintrag (Poll alle 2 min). */
+/** Zähler unentschiedener GVA-Hits neben dem Cockpit-Eintrag (Poll alle 2 min). */
 export default function SignalsBadge() {
   const [count, setCount] = useState(0);
 

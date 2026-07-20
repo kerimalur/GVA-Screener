@@ -375,6 +375,28 @@ create index if not exists idx_signals_inbox on signals(user_id, status, hit_at 
 
 
 -- ============================================================
+-- 3b. outlooks ↔ signals verkoppeln (Setup-Lebenszyklus)
+-- ============================================================
+-- Der Outlook ist die Detailebene ÜBER dem Signal: ein GVA-Hit legt beim
+-- Insert automatisch einen Outlook an, manuelle Thesen bleiben daneben
+-- bestehen. Steht bewusst hier unten und nicht im outlooks-Block — die
+-- Fremdschlüssel-Referenz braucht die signals-Tabelle.
+--
+-- Rein additiv: Bestandszeilen bekommen source='manual' und signal_id=null
+-- und funktionieren unverändert weiter. Es wird KEIN Backfill für historische
+-- Signale gemacht (siehe Backend/supabase_signals.py).
+alter table outlooks add column if not exists signal_id uuid
+  references signals(id) on delete set null;
+alter table outlooks add column if not exists source text not null default 'manual';
+
+-- Höchstens EIN Outlook je Signal. Partiell, damit die vielen manuellen
+-- Outlooks mit signal_id = null nicht miteinander kollidieren.
+create unique index if not exists idx_outlooks_signal_unique
+  on outlooks(signal_id) where signal_id is not null;
+create index if not exists idx_outlooks_source on outlooks(user_id, source);
+
+
+-- ============================================================
 -- 4. JOURNAL + signals: RLS, Policies, updated_at-Trigger
 -- ============================================================
 

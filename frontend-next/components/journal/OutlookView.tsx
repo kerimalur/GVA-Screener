@@ -19,6 +19,14 @@ import {
   type OutlookRecord,
   type OutlookStatus,
 } from "@/lib/journal/outlooks";
+import { loadSignals, signalsById, type SignalRecord } from "@/lib/journal/signals";
+import { setSetupStatus } from "@/lib/setup/setStatus";
+import {
+  fromOutlookStatus,
+  isClosedSetup,
+  setupLabel,
+  type SetupStatus,
+} from "@/lib/setup/lifecycle";
 import {
   fetchFundamentals,
   splitPair,
@@ -27,12 +35,52 @@ import {
 
 type StatusFilter = "all" | "starred" | OutlookStatus;
 
+function fmtWhen(iso: string): string {
+  return new Date(iso).toLocaleString("de-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function ConfidenceStars({ value }: { value: number }) {
   return (
     <span className="text-warn text-[11px]">
       {"★".repeat(value)}
       <span className="text-faint">{"★".repeat(Math.max(0, 5 - value))}</span>
     </span>
+  );
+}
+
+/**
+ * Herkunft eines automatisch erzeugten Outlooks. Zeigt, dass hinter dem
+ * Eintrag ein echter GVA-Hit steckt — inklusive Linien-Level, Hit-Zeitpunkt
+ * und dem Flag „nachträglich erkannt" aus `signals.detected_late`.
+ */
+function GvaHerkunft({
+  outlook,
+  signal,
+}: {
+  outlook: OutlookRecord;
+  signal: SignalRecord | undefined;
+}) {
+  if (outlook.source !== "gva") return null;
+  const level = signal?.lineLevel ?? outlook.interestingZone;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-muted">
+      <span className="px-1.5 py-0.5 rounded bg-accent/15 text-accent font-bold">GVA-Hit</span>
+      {level != null && <span>Linie {level}</span>}
+      {signal?.hitAt && <span>HIT {fmtWhen(signal.hitAt)}</span>}
+      {signal?.detectedLate && (
+        <span
+          title="Nachträglich aus der Kerzen-Historie erkannt — kein Live-Hit"
+          className="px-1.5 py-0.5 rounded bg-warn/15 text-warn font-bold"
+        >
+          ⏱ nachträglich erkannt
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -72,16 +120,25 @@ function FundamentalsCompare({
 export default function OutlookView() {
   const router = useRouter();
   const [outlooks, setOutlooks] = useState<OutlookRecord[]>([]);
+  const [signals, setSignals] = useState<Record<string, SignalRecord>>({});
   const [fundamentals, setFundamentals] = useState<FundamentalsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [showWizard, setShowWizard] = useState(false);
   const [editing, setEditing] = useState<OutlookRecord | undefined>();
+  /** Aus dem Cockpit verlinkter Eintrag („Im Outlook öffnen"). */
+  const [fokusId, setFokusId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setOutlooks(await loadOutlooks());
+      const [rows, sigs] = await Promise.all([
+        loadOutlooks(),
+        // Herkunftsdaten sind optional: ohne sie fehlt nur der GVA-Kopf.
+        loadSignals().catch(() => [] as SignalRecord[]),
+      ]);
+      setOutlooks(rows);
+      setSignals(signalsById(sigs));
     } catch {
       toast.error("Fehler beim Laden der Outlooks");
     } finally {
@@ -93,6 +150,11 @@ export default function OutlookView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Daten-Fetch beim Mount
     reload();
     fetchFundamentals().then(setFundamentals);
+
+    // Direktlink aus dem Cockpit: ?outlook=<id>. Bewusst über
+    // window.location statt useSearchParams — spart die Suspense-Grenze.
+    const ziel = new URLSearchParams(window.location.search).get("outlook");
+    if (ziel) setFokusId(ziel);
 
     // Dossier-Übergabe aus dem Weekly-Cockpit (/weekly): Wizard vorbefüllt öffnen
     const raw = sessionStorage.getItem("outlook-prefill");
@@ -124,10 +186,23 @@ export default function OutlookView() {
       if (!!b.isStarred !== !!a.isStarred) return b.isStarred ? 1 : -1;
       return (b.createdAt || "").localeCompare(a.createdAt || "");
     });
-    if (filter === "all") return sorted.filter((o) => o.status !== "cancelled" && o.status !== "executed");
-    if (filter === "starred") return sorted.filter((o) => o.isStarred);
-    return sorted.filter((o) => o.status === filter);
-  }, [outlooks, filter]);
+    let liste: OutlookRecord[];
+    if (filter === "all") {
+      // „Offen" = alles ausser abgeschlossen (ausgeführt / verworfen).
+      liste = sorted.filter((o) => !isClosedSetup(fromOutlookStatus(o.status)));
+    } else if (filter === "starred") {
+      liste = sorted.filter((o) => o.isStarred);
+    } else {
+      liste = sorted.filter((o) => o.status === filter);
+    }
+    // Ein aus dem Cockpit verlinkter Eintrag muss sichtbar sein, auch wenn der
+    // aktive Filter ihn sonst ausblenden würde — sonst führt der Link ins Leere.
+    if (fokusId && !liste.some((o) => o.id === fokusId)) {
+      const ziel = sorted.find((o) => o.id === fokusId);
+      if (ziel) liste = [ziel, ...liste];
+    }
+    return liste;
+  }, [outlooks, filter, fokusId]);
 
   const handleSave = async (data: OutlookRecord) => {
     try {
@@ -140,15 +215,33 @@ export default function OutlookView() {
     }
   };
 
-  const setStatus = async (o: OutlookRecord, status: OutlookStatus) => {
+  /**
+   * Statuswechsel läuft über den einzigen Schreibpfad: Signal (falls verknüpft),
+   * Outlook und Backend-Lebenszyklus in einem Aufruf. Ohne den Backend-Teil
+   * bliebe ein hier abgeschlossenes Setup im Screener sticky auf HIT — genau
+   * der Fehler, der die Software vorher verstummen liess.
+   *
+   * Manuell angelegte Outlooks haben keine `signalId`: dann wird weder
+   * `signals` geschrieben noch `markPair` gerufen, der Wechsel funktioniert
+   * trotzdem vollständig.
+   */
+  const setStatus = async (o: OutlookRecord, next: SetupStatus) => {
     if (!o.id) return;
-    await updateOutlook(o.id, {
-      status,
-      ...(status === "active" ? { startedAt: new Date().toISOString() } : {}),
-    });
+    try {
+      await setSetupStatus({
+        signalId: o.signalId ?? null,
+        outlookId: o.id,
+        pair: o.symbol,
+        next,
+      });
+    } catch {
+      toast.error("Statuswechsel unvollständig — bitte neu laden");
+    }
     await reload();
   };
 
+  // Kein Statuswechsel, deshalb bewusst direkt: der Stern ist eine reine
+  // Markierung und berührt weder Lebenszyklus noch Backend.
   const toggleStar = async (o: OutlookRecord) => {
     if (!o.id) return;
     await updateOutlook(o.id, { isStarred: !o.isStarred });
@@ -178,6 +271,7 @@ export default function OutlookView() {
         notes,
         confluences: o.confluences || [],
         outlookId: o.id,
+        signalId: o.signalId ?? null,
       }),
     );
     router.push("/journal");
@@ -190,10 +284,10 @@ export default function OutlookView() {
           options={[
             { value: "all" as const, label: "Offen" },
             { value: "starred" as const, label: "★" },
-            { value: "observation" as const, label: "Beobachtung" },
-            { value: "waiting" as const, label: "Wartend" },
-            { value: "active" as const, label: "Aktiv" },
-            { value: "executed" as const, label: "Ausgeführt" },
+            { value: "observation" as const, label: setupLabel("beobachtung") },
+            { value: "waiting" as const, label: setupLabel("wartend") },
+            { value: "active" as const, label: setupLabel("aktiv") },
+            { value: "executed" as const, label: setupLabel("ausgefuehrt") },
           ]}
           value={filter}
           onChange={setFilter}
@@ -217,9 +311,9 @@ export default function OutlookView() {
       ) : filtered.length === 0 ? (
         <Panel>
           <EmptyState
-            icon="ph-crosshair"
+            icon="ph-binoculars"
             title="Keine Outlooks"
-            description="Halte Trading-Thesen fest, bevor du handelst — Richtung, Level, Confluences, Checkliste."
+            description="Halte Trading-Thesen fest, bevor du handelst — Richtung, Level, Confluences, Checkliste. Jeder GVA-Hit legt hier automatisch einen Eintrag an."
             action={
               <Button icon="ph-plus" onClick={() => setShowWizard(true)}>
                 Ersten Outlook anlegen
@@ -231,10 +325,15 @@ export default function OutlookView() {
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((o) => {
             const statusCfg = OUTLOOK_STATUS_CONFIG[o.status];
+            const aktuell = fromOutlookStatus(o.status);
+            const signal = o.signalId ? signals[o.signalId] : undefined;
             return (
               <div
                 key={o.id}
-                className="bg-surface border border-border rounded-md p-4 flex flex-col gap-2 anim-slide-up"
+                id={`outlook-${o.id}`}
+                className={`bg-surface border rounded-md p-4 flex flex-col gap-2 anim-slide-up ${
+                  fokusId === o.id ? "border-accent" : "border-border"
+                }`}
               >
                 <div className="flex items-center gap-2">
                   <button
@@ -251,6 +350,8 @@ export default function OutlookView() {
                     <ConfidenceStars value={o.confidence} />
                   </span>
                 </div>
+
+                <GvaHerkunft outlook={o} signal={signal} />
 
                 {o.thesis && <p className="text-[12px] text-muted line-clamp-3">{o.thesis}</p>}
 
@@ -283,24 +384,24 @@ export default function OutlookView() {
                 <FundamentalsCompare symbol={o.symbol} fundamentals={fundamentals} />
 
                 <div className="flex items-center gap-1 mt-auto pt-2 border-t border-border/60">
-                  {o.status === "observation" && (
-                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "waiting")}>
-                      Wartend
+                  {aktuell === "beobachtung" && (
+                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "wartend")}>
+                      {setupLabel("wartend")}
                     </Button>
                   )}
-                  {(o.status === "observation" || o.status === "waiting") && (
-                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "active")}>
-                      Aktiv
+                  {(aktuell === "beobachtung" || aktuell === "wartend") && (
+                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "aktiv")}>
+                      {setupLabel("aktiv")}
                     </Button>
                   )}
-                  {o.status === "active" && (
+                  {aktuell === "aktiv" && (
                     <Button variant="primary" size="sm" icon="ph-notebook" onClick={() => transferToJournal(o)}>
                       Journalieren
                     </Button>
                   )}
-                  {o.status !== "cancelled" && o.status !== "executed" && (
-                    <Button variant="ghost" size="sm" onClick={() => setStatus(o, "cancelled")}>
-                      Abbrechen
+                  {!isClosedSetup(aktuell) && (
+                    <Button variant="ghost" size="sm" onClick={() => setStatus(o, "verworfen")}>
+                      {setupLabel("verworfen")}
                     </Button>
                   )}
                   <span className="ml-auto flex items-center gap-1">

@@ -1,27 +1,35 @@
 /**
  * Trade-Cockpit — reine Lane-Assembly (keine I/O, damit isoliert prüfbar).
  *
- * Drei Lanes aus vorhandenen Quellen zusammengesetzt:
- *  - Wartend   : Live-Scanner `PREPARE`, Distanz ≤ Schwelle (ephemer)
- *  - Aktiv     : signals.status = 'new'  (frischer GVA-HIT, unentschieden)
- *  - In Arbeit : signals.status = 'watchlist' (beobachtet)
+ * Drei Lanes, eingeordnet nach dem gemeinsamen Vokabular aus
+ * `lib/setup/lifecycle.ts`:
+ *  - Nähert sich : Live-Scanner `PREPARE`, Distanz ≤ Schwelle (ephemer,
+ *                  `naehert` — NICHT gespeichert, verschwindet von selbst)
+ *  - Getroffen   : `getroffen` (signals.status = 'new', unentschieden)
+ *  - In Arbeit   : `beobachtung` + `wartend` + `aktiv`
+ *
+ * Die Lane hiess früher „Wartend" und meinte damit das Gegenteil dessen, was
+ * „Wartend" im Outlook bedeutet (dort: bewusste, bestehende Absicht). Deshalb
+ * heisst sie jetzt „Nähert sich" — dasselbe Wort bedeutet überall dasselbe.
  *
  * Konfluenz = Stärke-Quintil-Ranking (pairBias) gegen die Linien-Richtung.
- * Nur `journaled` (via „Genommen") landet im Journal → Winrate bleibt sauber.
+ * Nur `ausgefuehrt` (via „Genommen") landet im Journal → Winrate bleibt sauber.
  */
 import { splitPair } from "@/lib/journal/fundamentals";
 import { pairBias, biasReason } from "@/lib/ml/pairBias";
 import { freshnessOf, type Freshness } from "@/lib/calc/realYield";
+import { effectiveSetupStatus, type SetupStatus } from "@/lib/setup/lifecycle";
 import type { MarketData } from "@/lib/gva/api";
 import type { SignalRecord } from "@/lib/journal/signals";
+import type { OutlookRecord } from "@/lib/journal/outlooks";
 
-export const WARTEND_PIP_LIMIT = 100;
+export const NAEHERT_PIP_LIMIT = 100;
 
 /** Frische-Schwellen der Kopfzeile in MINUTEN (nicht Tagen wie bei Real Yield). */
 export const SNAPSHOT_FRESH_MIN = 2;
 export const SNAPSHOT_STALE_MIN = 5;
 
-export type LaneId = "wartend" | "aktiv" | "inArbeit";
+export type LaneId = "naehert" | "getroffen" | "inArbeit";
 export type LineDir = "long" | "short";
 export type Verdict = "rueckenwind" | "gegenwind" | "neutral";
 
@@ -39,12 +47,21 @@ export interface CockpitCard {
   quote: string; // "USD"
   lineDir: LineDir | null;
   lineLevel: number | null;
-  /** nur Wartend: Pip-Distanz zur Linie */
+  /** nur „Nähert sich": Pip-Distanz zur Linie */
   distance: number | null;
-  /** nur Aktiv/In-Arbeit: ISO-Zeit des HITs */
+  /** nur Getroffen/In-Arbeit: ISO-Zeit des HITs */
   hitAt: string | null;
   /** gesetzt = Karte stammt aus der signals-Tabelle (Aktionen möglich) */
   signalId: string | null;
+  /** Vereinheitlichter Zustand — dieselbe Sprache wie im Outlook. */
+  status: SetupStatus;
+  /** Verknüpfter Outlook, sofern vorhanden (Altbestand hat keinen). */
+  outlookId: string | null;
+  /** Anreicherung aus dem Outlook — entfällt still, wenn keiner verknüpft ist. */
+  isStarred: boolean;
+  hasThesis: boolean;
+  checklistDone: number;
+  checklistTotal: number;
   baseQuintile: number | undefined;
   quoteQuintile: number | undefined;
   confluence: Confluence;
@@ -61,8 +78,8 @@ export interface CockpitCard {
 }
 
 export interface CockpitLanes {
-  wartend: CockpitCard[];
-  aktiv: CockpitCard[];
+  naehert: CockpitCard[];
+  getroffen: CockpitCard[];
   inArbeit: CockpitCard[];
 }
 
@@ -171,9 +188,14 @@ export function confluenceOf(
   return { verdict, reason };
 }
 
-function cardFromSignal(s: SignalRecord, quintiles: Record<string, number>): CockpitCard {
+function cardFromSignal(
+  s: SignalRecord,
+  quintiles: Record<string, number>,
+  outlook: OutlookRecord | undefined,
+): CockpitCard {
   const { base, quote } = splitPair(s.pair);
   const lineDir = toLineDir(s.lineType);
+  const checklist = outlook?.strategyChecklist ?? [];
   return {
     key: s.id,
     pair: s.pair,
@@ -184,6 +206,12 @@ function cardFromSignal(s: SignalRecord, quintiles: Record<string, number>): Coc
     distance: null,
     hitAt: s.hitAt,
     signalId: s.id,
+    status: effectiveSetupStatus(s.status, outlook?.status),
+    outlookId: outlook?.id ?? null,
+    isStarred: outlook?.isStarred === true,
+    hasThesis: (outlook?.thesis ?? "").trim().length > 0,
+    checklistDone: checklist.filter((i) => i.checked).length,
+    checklistTotal: checklist.length,
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
@@ -207,6 +235,14 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
     distance: md.distance,
     hitAt: null,
     signalId: null,
+    // Ephemer: es gibt weder Signal noch Outlook — deshalb `naehert` und keine
+    // Anreicherung. Die Karte verschwindet von selbst, wenn der Preis weglaeuft.
+    status: "naehert",
+    outlookId: null,
+    isStarred: false,
+    hasThesis: false,
+    checklistDone: 0,
+    checklistTotal: 0,
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
@@ -217,17 +253,27 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
   };
 }
 
+/** In-Arbeit-Lane: alles, was angefasst, aber noch nicht abgeschlossen ist. */
+const IN_ARBEIT: readonly SetupStatus[] = ["beobachtung", "wartend", "aktiv"];
+
 /**
  * Baut die drei Lanes. `scanner` = Live `/api/screener`, `signals` = signals-Tabelle,
- * `quintiles` = Stärke-Quintil je Währung (Champion). `pipLimit` steuert Wartend.
+ * `quintiles` = Stärke-Quintil je Währung (Champion), `outlookBySignal` = die
+ * verknüpften Outlooks (Index signal_id → Outlook, darf leer sein).
+ * `pipLimit` steuert die Lane „Nähert sich".
+ *
+ * Eingeordnet wird nach dem VEREINHEITLICHTEN Status: ein Signal auf
+ * 'watchlist', dessen Outlook auf `wartend` oder `aktiv` steht, bleibt in
+ * „In Arbeit" und zeigt dort denselben Zustand wie der Outlook.
  */
 export function assembleLanes(
   scanner: MarketData[],
   signals: SignalRecord[],
   quintiles: Record<string, number> = {},
-  pipLimit: number = WARTEND_PIP_LIMIT,
+  outlookBySignal: Record<string, OutlookRecord> = {},
+  pipLimit: number = NAEHERT_PIP_LIMIT,
 ): CockpitLanes {
-  const wartend = scanner
+  const naehert = scanner
     .filter(
       (md) =>
         md.status === "PREPARE" &&
@@ -242,15 +288,11 @@ export function assembleLanes(
   const byHitDesc = (a: CockpitCard, b: CockpitCard) =>
     (b.hitAt ?? "").localeCompare(a.hitAt ?? "");
 
-  const aktiv = signals
-    .filter((s) => s.status === "new")
-    .map((s) => cardFromSignal(s, quintiles))
-    .sort(byHitDesc);
+  const karten = signals.map((s) => cardFromSignal(s, quintiles, outlookBySignal[s.id]));
 
-  const inArbeit = signals
-    .filter((s) => s.status === "watchlist")
-    .map((s) => cardFromSignal(s, quintiles))
-    .sort(byHitDesc);
-
-  return { wartend, aktiv, inArbeit };
+  return {
+    naehert,
+    getroffen: karten.filter((c) => c.status === "getroffen").sort(byHitDesc),
+    inArbeit: karten.filter((c) => IN_ARBEIT.includes(c.status)).sort(byHitDesc),
+  };
 }

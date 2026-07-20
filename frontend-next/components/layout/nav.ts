@@ -26,7 +26,9 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresAdmin: true },
-      { href: "/scanner/signale", label: "Signale", icon: "ph-tray", requiresAdmin: true },
+      // „Signale" ist entfallen: die Seite zeigte exakt dieselbe signals-Tabelle
+      // wie das Cockpit, nur als flache Liste. Der Lebenszyklus lebt im Cockpit,
+      // die Details im Outlook.
       { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine", requiresAdmin: true },
     ],
   },
@@ -37,7 +39,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
       { href: "/journal", label: "Trades", icon: "ph-notebook" },
       { href: "/journal/equity", label: "Equity", icon: "ph-chart-line-up" },
-      { href: "/journal/outlook", label: "Outlook", icon: "ph-crosshair" },
+      // Eigenes Icon: Cockpit (ph-crosshair) = Lebenszyklus & Entscheidung,
+      // Outlook (ph-binoculars) = Detailebene darüber.
+      {
+        href: "/journal/outlook",
+        label: "Outlook — Details & eigene Thesen",
+        icon: "ph-binoculars",
+      },
       { href: "/journal/kalender", label: "Trade-Kalender", icon: "ph-calendar-heart" },
     ],
   },
@@ -85,12 +93,11 @@ export const PAGE_TITLES: Record<string, string> = {
   "/makro/terminal/vergleich": "Macro Terminal — Währungsvergleich",
   "/makro/real-yield": "Real Yield — Valuation-Bias (Zins − Inflation)",
   "/scanner/radar": "Visuelles Radar",
-  "/scanner/signale": "Signals-Inbox",
   "/scanner/heatmap": "Heatmap 28",
   "/journal": "Trade-Journal",
   "/journal/dashboard": "Journal-Dashboard",
   "/journal/equity": "Equity-Kurve",
-  "/journal/outlook": "Outlook — Trading-Thesen",
+  "/journal/outlook": "Outlook — Details & eigene Thesen",
   "/journal/kalender": "Trade-Kalender",
   "/journal/strategie": "Strategie-Builder",
   "/journal/backtest": "Backtest-Lab",
