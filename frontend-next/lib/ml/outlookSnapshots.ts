@@ -177,6 +177,12 @@ function computeWeek(
     currentMonth: Number(weekStart.slice(5, 7)),
   };
 
+  // BEWUSST UNVERÄNDERT: direction/aligned_count werden hier als HISTORISCHE
+  // AUFZEICHNUNG dessen gespeichert, was der Screener in dieser Woche sagte —
+  // Datengrundlage für den ehrlichen Backtest (der genau belegt, dass der
+  // Verdict ~50 % trifft). Das ist KEIN Live-Handelsurteil; die /weekly-Anzeige
+  // zeigt es nicht mehr als Empfehlung. Diese Zeilen NICHT „urteilsfrei" machen,
+  // sonst verliert der Backtest seine Vergleichsbasis.
   return FX_INSTRUMENTS.map((inst) => {
     const v = evaluatePair(inst, inputs);
     return {

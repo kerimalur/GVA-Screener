@@ -1,6 +1,5 @@
 import Panel from "@/components/layout/Panel";
-import WeeklyPairCard from "@/components/weekly/WeeklyPairCard";
-import WeeklyBtcCard from "@/components/weekly/WeeklyBtcCard";
+import WeeklyGrid from "@/components/weekly/WeeklyGrid";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadWeeklyData } from "@/lib/data/weekly";
@@ -32,22 +31,19 @@ export default async function Page() {
     );
   }
 
-  const signals = data.cards.filter((c) => c.verdict.direction !== null);
-  const rest = data.cards.filter((c) => c.verdict.direction === null);
-
   return (
     <div className="space-y-5 max-w-[1500px] mx-auto">
       <Panel
         title="Sonntagabend-Cockpit"
-        subtitle={`Top-Down-Dossier je Pair — sortiert nach Signalstärke (Faktoren-Konfluenz + Smart-Money-Rotation). COT-Quelle: ${
+        subtitle={`Urteilsfreies Dossier je Pair — faktisch sortiert (Standard: Ereignisse der Woche), KEIN LONG/SHORT-Signal. COT-Quelle: ${
           data.usingTff ? "TFF Leveraged Funds" : "Legacy Non-Commercials (TFF-Backfill ausstehend)"
         }${data.latestCotDate ? ` · Report ${new Date(data.latestCotDate).toLocaleDateString("de-DE")}` : ""}`}
       >
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px] font-mono text-muted">
-          <span><span className="text-up">▲</span>/<span className="text-down">▼</span> Faktor-Richtung (bezogen aufs Pair)</span>
+          <span><span className="text-up">▲</span>/<span className="text-down">▼</span> Faktor-Richtung (Einzelfakt, kein Gesamturteil)</span>
           <span><span className="text-warn">⚡</span> Drift-Event (CPI/NFP/Zinsentscheid)</span>
           <span>↑3W = Flow seit 3 Wochen gleiches Vorzeichen (Akkumulation)</span>
-          <span>&bdquo;Outlook erstellen&ldquo; übergibt das Dossier an den Journal-Wizard</span>
+          <span>&bdquo;Outlook erstellen&ldquo; übergibt die Faktenlage an den Journal-Wizard</span>
         </div>
       </Panel>
 
@@ -60,25 +56,7 @@ export default async function Page() {
         </Panel>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <WeeklyBtcCard btc={data.btc} />
-        {signals.map((c) => (
-          <WeeklyPairCard key={c.instrument} card={c} />
-        ))}
-      </div>
-
-      {rest.length > 0 && (
-        <Panel
-          title="Ohne Signal"
-          subtitle="Weniger als 2 gleichgerichtete Faktoren — Beobachtungsliste"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {rest.map((c) => (
-              <WeeklyPairCard key={c.instrument} card={c} />
-            ))}
-          </div>
-        </Panel>
-      )}
+      <WeeklyGrid data={data} />
     </div>
   );
 }

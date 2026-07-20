@@ -166,9 +166,12 @@ export async function loadDashboardData(db: SupabaseClient): Promise<DashboardDa
     sentimentByPair,
     currentMonth: new Date().getMonth() + 1,
   };
-  const verdicts = FX_INSTRUMENTS.map((inst) => evaluatePair(inst, inputs)).sort(
-    (a, b) => b.alignedCount - a.alignedCount,
-  );
+  // evaluatePair liefert die Einzel-Faktoren als FAKTEN (von /weekly konsumiert).
+  // Die frühere Sortierung nach alignedCount ist ENTFERNT: der aggregierte
+  // Konfluenz-Verdict ist out-of-sample widerlegt (~50 % gesamt, Alle-4-Kombi
+  // 47,4 %) und darf keine Rangfolge mehr bestimmen. Reihenfolge = FX_INSTRUMENTS
+  // (Konsument /weekly baut ohnehin eine Map nach instrument).
+  const verdicts = FX_INSTRUMENTS.map((inst) => evaluatePair(inst, inputs));
 
   return {
     strength,

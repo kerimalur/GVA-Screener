@@ -5,6 +5,7 @@ import { getCotSeriesBatch, getTffSeriesBatch } from "./cot";
 import { computeCotFlow, latestFlow, flowLabel, type CotFlowSummary } from "@/lib/calc/cotDelta";
 import type { ScreenerVerdict } from "@/lib/calc/screenerReasoning";
 import type { RiskGaugeResult } from "@/lib/calc/riskGauge";
+import { sortCards } from "@/lib/weekly/sort";
 import { FX_INSTRUMENTS, fromOanda } from "@/lib/constants/instruments";
 import { BANK_BY_CCY } from "@/lib/constants/banks";
 import type { CalendarEventRow, CbMeetingRow } from "@/lib/supabase/types";
@@ -54,8 +55,6 @@ export interface WeeklyPairCard {
   meetings: WeeklyMeeting[];
   /** Währungen des Pairs, die durch ein Drift-Event der letzten 7 Tage "in Play" sind */
   inPlay: string[];
-  /** Sortier-Score: Faktoren-Konfluenz + Flow-Rotation */
-  score: number;
   /** Vorformulierter Fundamental-Text (Wizard-Autofill) */
   fundamentalText: string;
   /** Wochen in Folge, die dieses Signal (gleiche Richtung) schon besteht (aus Snapshots) */
@@ -105,20 +104,21 @@ function fmtSigned(v: number | null | undefined, digits = 1): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(digits)}`;
 }
 
-/** Fundamental-Text einer Pair-Karte (Karte + Outlook-Wizard-Autofill). */
+/** Fundamental-Text einer Pair-Karte (Karte + Outlook-Wizard-Autofill).
+ *
+ * BEWUSST OHNE URTEIL: kein „Screener: LONG (x/y Faktoren)" mehr. Der aggregierte
+ * 5-Faktor-Verdict ist out-of-sample widerlegt (siehe lib/weekly/sort.ts) — die
+ * Einzel-Faktoren bleiben als FAKTEN, aber ohne gerichtete Gesamtaussage. */
 function buildFundamentalText(
-  card: Omit<WeeklyPairCard, "fundamentalText" | "score" | "signalWeeks" | "signalSince">,
+  card: Omit<WeeklyPairCard, "fundamentalText" | "signalWeeks" | "signalSince">,
   usingTff: boolean,
 ): string {
   const lines: string[] = [];
   const v = card.verdict;
-  lines.push(
-    v.direction
-      ? `Screener: ${v.direction} (${v.alignedCount}/${v.factors.length} Faktoren gleichgerichtet).`
-      : "Screener: kein klares Signal (<2 gleichgerichtete Faktoren).",
-  );
+  lines.push(`Faktenlage ${card.displayName} (${v.factors.length} Faktoren, kein aggregiertes Urteil):`);
   for (const f of v.factors) {
-    lines.push(`• ${f.name}: ${f.text}`);
+    const arrow = f.dir === 1 ? "▲" : f.dir === -1 ? "▼" : "•";
+    lines.push(`${arrow} ${f.name}: ${f.text}`);
   }
   const src = usingTff ? "Leveraged Funds (TFF)" : "Non-Commercials (Legacy)";
   if (card.baseFlow || card.quoteFlow) {
@@ -247,7 +247,7 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
   // steckt in loadDashboardData; hier nur fürs Label). BTC-Serie zählt mit.
   const usingTff = (btcTff.get(BTC_CFTC_CODE)?.length ?? 0) > 0;
 
-  const cards: WeeklyPairCard[] = FX_INSTRUMENTS.map((inst) => {
+  const unsortedCards: WeeklyPairCard[] = FX_INSTRUMENTS.map((inst) => {
     const base = inst.baseCcy!;
     const quote = inst.quoteCcy!;
     const verdict = verdictByInstrument.get(inst.instrument);
@@ -258,7 +258,7 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
     const longPct = sentLatest.get(pairKey) ?? null;
     const oldPct = sentOldest.get(pairKey) ?? null;
 
-    const partial: Omit<WeeklyPairCard, "fundamentalText" | "score" | "signalWeeks" | "signalSince"> = {
+    const partial: Omit<WeeklyPairCard, "fundamentalText" | "signalWeeks" | "signalSince"> = {
       instrument: inst.instrument,
       displayName: inst.displayName,
       base,
@@ -279,25 +279,23 @@ export async function loadWeeklyData(db: SupabaseClient): Promise<WeeklyData> {
       inPlay: [base, quote].filter((c) => inPlayCcys.has(c)),
     };
 
-    const flowGap =
-      partial.baseFlow?.delta4wPctOi != null && partial.quoteFlow?.delta4wPctOi != null
-        ? partial.baseFlow.delta4wPctOi - partial.quoteFlow.delta4wPctOi
-        : 0;
-    const score =
-      verdict.alignedCount * 10 + Math.min(Math.abs(flowGap), 10) + (partial.inPlay.length > 0 ? 3 : 0);
-
+    // Signal-Streak bleibt als FAKT (wie lange die aufgezeichnete Screener-Richtung
+    // schon anhält) — reine Anzeige, keine Handelsempfehlung.
     const streak = signalStreak(inst.instrument, verdict.direction);
 
     return {
       ...partial,
-      score,
       fundamentalText: buildFundamentalText(partial, usingTff),
       signalWeeks: streak.weeks,
       signalSince: streak.since,
     };
-  })
-    .filter((c): c is WeeklyPairCard => c !== null)
-    .sort((a, b) => b.score - a.score);
+  }).filter((c): c is WeeklyPairCard => c !== null);
+
+  // FAKTISCHE Default-Sortierung (Ereignisse dieser Woche). KEINE Signal-Sortierung:
+  // der alte Score (alignedCount*10 + flowGap + inPlay) wie auch Q5/Q1 sind
+  // out-of-sample widerlegt — Details in lib/weekly/sort.ts. Client kann faktisch
+  // umschalten; Signal-Sortierung erst wieder mit einer Metrik nachweislich >50 %.
+  const cards = sortCards(unsortedCards, "events");
 
   // ===== BTC-Karte =====
   const btcTffSeries = btcTff.get(BTC_CFTC_CODE) ?? [];

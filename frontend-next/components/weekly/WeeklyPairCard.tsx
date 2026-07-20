@@ -1,7 +1,13 @@
 import type { WeeklyPairCard as CardData } from "@/lib/data/weekly";
 import { flowLabel } from "@/lib/calc/cotDelta";
-import { TerminalCard, DirectionTag } from "@/components/ui/terminal";
+import { TerminalCard } from "@/components/ui/terminal";
 import OutlookPrefillButton from "./OutlookPrefillButton";
+
+// KEIN LONG/SHORT-Urteil und keine „X/Y Faktoren gleichgerichtet"-Konfluenz mehr:
+// der aggregierte 5-Faktor-Screener-Verdict ist out-of-sample widerlegt
+// (~50 % gesamt, Alle-4-Kombi 47,4 %, COT-NC schädlich). Die Einzel-Faktoren
+// bleiben als FAKTEN sichtbar, nur ohne gerichtetes Gesamturteil. Details:
+// lib/weekly/sort.ts. Nicht „aus Versehen" wieder ein Verdict/Signal einbauen.
 
 function fmtSigned(v: number | null | undefined, digits = 1, suffix = ""): string {
   if (v === null || v === undefined) return "–";
@@ -54,10 +60,9 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
 
   return (
     <TerminalCard className="space-y-2.5 flex flex-col">
-      {/* Header */}
+      {/* Header — reine Fakten, kein LONG/SHORT-Urteil */}
       <div className="flex items-center gap-2">
         <span className="font-bold text-[14px]">{card.displayName}</span>
-        <DirectionTag direction={card.verdict.direction ?? "NEUTRAL"} />
         {card.inPlay.length > 0 && (
           <span
             className="px-1.5 py-0.5 rounded-(--radius-tag) text-[9px] font-bold font-mono bg-warn-dim text-warn border border-warn/50"
@@ -68,15 +73,12 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
         )}
         {card.signalWeeks !== null && card.signalSince && (
           <span
-            className="text-[9px] font-mono text-faint border border-border/60 rounded px-1.5 py-0.5"
-            title={`Signal besteht seit KW ${isoWeek(card.signalSince)} (${new Date(card.signalSince).toLocaleDateString("de-DE")})`}
+            className="ml-auto text-[9px] font-mono text-faint border border-border/60 rounded px-1.5 py-0.5"
+            title={`Aufgezeichnete Screener-Richtung unverändert seit KW ${isoWeek(card.signalSince)} (${new Date(card.signalSince).toLocaleDateString("de-DE")}) — Fakt, keine Empfehlung`}
           >
-            seit {card.signalWeeks}W · KW{isoWeek(card.signalSince)}
+            unverändert seit {card.signalWeeks}W · KW{isoWeek(card.signalSince)}
           </span>
         )}
-        <span className="ml-auto text-[10px] font-mono text-faint" title="Signalstärke (Faktoren + Flow-Rotation)">
-          {card.score.toFixed(0)}
-        </span>
       </div>
 
       {/* COT-Flow beider Währungen */}
@@ -128,12 +130,11 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
         </div>
       )}
 
-      {/* Faktoren-Details (nativ aufklappbar, kein JS) */}
+      {/* Faktoren-Details (nativ aufklappbar, kein JS) — Einzelfakten, KEINE
+          aggregierte „X/Y gleichgerichtet"-Konfluenz (out-of-sample widerlegt). */}
       <details className="text-[11px]">
         <summary className="cursor-pointer text-muted hover:text-text transition-colors select-none">
-          {card.verdict.alignedCount > 0
-            ? `${card.verdict.alignedCount}/${card.verdict.factors.length} Faktoren gleichgerichtet`
-            : `${card.verdict.factors.length} Faktoren (kein Signal)`}
+          {card.verdict.factors.length} Faktoren im Detail
         </summary>
         <ul className="mt-1.5 space-y-1">
           {card.verdict.factors.map((f) => (
@@ -154,7 +155,9 @@ export default function WeeklyPairCard({ card }: { card: CardData }) {
         <OutlookPrefillButton
           prefill={{
             symbol: journalSymbol,
-            direction: card.verdict.direction === "LONG" ? "long" : card.verdict.direction === "SHORT" ? "short" : null,
+            // KEINE vorbelegte Richtung aus einem unvalidierten Signal — der Trader
+            // entscheidet die Richtung selbst; nur die Faktenlage wird übergeben.
+            direction: null,
             fundamental: card.fundamentalText,
           }}
         />
