@@ -17,9 +17,9 @@ Aktueller Stand: mean_hitrate ≈ **0,52–0,54 roh**, hall_score ≈ **0,51**
 **Zwei verschiedene Quintile — nie unqualifiziert «Q5» sagen:**
 - **Stärke-Quintil**: Position des Zins+Saison-Scores in seiner eigenen
   156W-Verteilung (Q5 = stärkstes Fünftel). Das ist, was Ranking-Seite,
-  Dashboard-WeekPlan, Setup-Finder, Fundamental-Track anzeigen. Das DB-/Typ-Feld
-  heisst historisch `confidence_quintile` — **Misnomer**, Inhalt ist Stärke,
-  keine Konfidenz. (Rename = separate strukturelle Migration, offen.)
+  Dashboard-WeekPlan, Setup-Finder, Fundamental-Track anzeigen. DB-/Typ-Feld
+  heisst `strength_quintile` (umbenannt von `confidence_quintile` am 2026-07-20,
+  Migration `rename_confidence_quintile_to_strength_quintile` — Werte unverändert).
 - **Konfidenz-Quintil**: Top-20 % nach |Composite-z| eines Modells. Lebte nur im
   entfernten ML-Labor; Quelle der 57,6 %. NICHT dasselbe wie das Stärke-Quintil.
 

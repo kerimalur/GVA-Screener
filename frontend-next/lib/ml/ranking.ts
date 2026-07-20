@@ -122,11 +122,7 @@ async function loadRankingDataUncached(): Promise<RankingData> {
   if (weekStart) {
     const { data: rows } = await sb
       .from("ml_weekly_rankings")
-      // Transitional während des Spalten-Renames confidence_quintile →
-      // strength_quintile: `*` bleibt gültig, egal welcher der beiden Namen
-      // gerade existiert. Nach der Migration (Phase 2) zurück auf die schlanke
-      // explizite Liste mit `strength_quintile`.
-      .select("*")
+      .select("ccy,model,horizon,score,strength_quintile,top_features,created_at")
       .eq("week_start", weekStart);
     for (const r of rows ?? []) {
       if (r.created_at && (updatedAt === null || r.created_at > updatedAt)) {
@@ -135,9 +131,7 @@ async function loadRankingDataUncached(): Promise<RankingData> {
       const row: RankingRow = {
         ccy: r.ccy,
         score: r.score ?? 0,
-        // Rename-tolerant: liest neue Spalte, fällt bis zur Migration auf die alte
-        // zurück. Fallback (+ `select("*")`) entfällt in Phase 2.
-        strength_quintile: r.strength_quintile ?? r.confidence_quintile ?? 3,
+        strength_quintile: r.strength_quintile ?? 3,
         top_features: (r.top_features as RankingRow["top_features"]) ?? [],
       };
       if (r.model === "champion") champion.push(row);

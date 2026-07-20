@@ -33,9 +33,11 @@ create table if not exists ml_weekly_rankings (
   model text not null,          -- 'champion' | 'baseline'
   horizon int not null,
   score real,
-  confidence_quintile int,      -- STÄRKE-Quintil 1..5 (5 = stärkstes Fünftel, Kandidat).
-                                -- Feldname historisch/Misnomer: kein Konfidenz-Mass, nicht
-                                -- validiert „handelbar". Rename = separate Migration.
+  strength_quintile int,        -- Stärke-Quintil 1..5 (5 = stärkstes Fünftel, Kandidat).
+                                -- Position des Scores in seiner eigenen 156W-Verteilung,
+                                -- kein Konfidenz-Mass, nicht validiert „handelbar".
+                                -- (Umbenannt von confidence_quintile via Migration
+                                --  rename_confidence_quintile_to_strength_quintile, 2026-07-20.)
   top_features jsonb,
   realized_return real,         -- nachgetragen wenn Horizont gereift
   hit boolean,
