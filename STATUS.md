@@ -5,6 +5,88 @@
 
 Stand: 2026-07-20
 
+## Kern-Workflow repariert: Lebenszyklus, Downtime, Sichtbarkeit (2026-07-20)
+Review-Befund: vier strukturelle Defekte im Kern-Workflow, alle mit dem
+Fehlermodus **Stille** — das Board sah funktionsfähig aus, während nichts mehr
+passierte. In drei Arbeitspaketen behoben (A und B sind Verhaltensänderungen,
+C ist reine Sichtbarkeit).
+
+**A — Linien-Lebenszyklus schliesst sich jetzt (🔴)**
+- *Vorher:* `TRIGGERED[pair]` ist sticky. Aufgehoben wurde es nur durch
+  `POST /api/mark {done}` — und `markPair` rief ausschliesslich
+  `ScannerShell.tsx`. Das Cockpit importierte die Funktion nicht einmal.
+  Folge: Pair hittet → „Genommen" → Karte weg → Backend bleibt **für immer**
+  auf HIT. Kein Alert, keine nächste Linie. Nach Wochen sind die aktivsten
+  Pairs tot und drei leere Lanes sehen aus wie „nichts los".
+- **A1:** `onTake` und `onDismiss` rufen zusätzlich `markPair(pair,"done")`,
+  „Beobachten" ruft `markPair(pair,"pending")`. Aufrufe sind idempotent und
+  werfen nicht (`markPair` gibt `boolean` zurück, loggt statt zu werfen) —
+  ein fehlgeschlagener Backend-Call blockiert weder Supabase noch die UI.
+- **A2:** Zustand liegt in **Supabase**, nicht mehr in `state.json`
+  (`render.yaml` deklariert bewusst weiterhin KEINE Disk — Render Free hat kein
+  persistentes FS, die Lösung ist die DB). Neu `Backend/lifecycle_state.py`:
+  `journaled`/`dismissed` = **consumed**, `new`/`watchlist` = **triggered**.
+  Kein Daten-Rewrite, bestehende `signals`-Zeilen werden korrekt gedeutet.
+  `state.json` ist auf **reinen Cache** degradiert; ein Lauf mit gelöschter
+  Datei verhält sich identisch.
+- **Migration ohne Alert-Sturm:** Ein offener HIT, den nur die Datei kennt und
+  Supabase nicht, gilt **im Zweifel als consumed** — lieber ein Alert zu wenig
+  als eine Flut auf längst getradete Setups. `ALERT_CACHE` wird beim Start aus
+  den offenen Signalen vorbelegt (kein Doppel-Alert nach Restart).
+- **Kein Weg zurück in die Sackgasse:** `reconcile_state()` läuft bei jedem
+  Zonen-Refresh (15 min) und löst Trigger, deren Signal ausserhalb von
+  `/api/mark` geschlossen wurde (z.B. direkt im Journal).
+- `POST /api/mark` bleibt in Signatur und Verhalten kompatibel
+  (`ScannerShell.tsx:44` unberührt); neu ist nur der Durchschrieb nach Supabase
+  (`done` → `dismissed`, `pending` → `watchlist`, fire-and-forget) und dass ein
+  doppelter Aufruf `{ok:true, reason:"already_resolved"}` liefert statt zu failen.
+
+**B — Verpasste Hits während Downtime werden nachgetragen (🔴)**
+- *Vorher:* Kreuzungs-Erkennung braucht `PREV_PRICE`; nach jedem Restart leer.
+  Render Free schläft nach 15 min, der Keep-Alive ist ein GitHub-Cron (verzögert
+  notorisch 5–20 min). Eine Linie, die im Downtime-Fenster durchquert wird und
+  nicht zurückkommt, wurde **nie** erkannt.
+- Neu `Backend/late_hits.py`: beim Zonen-Refresh prüft
+  `replay.gva_history.collect_hits` (**keine zweite Erkennungslogik**), ob seit
+  dem letzten Lauf eine Linie berührt wurde. Treffer → Signal + Telegram-Alert,
+  beide klar als **„nachträglich erkannt"** gekennzeichnet.
+- Zeitpunkt des letzten Laufs liegt in `screener_state.last_backfill_scan`
+  (Supabase) — er muss genau die Downtime überleben, die er misst.
+- **Dedupe:** offener HIT / consumed Linie / `ALERT_CACHE` — derselbe Treffer
+  wird bei einem zweiten Refresh weder geschrieben noch gealertet. Nachträglicher
+  Hit auf eine bereits consumed Linie erzeugt **nichts**.
+- **Erster Lauf überhaupt** trägt bewusst nichts nach (sonst Alert-Sturm über die
+  gesamte Historie).
+- Grenze: OANDA liefert nur abgeschlossene Tageskerzen → Nachtrag spätestens mit
+  dem nächsten Tagesschluss (NY 17:00), nicht sekundengenau. Genau deshalb ist
+  das Flag da.
+
+**C — Leeres Board ist von Ausfall unterscheidbar (🟠)**
+- `GET /api/screener` liefert jetzt `{data, updated, zones, pairs_total, live}`
+  statt roh `LIVE_CACHE["data"]`. `toSnapshot()` im Frontend hebt auch die alte
+  Array-Antwort auf den neuen Vertrag (Deploy-Fenster).
+- **Kaltstart** (`zones < 28`) rendert den eigenen Zustand
+  „Backend startet (Zonen X/28)" — **nicht** `ok` mit drei leeren Lanes.
+- **Kopfzeile** „Stand HH:MM · N Pairs": >2 min grau, >5 min `warn`.
+- **OANDA-Ausfall:** `live:false`, betroffene Karten tragen `stale:true` und
+  zeigen `~` vor der Pip-Distanz; Board bleibt bedienbar.
+- **Keine neue Frische-Logik:** `freshnessOf` bekam überschreibbare Schwellen
+  (Defaults unverändert, Cockpit ruft `freshnessOf(alterInMinuten, 2, 5)`),
+  `FreshBadge` ist aus `RealYieldView` nach `components/ui/FreshBadge.tsx`
+  herausgelöst und wird von beiden genutzt.
+
+**DB** (Migration `screener_lifecycle_state_and_detected_late`, angewandt, additiv):
+`signals.detected_late boolean default false` + Tabelle `screener_state`
+(key/value/updated_at, RLS an ohne Policies).
+
+**Verifiziert:** 107 pytest grün (neu: `test_lifecycle_state.py` 14,
+`test_late_hits.py` 7, `test_screener_lifecycle.py` 17 — inkl. hit → genommen →
+nächster Hit, Restart-Persistenz, Dedupe-Logik). 20 Frontend-Kontrollwerte grün
+(`npx tsx scripts/cockpit-board-check.mts`). tsc sauber, `npm run build` sauber;
+ESLint-Meldungen sind ausschliesslich vorbestehend (journal/, layout/, ml/,
+hooks/ — keine berührte Datei).
+**Noch nicht live gesichtet** (Auth + Render nötig) — beim nächsten Login prüfen.
+
 ## Trade-Cockpit — neue Startseite (2026-07-20)
 Konsolidierung: statt fundamentalem Sprawl (Weekly Outlook, Setup-Finder,
 Fundamental-Track, Macro Terminal, COT, Season) ein GVA-zentrisches Cockpit.

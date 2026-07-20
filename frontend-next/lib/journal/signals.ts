@@ -18,6 +18,8 @@ export interface SignalRecord {
   fundamentalSnapshot: { base?: G8Currency | null; quote?: G8Currency | null } | null;
   status: SignalStatus;
   createdAt: string;
+  /** true = Hit wurde nachträglich aus der Kerzen-Historie erkannt (Downtime-Lücke). */
+  detectedLate: boolean;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamische Supabase-Rows */
@@ -32,6 +34,7 @@ function rowToSignal(r: any): SignalRecord {
     fundamentalSnapshot: r.fundamental_snapshot ?? null,
     status: (r.status || "new") as SignalStatus,
     createdAt: r.created_at,
+    detectedLate: r.detected_late === true,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

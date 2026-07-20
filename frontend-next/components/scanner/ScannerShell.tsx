@@ -19,7 +19,8 @@ export default function ScannerShell({ mode }: ScannerShellProps) {
 
   const load = useCallback(async () => {
     try {
-      const rows = await fetchScreener();
+      const snap = await fetchScreener();
+      const rows = snap.data;
       setData(rows);
       setError(null);
       // Modal-Item aktualisieren, falls offen

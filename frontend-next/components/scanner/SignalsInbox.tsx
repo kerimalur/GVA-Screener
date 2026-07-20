@@ -138,6 +138,14 @@ export default function SignalsInbox() {
                     Level {s.lineLevel}
                   </span>
                   <span className="text-[11px] font-mono text-faint">{fmtWhen(s.hitAt)}</span>
+                  {s.detectedLate && (
+                    <span
+                      title="Nachträglich aus der Kerzen-Historie erkannt — kein Live-Hit"
+                      className="px-1.5 py-0.5 rounded bg-warn/15 text-warn text-[10px] font-bold font-mono"
+                    >
+                      ⏱ nachträglich erkannt
+                    </span>
+                  )}
                   {s.status !== "new" && (
                     <Badge tone={s.status === "journaled" ? "accent" : "neutral"}>
                       {s.status === "journaled" ? "journaliert" : "verworfen"}

@@ -54,10 +54,10 @@ export default function NearGva({ quintiles = {} }: { quintiles?: Record<string,
     let alive = true;
     const load = async () => {
       try {
-        const rows = await fetchScreener();
+        const snap = await fetchScreener();
         if (!alive) return;
         const within = sortByDistance(
-          rows.filter((r) => r.distance != null && r.distance <= PIP_LIMIT),
+          snap.data.filter((r) => r.distance != null && r.distance <= PIP_LIMIT),
         );
         setNear(within);
         setState("ok");

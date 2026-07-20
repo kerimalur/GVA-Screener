@@ -1,17 +1,20 @@
 import os
-import json
 import time
 import threading
+from datetime import datetime, timezone
+
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_and_resample_3d, fetch_live_prices
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
+import lifecycle_state
+import late_hits
 
 load_dotenv()
 
@@ -62,7 +65,10 @@ TRIGGERED = {}
 CONSUMED = {}
 
 # Merged Output (Zonen + Live-Preis), den der Endpoint zurueckgibt.
-LIVE_CACHE = {"data": [], "updated": None}
+# "live" = letzter Snapshot hat echte OANDA-Preise bekommen. False bedeutet:
+# gerechnet wurde mit dem Tagesschluss aus den Zonen (Fallback) — das MUSS im
+# Frontend sichtbar sein, sonst sehen die Pip-Distanzen live aus, sind es aber nicht.
+LIVE_CACHE = {"data": [], "updated": None, "live": False}
 
 REFRESH_INTERVAL = 60 * 15  # Zonen-Neuberechnung: 15 Minuten
 PRICE_INTERVAL = 30         # Live-Preis + HIT-Check: 30 Sekunden
@@ -71,34 +77,49 @@ MACRO_INTERVAL = 60 * 60 * 6  # Makro (FRED/CFTC/Kalender): alle 6h, ändert sic
 # Makro & Stärke (Power Index / Matrix / Datenzentrum / Kalender) — unabhängig vom Screener.
 MACRO_CACHE = {"currencies": [], "calendar": [], "updated": None}
 
-STATE_FILE = os.path.join(os.path.dirname(__file__), "state.json")
+STATE_FILE = lifecycle_state.default_state_file()
 _state_lock = threading.Lock()
 
 
 def save_state():
-    """TRIGGERED + CONSUMED persistieren (ueberlebt Neustart waehrend Laufzeit)."""
-    try:
-        data = {
-            "triggered": TRIGGERED,
-            "consumed": {p: {s: sorted(v) for s, v in sides.items()} for p, sides in CONSUMED.items()},
-        }
-        with open(STATE_FILE, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print(f"save_state Fehler: {e}")
+    """Zustand als CACHE in state.json schreiben.
+
+    Die Wahrheit liegt in Supabase (`signals`) — Render hat kein persistentes
+    Dateisystem. Die Datei hilft nur lokal und wenn Supabase kurz wegbricht;
+    fehlt sie, verhaelt sich der Screener identisch.
+    """
+    lifecycle_state.write_cache_file(STATE_FILE, TRIGGERED, CONSUMED)
 
 
 def load_state():
-    global TRIGGERED, CONSUMED
-    try:
-        with open(STATE_FILE) as f:
-            d = json.load(f)
-        TRIGGERED = d.get("triggered", {})
-        CONSUMED = {p: {s: set(v) for s, v in sides.items()} for p, sides in d.get("consumed", {}).items()}
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        print(f"load_state Fehler: {e}")
+    """TRIGGERED/CONSUMED/ALERT_CACHE aus Supabase aufbauen (Cache als Fallback)."""
+    global TRIGGERED, CONSUMED, ALERT_CACHE
+    triggered, consumed, alert_cache, source = lifecycle_state.load_lifecycle(STATE_FILE)
+    TRIGGERED = triggered
+    CONSUMED = consumed
+    ALERT_CACHE = alert_cache
+    consumed_count = sum(len(v) for sides in CONSUMED.values() for v in sides.values())
+    print(
+        f"Lebenszyklus geladen ({source}): {len(TRIGGERED)} offene HITs, "
+        f"{consumed_count} verbrauchte Linien"
+    )
+    save_state()
+
+
+def reconcile_state():
+    """Laufenden Zustand gegen Supabase abgleichen (alle 15 min im Zonen-Loop).
+
+    Faengt Statuswechsel ab, die nicht ueber /api/mark laufen (z.B. direkt im
+    Journal). Damit kann kein Paar dauerhaft sticky in TRIGGERED haengen.
+    """
+    rows = supabase_signals.fetch_signal_rows()
+    if rows is None:
+        return
+    with _state_lock:
+        changed = lifecycle_state.reconcile(TRIGGERED, CONSUMED, ALERT_CACHE, rows)
+    if changed:
+        save_state()
+        print("Lebenszyklus abgeglichen (Supabase -> Laufzeit)")
 
 
 def select_lines(pair: str):
@@ -179,7 +200,10 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
 
             # Sticky setzen + Alert (nur bei echten Live-Ticks).
             if fire_alerts:
-                TRIGGERED[pair] = {"side": side, "level": level, "date": date, "pending": False}
+                TRIGGERED[pair] = {
+                    "side": side, "level": round(level, 5), "date": date,
+                    "pending": False, "detected_late": False,
+                }
                 cache_key = f"{pair}_{side}"
                 if ALERT_CACHE.get(cache_key) != level:
                     msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
@@ -214,15 +238,100 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
         "pending": bool(TRIGGERED.get(pair, {}).get("pending")),
         "distance": distance_pips,
         "last_touched": zone.get("last_touched"),
+        # True = Preis stammt NICHT von OANDA, sondern vom letzten Tagesschluss.
+        # Das Frontend markiert solche Karten mit "~" vor der Pip-Distanz.
+        "stale": not fire_alerts,
+        # True = HIT wurde nachtraeglich aus der Kerzen-Historie erkannt (Downtime).
+        "detected_late": bool(TRIGGERED.get(pair, {}).get("detected_late")),
     }
 
 
+def _late_scan_since() -> str | None:
+    """ISO-Datum, ab dem nachtraeglich erkannte Hits zaehlen.
+
+    None = erster Lauf ueberhaupt: dann wird NICHTS nachgetragen, sonst wuerde
+    die komplette Historie als Alert-Sturm hereinbrechen. Der Zeitstempel liegt
+    in Supabase, weil er genau die Downtime ueberleben muss, die er misst.
+    """
+    stored = supabase_signals.get_state_value(late_hits.LAST_SCAN_KEY)
+    if isinstance(stored, dict):
+        stored = stored.get("at")
+    if not stored:
+        return None
+    try:
+        return str(stored)[:10]  # 'YYYY-MM-DD'
+    except Exception:
+        return None
+
+
+def _mark_late_scan_done():
+    supabase_signals.set_state_value(
+        late_hits.LAST_SCAN_KEY, {"at": datetime.now(timezone.utc).isoformat()}
+    )
+
+
+def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
+    """Nachtraeglich erkannten Hit eines Paars verarbeiten (Arbeitspaket B).
+
+    Erkennung kommt komplett aus replay.gva_history.collect_hits — keine zweite
+    Hit-Logik. Hier wird nur entschieden, ob daraus ein Signal + Alert wird.
+    """
+    if since_day is None:
+        return
+    with _state_lock:
+        if pair in TRIGGERED:
+            return  # offener HIT -> sticky, nichts nachtragen
+        consumed = {s: set(v) for s, v in CONSUMED.get(pair, {}).items()}
+
+    found = late_hits.find_late_hits(df_3d, daily, pair, since_day, consumed)
+    if not found:
+        return
+
+    # Nur der juengste Treffer wird aktiv: das Sticky-Modell kennt genau einen
+    # offenen HIT je Paar. Aeltere verpasste Linien bleiben unangetastet und
+    # kommen im naechsten Refresh dran, sobald dieser hier geloest ist.
+    hit = found[-1]
+    side, level = hit["direction"], hit["level"]
+    cache_key = f"{pair}_{side}"
+
+    with _state_lock:
+        if pair in TRIGGERED:
+            return
+        if level in CONSUMED.get(pair, {}).get(side, set()):
+            return
+        if ALERT_CACHE.get(cache_key) == level:
+            return  # derselbe Hit wurde schon gemeldet
+        TRIGGERED[pair] = {
+            "side": side,
+            "level": level,
+            "date": hit.get("line_formed_date"),
+            "pending": False,
+            "detected_late": True,
+        }
+        ALERT_CACHE[cache_key] = level
+
+    save_state()
+    send_telegram_alert(late_hits.alert_text(pair, hit))
+    snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
+    supabase_signals.record_hit_async(pair, side, level, snapshot, detected_late=True)
+    print(f"Nachtraeglich erkannt: {pair} {side} @ {level} (Hit-Tag {hit['hit_date']})")
+
+
 def compute_zones():
-    """Schwerer Durchlauf (15 min): berechnet die GVA-Zonen je Paar neu.
-    Keine Alerts hier - die feuern live im Preis-Loop."""
+    """Schwerer Durchlauf (15 min): berechnet die GVA-Zonen je Paar neu und
+    traegt Hits nach, die waehrend einer Downtime live verpasst wurden."""
+    reconcile_state()
+    since_day = _late_scan_since()
+    scanned_any = False
+
     for pair in PAIRS:
         try:
-            df_3d = fetch_and_resample_3d(pair, count=5000)
+            # Tageskerzen einmal holen (5-min-Cache) — 3D fuer die Zonen,
+            # daily fuer die tagesgenaue Verfeinerung der nachgetragenen Hits.
+            daily = fetch_daily_oanda(pair, count=5000)
+            if daily.empty:
+                continue
+            df_3d = resample_3d_bars(daily)
             if df_3d.empty:
                 continue
 
@@ -235,13 +344,28 @@ def compute_zones():
                 "last_touched": last_touched,
                 "daily_close": price,  # Fallback-Preis bis Live-Tick kommt
             }
+            scanned_any = True
+
+            try:
+                _handle_late_hits(pair, df_3d, daily, since_day)
+            except Exception as e:
+                print(f"Nachtrag-Fehler bei {pair}: {e}")
         except Exception as e:
             print(f"Zonen-Fehler bei {pair}: {e}")
         time.sleep(0.1)
 
+    # Erst nach einem echten Durchlauf weiterstellen — bricht der Lauf ab,
+    # bleibt das Fenster offen und der Hit wird beim naechsten Mal gefunden.
+    if scanned_any:
+        _mark_late_scan_done()
+
 
 def build_live_snapshot():
-    """Leichter Durchlauf (30s): Live-Preise holen + gegen Zonen bewerten."""
+    """Leichter Durchlauf (30s): Live-Preise holen + gegen Zonen bewerten.
+
+    Faellt OANDA-Pricing aus, rechnen wir mit dem letzten Tagesschluss weiter —
+    aber NICHT still: `live=False` global, `stale=True` je betroffener Karte.
+    """
     prices = fetch_live_prices(PAIRS)
     market_data = []
     for pair in PAIRS:
@@ -255,6 +379,7 @@ def build_live_snapshot():
         market_data.append(evaluate_pair(pair, price, zone, fire_alerts=bool(live)))
     LIVE_CACHE["data"] = market_data
     LIVE_CACHE["updated"] = time.time()
+    LIVE_CACHE["live"] = bool(prices)
 
 
 def _zones_loop():
@@ -317,9 +442,19 @@ def start_background_refresh():
 
 @app.get("/api/screener")
 def get_screener():
-    # Sofort aus dem Live-Cache. Beim ersten Start evtl. leer,
-    # bis Zonen berechnet und der erste Live-Tick durch ist.
-    return LIVE_CACHE["data"]
+    """Live-Snapshot MIT Zustandskontext.
+
+    Frueher kam hier nur das rohe Array — ein leeres Board beim Kaltstart war
+    dadurch nicht von "diese Woche ist nichts los" zu unterscheiden. `updated`,
+    `zones` und `live` machen genau das im Frontend sichtbar.
+    """
+    return {
+        "data": LIVE_CACHE["data"],
+        "updated": LIVE_CACHE["updated"],  # Unix-Sekunden oder null
+        "zones": len(ZONES),               # < len(PAIRS) = Backend startet noch
+        "pairs_total": len(PAIRS),
+        "live": bool(LIVE_CACHE["live"]),  # False = Preise vom Tagesschluss
+    }
 
 
 class MarkRequest(BaseModel):
@@ -329,27 +464,45 @@ class MarkRequest(BaseModel):
 
 @app.post("/api/mark")
 def mark(req: MarkRequest):
-    """User-Aktion aus dem Popup auf ein getroffenes (HIT) Paar."""
+    """User-Aktion auf ein getroffenes (HIT) Paar.
+
+    Signatur und Verhalten unveraendert (ScannerShell ruft das weiterhin so auf).
+    Neu ist nur der Durchschrieb nach Supabase, damit der Lebenszyklus den
+    Neustart ueberlebt: 'done' -> Signal wird consumed, 'pending' -> watchlist.
+    Idempotent: ein bereits vom Cockpit gesetzter Status wird nicht ueberschrieben.
+    """
     with _state_lock:
         trig = TRIGGERED.get(req.pair)
         if not trig:
-            return {"ok": False, "reason": "not_triggered"}
+            # Bereits geloest (z.B. Cockpit war schneller) -> trotzdem Erfolg
+            # melden, damit doppelte Aufrufe die UI nie blockieren.
+            if req.action in ("pending", "done"):
+                return {"ok": True, "reason": "already_resolved"}
+            return {"ok": False, "reason": "bad_action"}
+
+        side = trig["side"]
 
         if req.action == "pending":
             trig["pending"] = True
+            db_status = "watchlist"
 
         elif req.action == "done":
             # Line ist verbraucht (nur 1x nutzbar) -> blacklisten, HIT loeschen,
             # Alert-Dedup loeschen -> naechste Line wird automatisch gewaehlt.
-            side = trig["side"]
             level = round(trig["level"], 5)
             CONSUMED.setdefault(req.pair, {}).setdefault(side, set()).add(level)
             TRIGGERED.pop(req.pair, None)
             ALERT_CACHE.pop(f"{req.pair}_{side}", None)
+            # 'dismissed' (nicht 'journaled'): der Backend-Weg bedeutet nur
+            # "Linie verbraucht". Ein echter Journal-Trade kommt aus dem Cockpit.
+            db_status = "dismissed"
         else:
             return {"ok": False, "reason": "bad_action"}
 
         save_state()
+
+    # Fire-and-forget — Supabase darf den Request nie ausbremsen.
+    supabase_signals.update_signal_status_async(req.pair, side, db_status)
 
     # Snapshot sofort neu bauen, damit das Frontend direkt aktualisiert ist.
     try:
@@ -390,7 +543,10 @@ def health():
         "status": "ok",
         "zones": len(ZONES),
         "pairs": len(LIVE_CACHE["data"]),
+        "pairs_total": len(PAIRS),
         "triggered": len(TRIGGERED),
+        "consumed": sum(len(v) for sides in CONSUMED.values() for v in sides.values()),
+        "live": bool(LIVE_CACHE["live"]),
         "updated": LIVE_CACHE["updated"],
     }
 

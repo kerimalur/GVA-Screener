@@ -134,6 +134,13 @@ export default function FundamentalModal({
       }
     >
       <div className="space-y-3">
+        {card.detectedLate && (
+          <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-[12px] text-warn">
+            <span className="font-bold">⏱ Nachträglich erkannt.</span> Dieser Hit kam nicht
+            live, sondern wurde aus der 3D-Kerzen-Historie nachgetragen (Backend war offline).
+            Der Preis kann inzwischen weit weg sein — vor dem Trade prüfen.
+          </div>
+        )}
         <div className={`rounded-md border px-3 py-2 flex items-center gap-2 ${
           card.confluence.verdict === "rueckenwind"
             ? "border-up/40 bg-up/10 text-up"

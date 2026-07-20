@@ -9,10 +9,24 @@ import type { SeriesPoint } from "./seriesMath";
 
 export type Freshness = "fresh" | "old" | "dead";
 
-/** ≤100 Tage = aktuell; ≤400 = älterer Stand (Quartals-/Publikationslag); sonst tot. */
-export function freshnessOf(ageDays: number | null): Freshness {
-  if (ageDays === null || ageDays > 400) return "dead";
-  return ageDays <= 100 ? "fresh" : "old";
+/**
+ * Frische-Einstufung eines Datenstands.
+ *
+ * Default-Schwellen sind die Real-Yield-Schwellen: ≤100 Tage = aktuell,
+ * ≤400 = älterer Stand (Quartals-/Publikationslag), sonst tot.
+ *
+ * Die Schwellen sind überschreibbar, damit andere Skalen dieselbe Logik nutzen
+ * statt eine zweite zu bauen — z.B. das Cockpit mit Minuten
+ * (`freshnessOf(alterInMinuten, 2, 5)`). `age === null` gilt immer als "dead":
+ * kein bekannter Stand ist der schlechteste Fall, nicht der beste.
+ */
+export function freshnessOf(
+  age: number | null,
+  freshMax = 100,
+  staleMax = 400,
+): Freshness {
+  if (age === null || age > staleMax) return "dead";
+  return age <= freshMax ? "fresh" : "old";
 }
 
 export interface RealYieldPoint {

@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import Panel from "@/components/layout/Panel";
 import TimeSeriesChart from "@/components/charts/TimeSeriesChart";
 import RealYieldHistoryChart from "@/components/makro/RealYieldHistoryChart";
+import FreshBadge from "@/components/ui/FreshBadge";
 import {
   realYieldVerdict,
   VERDICT_TREND_BAND,
   type CcyRealYield,
-  type Freshness,
   type RealYieldPoint,
   type RealYieldVerdict,
   type RealYieldVerdictLabel,
@@ -19,25 +19,8 @@ const fmtPp = (v: number, digits = 2) => `${v >= 0 ? "+" : ""}${v.toFixed(digits
 const fmtMonth = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("de-CH", { month: "short", year: "2-digit" }) : "–";
 
-function FreshBadge({ f, ageDays }: { f: Freshness; ageDays: number | null }) {
-  if (f === "dead")
-    return (
-      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-down/15 text-down">
-        keine aktuellen Daten
-      </span>
-    );
-  if (f === "old")
-    return (
-      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-warn/15 text-warn">
-        älterer Stand ({ageDays} T)
-      </span>
-    );
-  return (
-    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-up/15 text-up">
-      aktuell
-    </span>
-  );
-}
+// FreshBadge lebt jetzt in components/ui — dieselbe Anzeige nutzt auch das
+// Cockpit (Arbeitspaket C), damit es nur EINE Frische-Darstellung gibt.
 
 function Slope({ v }: { v: number | null }) {
   if (v === null) return <span className="text-muted">–</span>;

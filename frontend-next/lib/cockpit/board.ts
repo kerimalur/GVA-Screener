@@ -11,10 +11,15 @@
  */
 import { splitPair } from "@/lib/journal/fundamentals";
 import { pairBias, biasReason } from "@/lib/ml/pairBias";
+import { freshnessOf, type Freshness } from "@/lib/calc/realYield";
 import type { MarketData } from "@/lib/gva/api";
 import type { SignalRecord } from "@/lib/journal/signals";
 
 export const WARTEND_PIP_LIMIT = 100;
+
+/** Frische-Schwellen der Kopfzeile in MINUTEN (nicht Tagen wie bei Real Yield). */
+export const SNAPSHOT_FRESH_MIN = 2;
+export const SNAPSHOT_STALE_MIN = 5;
 
 export type LaneId = "wartend" | "aktiv" | "inArbeit";
 export type LineDir = "long" | "short";
@@ -43,12 +48,48 @@ export interface CockpitCard {
   baseQuintile: number | undefined;
   quoteQuintile: number | undefined;
   confluence: Confluence;
+  /** true = Pip-Distanz basiert auf dem Tagesschluss, nicht auf einem Live-Preis. */
+  stale: boolean;
+  /** true = HIT wurde nachträglich aus der Kerzen-Historie erkannt (Downtime). */
+  detectedLate: boolean;
 }
 
 export interface CockpitLanes {
   wartend: CockpitCard[];
   aktiv: CockpitCard[];
   inArbeit: CockpitCard[];
+}
+
+/**
+ * Zustand des Boards. `warmup` ist bewusst NICHT `ok`: beim Kaltstart hat das
+ * Backend erst einen Teil der Zonen berechnet — drei leere Lanes würden dann
+ * wie „diese Woche ist nichts los" aussehen statt wie „startet noch".
+ */
+export type BoardState = "loading" | "warmup" | "offline" | "ok";
+
+export function boardStateOf(
+  loaded: boolean,
+  offline: boolean,
+  zones: number,
+  pairsTotal: number,
+): BoardState {
+  if (offline) return "offline";
+  if (!loaded) return "loading";
+  return zones < pairsTotal ? "warmup" : "ok";
+}
+
+/**
+ * Frische des Snapshots für die Kopfzeile — dieselbe Einstufung wie im
+ * Real-Yield-View, nur mit Minuten-Schwellen: ≤2 min frisch, ≤5 min alt,
+ * darüber (oder ohne Zeitstempel) tot.
+ */
+export function snapshotFreshness(
+  updatedSec: number | null,
+  nowMs: number = Date.now(),
+): Freshness {
+  if (updatedSec == null) return "dead";
+  const ageMin = (nowMs - updatedSec * 1000) / 60_000;
+  return freshnessOf(ageMin, SNAPSHOT_FRESH_MIN, SNAPSHOT_STALE_MIN);
 }
 
 function toLineDir(v: string | null | undefined): LineDir | null {
@@ -91,6 +132,8 @@ function cardFromSignal(s: SignalRecord, quintiles: Record<string, number>): Coc
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
+    stale: false, // HIT-Karten zeigen keine Live-Distanz
+    detectedLate: s.detectedLate,
   };
 }
 
@@ -111,6 +154,8 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
+    stale: md.stale === true,
+    detectedLate: md.detected_late === true,
   };
 }
 

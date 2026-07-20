@@ -80,10 +80,10 @@ export default function WeekPlan({
     let alive = true;
     const load = async () => {
       try {
-        const rows = await fetchScreener();
+        const snap = await fetchScreener();
         if (!alive) return;
         const map: Record<string, MarketData> = {};
-        for (const r of rows) map[norm(r.pair)] = r;
+        for (const r of snap.data) map[norm(r.pair)] = r;
         setByPair(map);
         setLive(true);
       } catch {
