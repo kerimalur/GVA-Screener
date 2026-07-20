@@ -19,10 +19,17 @@ function ScoreBar({ score }: { score: number }) {
 function QuintileBadge({ q }: { q: number }) {
   const cls =
     q === 5 ? "bg-up/15 text-up" : q === 1 ? "bg-down/15 text-down" : "bg-border/40 text-muted";
+  // STÄRKE-Quintil (nicht Konfidenz): Position des Zins+Saison-Scores in der
+  // eigenen 156W-Verteilung. Q5 = stärkstes Fünftel. „handelbar" bewusst
+  // entfernt — die OOS-Evidenz reicht dafür nicht (Paper-Track nahe Münzwurf,
+  // n zu klein). Q5/Q1 = Kandidat, keine validierte Handelsfreigabe.
   return (
-    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${cls}`}>
+    <span
+      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${cls}`}
+      title="Stärke-Quintil des Zins+Saison-Scores (Q5 = stärkstes Fünftel vs. eigene 156-Wochen-Verteilung). Kandidat, nicht validiert handelbar."
+    >
       Q{q}
-      {q === 5 ? " · handelbar" : ""}
+      {q === 5 ? " · Kandidat" : ""}
     </span>
   );
 }
@@ -37,7 +44,9 @@ function RankingTable({ rows }: { rows: RankingRow[] }) {
             <th className="pr-3">Währung</th>
             <th className="pr-3">Score</th>
             <th className="pr-3"></th>
-            <th className="pr-3">Konfidenz</th>
+            <th className="pr-3" title="Stärke-Quintil: Position des Scores in der eigenen 156W-Verteilung (nicht Konfidenz)">
+              Stärke-Quintil
+            </th>
             <th>Top-Faktoren</th>
           </tr>
         </thead>
@@ -90,10 +99,10 @@ function PairList({ ideas }: { ideas: PairIdeas }) {
     <div className="space-y-6">
       <div>
         <div className="text-xs text-muted mb-2 font-bold">
-          Beste Konstellation — beide Seiten extrem (Q5 × Q1)
+          Beste Konstellation — beide Seiten extrem (Stärke-Quintil Q5 × Q1)
         </div>
         {ideas.best.length ? ideas.best.map((i) => <PairRow key={i.pair} i={i} />) : (
-          <p className="text-xs text-muted">Diese Woche keine Q5×Q1-Paarung.</p>
+          <p className="text-xs text-muted">Diese Woche keine Q5×Q1-Paarung (beide Seiten im Stärke-Quintil-Extrem).</p>
         )}
       </div>
       <div className="grid md:grid-cols-3 gap-6">
@@ -128,11 +137,21 @@ function Explainer() {
             Die Spalte «Top-Faktoren» zeigt die Beiträge pro Währung.
           </p>
           <p>
-            <span className="font-bold text-fg">Q-Stufe (1–5)</span>: der heutige Score wird gegen
-            die Verteilung aller Scores der letzten 156 Wochen gestellt. Q5 = oberstes Fünftel,
-            Q1 = unterstes. Grund: der 8-Jahres-Backtest zeigt Trefferquote 57.6 % in Q5, aber nur
-            49.5 % in Q1–Q3 gemischt — die Edge lebt ausschliesslich in den Extremen. Deshalb
-            zählen nur Q5 (long) und Q1 (short); Q2–Q4 ist Rauschen und wird ignoriert.
+            <span className="font-bold text-fg">Stärke-Quintil (1–5)</span>: der heutige Score wird
+            gegen die Verteilung aller Scores der letzten 156 Wochen gestellt. Q5 = stärkstes
+            Fünftel, Q1 = schwächstes. Das ist ein <span className="font-bold">Stärke</span>-Mass,
+            <span className="font-bold"> keine Konfidenz</span> und keine Trefferquote. Nur die
+            Extreme Q5 (long) / Q1 (short) werden als Kandidaten geflaggt, Q2–Q4 gelten als neutral.
+          </p>
+          <p>
+            <span className="font-bold text-fg">Wie gut trifft das out-of-sample?</span> Ehrlich:
+            nahe Münzwurf. Die purged Walk-Forward-Baseline (Engine, Zielgrösse demeaned Korb-Return)
+            liegt bei ~52–54 % roher Trefferquote, hall_score ≈ 0.51; die breite Labor-Messung
+            derselben Zins+Saison-Logik ergab 51.8 % (4W, OOS). Eine früher zitierte «57.6 %» war das
+            oberste <span className="font-bold">Konfidenz</span>-Fünftel eines interaktiv getunten
+            Composites — ein anderes Mass auf anderer Stichprobe, selektions-optimistisch und nicht
+            purged. Sie gilt <span className="font-bold">nicht</span> für dieses Stärke-Quintil und
+            ist keine Baseline-Zahl. Der Paper-Track unten misst die echte Live-Trefferquote mit n.
           </p>
         </div>
       </details>
@@ -157,15 +176,15 @@ function Explainer() {
             (Zähler unten). Beförderung passiert nie automatisch.
           </p>
           <p>
-            <span className="font-bold text-fg">Warum 57 % viel ist:</span> 57 % Trefferquote
-            heisst pro Signal ein Erwartungswert von +14 % einer Risikoeinheit (0.57 − 0.43) —
-            über 50+ Signale pro Jahr substanziell, pro Einzeltrade fast unsichtbar. Werte ab
-            ~60 % auf Wochenhorizont sind in liquiden FX-Märkten praktisch immer Overfitting.
-            Die Engine sucht deshalb nicht «mehr Prozent», sondern Konsistenz — und der
-            Paper-Track unten misst live, ob die Edge echt ist: jede Samstags-Prognose wird nach
-            4 Wochen gegen die Realität abgerechnet. Erst reift eine Prognose (4 Wochen), dann
-            braucht es ~50 gereifte für Aussagekraft — daher 2–3 Monate. Der Backtest lässt sich
-            nicht als Ersatz vorziehen, sonst wäre der Live-Beweis wieder ein Rückblick.
+            <span className="font-bold text-fg">Wo die Latte liegt:</span> schon ~54 % Trefferquote
+            wären auf Wochenhorizont substanziell (über 50+ Signale/Jahr), pro Einzeltrade aber fast
+            unsichtbar; Werte ab ~60 % sind in liquiden FX-Märkten praktisch immer Overfitting. Die
+            Engine sucht deshalb nicht «mehr Prozent», sondern Konsistenz (hall_score = Ø-Trefferquote
+            − Streuung). Aktueller Stand: die Baseline schafft OOS knapp über Münzwurf — ob daraus
+            eine handelbare Edge wird, entscheidet allein der Paper-Track unten: jede Samstags-Prognose
+            wird nach 4 Wochen gegen die Realität abgerechnet. Es braucht ~50 gereifte Prognosen für
+            Aussagekraft (daher 2–3 Monate). Der Backtest lässt sich nicht als Ersatz vorziehen, sonst
+            wäre der Live-Beweis wieder ein Rückblick.
           </p>
         </div>
       </details>
@@ -187,20 +206,20 @@ export default async function Page() {
     <div className="space-y-5 max-w-[1200px] mx-auto">
       <Panel
         title={`Pairs der Woche — ${d.weekStart ?? "?"}`}
-        subtitle="Automatisch aus Q5 (long) × Q1 (short) abgeleitet. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
+        subtitle="Automatisch aus Stärke-Quintil Q5 (long) × Q1 (short) abgeleitet — Kandidaten, kein validiertes Signal. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
       >
         <div className="p-5">
           {d.pairIdeas.best.length || d.pairIdeas.groups.length ? (
             <PairList ideas={d.pairIdeas} />
           ) : (
-            <p className="text-sm text-muted">Diese Woche keine Q5/Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.</p>
+            <p className="text-sm text-muted">Diese Woche keine Stärke-Quintil-Extreme (Q5/Q1) — kein fundamentaler Rückenwind, reine GVA-Regeln.</p>
           )}
         </div>
       </Panel>
 
       <Panel
         title={`Währungs-Ranking — Woche ${d.weekStart ?? "?"}${updated ? ` · zuletzt aktualisiert ${updated}` : ""}`}
-        subtitle={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, stark long → stark short. Nur Q5-Signale gelten als handelbar (Labor-Regel: Edge lebt im obersten Konfidenz-Fünftel).`}
+        subtitle={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, Stärke-Quintil stark long → stark short. Nur Q5/Q1 gelten als Kandidaten (Extrem-Regel); „handelbar" erst, wenn der Paper-Track die Trefferquote signifikant >50 % belegt.`}
       >
         {d.champion.length > 0 ? (
           <div className="p-5 space-y-4">

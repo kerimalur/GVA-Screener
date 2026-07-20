@@ -1,4 +1,11 @@
-"""Experiment-Auswertung: Purged Walk-Forward → Fold-Metriken → hall_score."""
+"""Experiment-Auswertung: Purged Walk-Forward → Fold-Metriken → hall_score.
+
+KANONISCHE ZIELGRÖSSE des Projekts (siehe STATUS.md „Kanonische Zielgrösse &
+Vokabular"): demeaned Korb-Log-Returns (panel.py:84-85). mean_hitrate/hall_score
+hier sind DIE Referenz für Aussagen über Ranking-/Signal-Qualität. Rohe
+Pair-Renditen (Ranking-View / fundamental_track) sind ein anderes, nicht
+kanonisches Mass und im UI als „Kalibrier-Blick" gekennzeichnet.
+"""
 from __future__ import annotations
 
 import numpy as np

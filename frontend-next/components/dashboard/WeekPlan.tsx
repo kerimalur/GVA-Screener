@@ -101,7 +101,7 @@ export default function WeekPlan({
   if (pairs.length === 0 && groups.length === 0) {
     return (
       <p className="text-sm text-muted">
-        Diese Woche keine Q5/Q1-Extreme — kein fundamentaler Rückenwind, reine GVA-Regeln.
+        Diese Woche keine Stärke-Quintil-Extreme (Q5/Q1) — kein fundamentaler Rückenwind, reine GVA-Regeln.
       </p>
     );
   }
@@ -117,7 +117,7 @@ export default function WeekPlan({
 
       {pairs.length === 0 ? (
         <p className="text-sm text-muted">
-          Keine Q5×Q1-Paarung (beide Seiten extrem) diese Woche — nur einseitiger Rückenwind oben.
+          Keine Q5×Q1-Paarung (beide Seiten im Stärke-Quintil-Extrem) diese Woche — nur einseitiger Rückenwind oben.
         </p>
       ) : (
       <div className="space-y-2">
@@ -175,7 +175,7 @@ export default function WeekPlan({
         </table>
       </div>
       <p className="text-[11px] text-muted">
-        Kontrolle = Macro-Terminal-Richtung vs. Q5/Q1. ⚠ Divergenz → im Macro Terminal nachbohren.
+        Kontrolle = Macro-Terminal-Richtung vs. Stärke-Quintil (Q5/Q1). ⚠ Divergenz → im Macro Terminal nachbohren.
         GVA-Nähe live vom Scanner (HIT = Linie berührt, ○ = ≤100 Pips).
       </p>
       </div>

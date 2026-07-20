@@ -1017,7 +1017,7 @@ function CalibrationPanel() {
   );
 }
 
-// Fundamentale Konfluenz als Badge + Kurz-Inline (EUR Q5 / USD Q1)
+// Fundamentale Konfluenz als Badge + Kurz-Inline (Stärke-Quintil, z.B. EUR Q5 / USD Q1)
 function BiasRow({ hit }: { hit: Hit }) {
   const wind = windOf(hit.bias, hit.direction);
   if (!wind) return null; // kein Panel-Datum → nichts anzeigen

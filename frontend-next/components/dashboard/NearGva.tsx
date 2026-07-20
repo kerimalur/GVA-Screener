@@ -5,12 +5,12 @@ import { fetchScreener, sortByDistance, type MarketData } from "@/lib/gva/api";
 import { biasReason, pairBias } from "@/lib/ml/pairBias";
 
 /** Alle Pairs innerhalb PIP_LIMIT Pips einer GVA-Linie — Schnellübersicht wie
- *  der Market-Scanner, unabhängig vom Q5/Q1-Wochenplan. */
+ *  der Market-Scanner, unabhängig vom Stärke-Quintil-Wochenplan (Q5/Q1). */
 const PIP_LIMIT = 50;
 const POLL_MS = 15_000;
 
-/** Wochen-Ranking-Abgleich: bestätigt das Q5/Q1-Ranking die Linien-Richtung?
- *  SHORT-Linie = Short-Trade, LONG-Linie = Long-Trade. Q2–Q4 = kein Badge. */
+/** Wochen-Ranking-Abgleich: bestätigt das Stärke-Quintil-Ranking (Q5/Q1) die
+ *  Linien-Richtung? SHORT-Linie = Short-Trade, LONG-Linie = Long-Trade. Q2–Q4 = kein Badge. */
 function RankingBadge({ md, quintiles }: { md: MarketData; quintiles: Record<string, number> }) {
   if (!md.near) return null;
   const [base, quote] = md.pair.split("/");

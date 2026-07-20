@@ -56,7 +56,9 @@ export interface WeekPlanData {
   weekStart: string | null;
   pairs: WeekPlanPair[];
   groups: WeekPlanGroup[];
-  /** Konfidenz-Quintil je Währung (Champion) — für den Ranking-Abgleich an GVA-Linien */
+  /** Stärke-Quintil je Währung (Champion) — Position des Scores in der eigenen
+   *  156W-Verteilung. NB: das DB-Feld heisst historisch `confidence_quintile`,
+   *  ist aber ein Stärke-Mass, keine Konfidenz. Für den Ranking-Abgleich an GVA-Linien. */
   quintiles: Record<string, number>;
 }
 

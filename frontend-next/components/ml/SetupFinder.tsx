@@ -19,7 +19,7 @@ import {
 
 /**
  * Setup-Finder: EIN Tool, zwei Signalquellen (Umschalter):
- *  - RANKING: Q5/Q1-Bias aus dem Fundamental-Track (bestehender Backend-
+ *  - RANKING: Stärke-Quintil-Bias (Q5/Q1) aus dem Fundamental-Track (bestehender Backend-
  *    Endpoint, hier über alle 28 Pairs statt einzeln).
  *  - OUTLOOK: Konfluenz über die Weekly-Outlook-Faktoren (bestehende
  *    Backtest-Rohdaten via /api/ml/setup-finder, Schwelle/Faktoren live).
@@ -199,14 +199,14 @@ function RankingView({ range, from, to }: { range: RangeKey; from: string; to: s
       )}
 
       <Panel
-        title="Live — aktuell qualifizierende Setups (Q5/Q1)"
-        subtitle="Letzte Woche im gewählten Zeitraum. Bias = Basis Q5 gegen Quote Q1 (long) bzw. umgekehrt (short); Q2–Q4 neutral."
+        title="Live — aktuell qualifizierende Kandidaten (Stärke-Quintil Q5/Q1)"
+        subtitle="Letzte Woche im gewählten Zeitraum. Bias = Basis Q5 (stark) gegen Quote Q1 (schwach) → long bzw. umgekehrt → short; Q2–Q4 neutral. Kandidaten, kein validiertes Signal."
       >
         {running && tracks.size === 0 ? (
           <SkeletonRows rows={4} />
         ) : live.length === 0 ? (
           <p className="text-sm text-muted">
-            Kein Pair mit Q5/Q1-Extrem in der letzten Woche des Zeitraums.
+            Kein Pair mit Stärke-Quintil-Extrem (Q5/Q1) in der letzten Woche des Zeitraums.
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -225,12 +225,12 @@ function RankingView({ range, from, to }: { range: RangeKey; from: string; to: s
       </Panel>
 
       <Panel
-        title="Backtest — Q5/Q1-Bias vs. Forward-Move"
-        subtitle="Bestehende Fundamental-Track-Logik (Baseline Zins+Saison, as-of, kein Lookahead) über alle 28 Pairs."
+        title="Kalibrier-Blick — Stärke-Quintil-Bias (Q5/Q1) vs. Forward-Move"
+        subtitle="Fundamental-Track-Logik (Baseline Zins+Saison, as-of, kein Lookahead) über alle 28 Pairs, Zielgrösse rohe Pair-Rendite. Überlappende Fenster + korrelierte Pairs → keine belastbare Signifikanz; kanonisch ist die purged Engine-Baseline."
       >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <RateTile label="Trefferquote 1W (alle Pairs)" s={agg.h1} />
-          <RateTile label="Trefferquote 4W (alle Pairs)" s={agg.h4} />
+          <RateTile label="Kalibrier-Quote 1W (alle Pairs)" s={agg.h1} />
+          <RateTile label="Kalibrier-Quote 4W (alle Pairs)" s={agg.h4} />
           <div className="bg-surface2 border border-border rounded p-3">
             <div className="text-[10px] text-muted font-mono uppercase tracking-wider">Pairs geladen</div>
             <div className="text-xl font-bold font-mono mt-1">
@@ -286,9 +286,9 @@ function RankingView({ range, from, to }: { range: RangeKey; from: string; to: s
           </table>
         </div>
         <p className="mt-3 text-[11px] text-faint leading-relaxed">
-          Nur Q5/Q1-Extreme zählen (Q2–Q4 = neutral, keine Signal-Woche). Treffer = Close nach 1W/4W
-          in Bias-Richtung. Quelle: Backend-Endpoint /replay/fundamental-track (identische Logik wie
-          die Einzel-Pair-Ansicht «Fundamental-Track»).
+          Nur Stärke-Quintil-Extreme (Q5/Q1) zählen (Q2–Q4 = neutral, keine Kandidaten-Woche).
+          Treffer = Close nach 1W/4W in Bias-Richtung. Quelle: Backend-Endpoint
+          /replay/fundamental-track (identische Logik wie die Einzel-Pair-Ansicht «Fundamental-Track»).
         </p>
       </Panel>
     </div>
@@ -531,7 +531,7 @@ export default function SetupFinder() {
           <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1.5">Signalquelle</div>
           <div className="flex gap-1.5">
             <ModePill active={mode === "ranking"} onClick={() => setMode("ranking")}>
-              WÄHRUNGSRANKING (Q5/Q1)
+              WÄHRUNGSRANKING (Stärke-Quintil Q5/Q1)
             </ModePill>
             <ModePill active={mode === "outlook"} onClick={() => setMode("outlook")}>
               WEEKLY-OUTLOOK (Konfluenz)

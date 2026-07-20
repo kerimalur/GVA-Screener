@@ -5,6 +5,36 @@
 
 Stand: 2026-07-20
 
+## ⭐ Kanonische Zielgrösse & Vokabular (VERBINDLICH, 2026-07-20)
+Damit «Q5» und «Trefferquote» nie wieder zwei Dinge bedeuten:
+
+**Kanonische Zielgrösse für ALLE Aussagen über Ranking-/Signal-Qualität:**
+die purged Walk-Forward Engine-Baseline — `Backend/ml_engine/evaluate.py`,
+Zielgrösse = **demeaned Korb-Log-Returns** (`macro_features/panel.py:84-85`).
+Aktueller Stand: mean_hitrate ≈ **0,52–0,54 roh**, hall_score ≈ **0,51**
+(= Ø-Trefferquote − Streuung). Alles andere ist nachrangig.
+
+**Zwei verschiedene Quintile — nie unqualifiziert «Q5» sagen:**
+- **Stärke-Quintil**: Position des Zins+Saison-Scores in seiner eigenen
+  156W-Verteilung (Q5 = stärkstes Fünftel). Das ist, was Ranking-Seite,
+  Dashboard-WeekPlan, Setup-Finder, Fundamental-Track anzeigen. Das DB-/Typ-Feld
+  heisst historisch `confidence_quintile` — **Misnomer**, Inhalt ist Stärke,
+  keine Konfidenz. (Rename = separate strukturelle Migration, offen.)
+- **Konfidenz-Quintil**: Top-20 % nach |Composite-z| eines Modells. Lebte nur im
+  entfernten ML-Labor; Quelle der 57,6 %. NICHT dasselbe wie das Stärke-Quintil.
+
+**Andere Zielgrössen im Umlauf (nicht kanonisch, nur gekennzeichnet nutzen):**
+rohe Pair-Rendite Close-to-Close (Ranking-View / `fundamental_track`) →
+im UI als **„Kalibrier-Blick, keine Signifikanz"** gelabelt (überlappende
+4W-Fenster + korrelierte Pairs → effektives n ≪ Zeilenzahl). Bewusst NICHT
+gepurged: Purging wäre eine Logikänderung mit eigenem Validierungsbedarf; das
+ehrliche Label ist die pragmatische, risikoarme Variante und verhindert, dass
+daraus je wieder eine Headline-Zahl wird.
+
+**Label-Disziplin:** „handelbar" erst, wenn der Paper-Track signifikant >50 %
+mit ausreichend n zeigt. Bis dahin: „Kandidat" / „Beobachtung". Jede prominente
+Prozentzahl braucht Definition + Zeitraum + n (sichtbar oder Tooltip).
+
 ## ML-Engine stabilisiert + Trefferquote transparent (2026-07-20)
 Spec: `docs/superpowers/specs/2026-07-19-ml-engine-stabilisierung-design.md`
 Problem: nächtlicher «Bester» war roher max(hall_score) über ~1200 Zufalls-Configs
@@ -447,9 +477,16 @@ Adressiert die bewiesenen Kernprobleme der Faktor-Logik:
 ### Validiertes Ergebnis (live-Daten, out-of-sample)
 - Zins+Saison edge: IS 51.9 / OOS 51.8 % (2W), IS 52.7 / OOS 52.0 % (4W) →
   **kein Overfit** (IS≈OOS), aber breit angewandt nur schwache Edge.
-- **Konfidenz-Quintile OOS (alle 5, 4W): Q1 49.5 → Q5 57.6 %** → Edge lebt NUR
-  im oberen Konfidenz-Fünftel. Design-Regel für Weekly-Outlook-Umbau: nur die
-  Top-~20%-Konfidenz-Signale flaggen, nicht jedes Pair.
+- **Konfidenz-Quintile OOS (alle 5, 4W): Q1 49.5 → Q5 57.6 %.**
+  ⚠️ **ENTWERTET (2026-07-20): KEINE Baseline-Zahl.** Diese 57,6 % sind das oberste
+  **Konfidenz**-Fünftel (Top-20 % nach |Composite-z|) eines interaktiv getunten
+  Composites — selektions-optimistisch, nicht purged, anderes Mass/andere
+  Stichprobe als das Live-**Stärke**-Quintil im Ranking. Nirgends als Beleg für
+  Ranking-Qualität zitieren.
+  **Kanonisch dagegen** (purged Walk-Forward, Zielgrösse demeaned Korb, evaluate.py):
+  mean_hitrate ≈ **0,52–0,54 roh**, hall_score ≈ **0,51**. Vergleichbare *breite*
+  Labor-Zahl derselben Zins+Saison-Logik: **51,8 %** (4W, OOS) — nahe Münzwurf.
+  Siehe Abschnitt „Kanonische Zielgrösse & Vokabular" oben.
 
 ### Noch offen (nicht bewiesen / größer)
 - **#3 Regime-Filter**: Risk-Gauge existiert (riskGauge.ts, nur für BTC genutzt).

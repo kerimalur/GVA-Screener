@@ -315,6 +315,7 @@ export default function BacktestRoom({ session, onAddTrade, onDeleteTrade, onTog
                   <div key={s.ccy} className="flex items-center gap-2 text-[13px] font-mono">
                     <b>{s.ccy}</b>
                     <span
+                      title="Stärke-Quintil (Score vs. eigene 156W-Verteilung, Q5 = stärkstes Fünftel) — keine Konfidenz"
                       className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
                         s.quintile === 5
                           ? "bg-up/15 text-up"
@@ -342,7 +343,7 @@ export default function BacktestRoom({ session, onAddTrade, onDeleteTrade, onTog
                   }`}
                 >
                   {weekRanking.bias === "neutral"
-                    ? "NEUTRAL — kein Q5/Q1-Extrem"
+                    ? "NEUTRAL — kein Stärke-Quintil-Extrem (Q5/Q1)"
                     : weekRanking.bias === formData.direction
                       ? `JA — Rückenwind für ${formData.direction.toUpperCase()}`
                       : `NEIN — Ranking sagt ${weekRanking.bias.toUpperCase()}`}

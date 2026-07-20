@@ -22,7 +22,7 @@ export const DEFAULT_APLUS_CRITERIA = [
   "GVA-Hit",
   "BOS bestätigt",
   "Richtige Session (London 08–10 / NY 14–16 Uhr)",
-  "Fundamental Q5/Q1 aligned",
+  "Fundamental Stärke-Quintil Q5/Q1 aligned",
 ] as const;
 
 const APLUS_KEY = "aplus_criteria";

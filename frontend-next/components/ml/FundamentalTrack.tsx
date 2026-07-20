@@ -155,8 +155,8 @@ export default function FundamentalTrack() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <RateTile label="Trefferquote 1W" s={track.summary.h1} />
-            <RateTile label="Trefferquote 4W" s={track.summary.h4} />
+            <RateTile label="Kalibrier-Quote 1W" s={track.summary.h1} />
+            <RateTile label="Kalibrier-Quote 4W" s={track.summary.h4} />
             <div className="bg-surface2 border border-border rounded p-3">
               <div className="text-[10px] text-muted font-mono uppercase tracking-wider">Basis</div>
               <div className="text-xl font-bold font-mono mt-1">{track.base_ccy}</div>
@@ -168,9 +168,16 @@ export default function FundamentalTrack() {
           </div>
 
           <p className="text-[11px] text-faint leading-relaxed">
-            Bias = long wenn Basis stark (Q5) / Quote schwach (Q1), short umgekehrt. Treffer = Kurs lief
-            in Bias-Richtung (✓ grün / ✗ rot). Neutrale Wochen (○) zählen nicht in die Quote. 1W/4W =
-            Forward-Fenster ab Wochen-Start. Nur Q5/Q1-Extreme tragen echte Edge (Labor: Q5 4W ≈ 57.6%).
+            Bias = long wenn Basis stark (Stärke-Quintil Q5) / Quote schwach (Q1), short umgekehrt.
+            Treffer = Kurs lief in Bias-Richtung (✓ grün / ✗ rot), Zielgrösse = rohe Pair-Rendite
+            Close-to-Close. Neutrale Wochen (○) zählen nicht in die Quote. 1W/4W = Forward-Fenster ab
+            Wochen-Start.{" "}
+            <span className="text-warn">
+              Kalibrier-Blick, keine Signifikanz:
+            </span>{" "}
+            überlappende 4W-Fenster und 28 korrelierte Pairs → effektives n ≪ Zeilenzahl; die Quote
+            unten ist keine belastbare Trefferquote. Kanonisch ist die purged Engine-Baseline
+            (~52–54 % roh, demeaned Korb) — Details im Engine-Log.
           </p>
 
           <div className="overflow-x-auto rounded border border-border/50">

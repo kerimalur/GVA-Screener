@@ -6,6 +6,9 @@ import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
 export interface RankingRow {
   ccy: string;
   score: number;
+  /** STÄRKE-Quintil 1..5 (Score vs. eigene 156W-Verteilung, Q5 = stärkstes
+   *  Fünftel). Feldname historisch/Misnomer — KEINE Konfidenz. In UI immer als
+   *  „Stärke-Quintil" labeln. Rename = separate strukturelle Migration. */
   confidence_quintile: number;
   top_features: { feature: string; value: number }[];
 }

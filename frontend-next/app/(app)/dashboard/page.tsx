@@ -53,14 +53,14 @@ export default async function Page() {
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
       <Panel
-        title={`Diese Woche — Q5/Q1 × GVA${weekPlan.weekStart ? ` · ${weekPlan.weekStart}` : ""}`}
+        title={`Diese Woche — Stärke-Quintil (Q5/Q1) × GVA${weekPlan.weekStart ? ` · ${weekPlan.weekStart}` : ""}`}
         subtitle="Handelbare Extrem-Paare mit Macro-Kontrolle und Live-GVA-Nähe"
       >
         <WeekPlan pairs={weekPlan.pairs} groups={weekPlan.groups} />
       </Panel>
       <Panel
         title="Nahe GVA-Linien — ≤ 50 Pips"
-        subtitle="Live-Übersicht aller Pairs kurz vor einer Linie (wie Market-Scanner), unabhängig vom Wochenplan · ✓ = Wochen-Ranking (Q5/Q1) bestätigt die Linien-Richtung, ✗ = widerspricht"
+        subtitle="Live-Übersicht aller Pairs kurz vor einer Linie (wie Market-Scanner), unabhängig vom Wochenplan · ✓ = Stärke-Quintil-Ranking (Q5/Q1) bestätigt die Linien-Richtung, ✗ = widerspricht"
       >
         <NearGva quintiles={weekPlan.quintiles} />
       </Panel>

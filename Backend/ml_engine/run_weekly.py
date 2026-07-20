@@ -26,7 +26,10 @@ BASELINE_CFG = {"algo": "baseline", "horizon": 4, "features": ["scores"], "param
 
 
 def quintile_of(score: float, history: np.ndarray) -> int:
-    """1..5 anhand der Score-Historie des Modells; leere Historie → 3 (neutral)."""
+    """STÄRKE-Quintil 1..5: Position des Scores in der eigenen Score-Historie
+    (Q5 = stärkstes Fünftel). KEINE Konfidenz und keine Trefferquote — trotz des
+    historischen DB-/Feldnamens `confidence_quintile` (Misnomer, aus
+    Kompatibilität beibehalten). Leere Historie → 3 (neutral)."""
     h = history[~np.isnan(history)]
     if len(h) < 20:
         return 3
@@ -89,6 +92,9 @@ def main() -> None:
                 "week_start": str(week.date()), "ccy": r["ccy"], "model": model_name,
                 "horizon": int(cfg["horizon"]),
                 "score": round(float(scores[i]), 4),
+                # Feldname `confidence_quintile` ist historisch — Inhalt ist ein
+                # STÄRKE-Quintil (quintile_of), keine Konfidenz. Rename = separate,
+                # strukturelle Migration (Frontend-Typ + DB-Spalte), hier bewusst nicht.
                 "confidence_quintile": quintile_of(float(scores[i]), np.asarray(hist_scores)),
                 "top_features": contribs[i],
             })

@@ -1,8 +1,14 @@
 """As-of-Währungs-Ranking für Replay-Hits.
 
 Für ein historisches Hit-Datum: Baseline-Score (Zins+Saison, identisch zur
-ML-Engine) + Konfidenz-Quintil beider Pair-Währungen — nur mit Daten, die
-damals real verfügbar waren (macro_features-Panel ist as-of-sauber).
+ML-Engine) + STÄRKE-Quintil beider Pair-Währungen (Score vs. eigene
+156W-Verteilung; keine Konfidenz) — nur mit Daten, die damals real verfügbar
+waren (macro_features-Panel ist as-of-sauber).
+
+Zielgrösse der Trefferquote hier: rohe Pair-Rendite Close-to-Close. Wegen
+überlappender Forward-Fenster + korrelierter Pairs ist die aggregierte Quote
+ein KALIBRIER-BLICK ohne Signifikanz — kanonisch ist die purged Engine-Baseline
+(evaluate.py, demeaned Korb-Return). Siehe STATUS.md „Kanonische Zielgrösse".
 
 Panel wird einmal pro Prozess gebaut (lru_cache); auf Render kostet der
 erste Aufruf nach Kaltstart die Daten-Fetches, danach Lookups in ms.

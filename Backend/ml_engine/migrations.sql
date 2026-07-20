@@ -33,7 +33,9 @@ create table if not exists ml_weekly_rankings (
   model text not null,          -- 'champion' | 'baseline'
   horizon int not null,
   score real,
-  confidence_quintile int,      -- 1..5, 5 = handelbar
+  confidence_quintile int,      -- STÄRKE-Quintil 1..5 (5 = stärkstes Fünftel, Kandidat).
+                                -- Feldname historisch/Misnomer: kein Konfidenz-Mass, nicht
+                                -- validiert „handelbar". Rename = separate Migration.
   top_features jsonb,
   realized_return real,         -- nachgetragen wenn Horizont gereift
   hit boolean,
