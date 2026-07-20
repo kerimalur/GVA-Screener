@@ -80,7 +80,34 @@ export async function proxy(request: NextRequest) {
 
   if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/cockpit";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // ── Ausgeblendete Bereiche ────────────────────────────────────────────────
+  // Code + Seiten bleiben im Projekt, sind aber bewusst NICHT erreichbar —
+  // Fokus liegt auf Cockpit + GVA. Reaktivieren: Pfad hier rausnehmen und den
+  // Nav-Eintrag in components/layout/nav.ts wieder ergänzen.
+  const HIDDEN_PREFIXES = [
+    "/weekly",
+    "/cot",
+    "/ml/season",
+    "/ml/fundamental-track",
+    "/ml/setup-finder",
+    "/ml/modell",
+    "/ml/training",
+    "/ml/labor",
+  ];
+  // Exakt "/ml" = Daten-Check. Unterseiten (/ml/ranking, /ml/factor-lab,
+  // /ml/engine-log, /ml/replay) bleiben erreichbar — daher kein Prefix-Match.
+  const isHidden =
+    pathname === "/ml" ||
+    HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+
+  if (user && isHidden) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/cockpit";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -104,7 +131,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && isAdminRoute && !isAdminUser) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/cockpit";
     url.search = "";
     return NextResponse.redirect(url);
   }

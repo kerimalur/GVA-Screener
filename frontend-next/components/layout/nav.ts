@@ -53,21 +53,17 @@ export const NAV_GROUPS: NavGroup[] = [
     // Faktor-Detail-Ansichten + Auto-News: erklären das "Warum", sind aber keine
     // tägliche Entscheidungsquelle (Labor: Gleichgewichtung ~50 %). Laufen weiter
     // fürs spätere Faktor-Labor (Projekt B), bewusst aus dem täglichen Weg genommen.
+    // Bewusst schlank: nur was tatsächlich beobachtet wird. Alles andere
+    // (Weekly Outlook, COT, Season, Fundamental-Track, Setup-Finder, ML-Modell,
+    // Daten-Check) bleibt im Code, ist aber via proxy.ts hart nicht erreichbar.
     title: "Labor · versteckt",
     collapsible: true,
     items: [
       { href: "/ml/factor-lab", label: "Factor-Lab", icon: "ph-flask" },
-      { href: "/dashboard", label: "News-Dashboard", icon: "ph-gauge" },
-      { href: "/weekly", label: "Weekly Outlook", icon: "ph-compass" },
+      { href: "/ml/engine-log", label: "Engine-Log (nächtlich)", icon: "ph-list-checks" },
       { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
       { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
-      { href: "/cot/intelligence", label: "COT Intelligence", icon: "ph-chart-bar" },
-      { href: "/ml/season", label: "Season 2.0", icon: "ph-sun-horizon" },
-      { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
-      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
-      { href: "/ml/engine-log", label: "Engine-Log (nächtlich)", icon: "ph-list-checks" },
-      { href: "/ml/modell", label: "ML-Modell (Anleitung)", icon: "ph-brain" },
-      { href: "/ml", label: "Daten-Check", icon: "ph-robot" },
+      { href: "/dashboard", label: "News", icon: "ph-newspaper" },
     ],
   },
   {
@@ -82,7 +78,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 export const PAGE_TITLES: Record<string, string> = {
   "/cockpit": "Cockpit — Trades der Woche",
-  "/dashboard": "Dashboard — Wirtschafts-News",
+  "/dashboard": "News — Wirtschaftskalender",
   "/weekly": "Weekly Outlook — Sonntags-Cockpit",
   "/cot/intelligence": "COT Intelligence — Institutionelle Positionierung",
   "/makro/terminal": "Macro Terminal — G8 Currency Bias",
