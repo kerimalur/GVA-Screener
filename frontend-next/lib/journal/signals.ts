@@ -20,6 +20,8 @@ export interface SignalRecord {
   createdAt: string;
   /** true = Hit wurde nachträglich aus der Kerzen-Historie erkannt (Downtime-Lücke). */
   detectedLate: boolean;
+  /** Tag der Linien-Bildung (ISO). null bei Altzeilen vor der Migration. */
+  lineFormedDate: string | null;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamische Supabase-Rows */
@@ -35,6 +37,7 @@ function rowToSignal(r: any): SignalRecord {
     status: (r.status || "new") as SignalStatus,
     createdAt: r.created_at,
     detectedLate: r.detected_late === true,
+    lineFormedDate: r.line_formed_date ?? null,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

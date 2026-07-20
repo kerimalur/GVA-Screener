@@ -15,6 +15,7 @@ import {
   assembleLanes,
   boardStateOf,
   snapshotFreshness,
+  zonesLabel,
   SNAPSHOT_FRESH_MIN,
   SNAPSHOT_STALE_MIN,
   WARTEND_PIP_LIMIT,
@@ -148,6 +149,9 @@ export default function CockpitBoard({
     zones: 0,
     pairsTotal: PAIRS_TOTAL,
     live: true,
+    completeRun: false,
+    /** ms des ERSTEN erfolgreichen Fetches — Basis fürs warmup-Zeitfenster */
+    firstFetchMs: null as number | null,
   });
   const [selected, setSelected] = useState<CockpitCard | null>(null);
   const [busy, setBusy] = useState(false);
@@ -171,14 +175,17 @@ export default function CockpitBoard({
       const snap = await fetchScreener();
       if (!aliveRef.current) return;
       setScanner(snap.data);
-      setMeta({
+      setMeta((m) => ({
         loaded: true,
         offline: false,
         updated: snap.updated,
         zones: snap.zones,
         pairsTotal: snap.pairsTotal,
         live: snap.live,
-      });
+        completeRun: snap.zonesCompleteRun,
+        // Nur beim ersten Erfolg setzen — das Zeitfenster misst ab da.
+        firstFetchMs: m.firstFetchMs ?? Date.now(),
+      }));
     } catch {
       if (aliveRef.current) setMeta((m) => ({ ...m, offline: true }));
     }
@@ -198,21 +205,25 @@ export default function CockpitBoard({
     };
   }, [loadScanner, loadSignalsSafe]);
 
-  const state: BoardState = boardStateOf(
-    meta.loaded,
-    meta.offline,
-    meta.zones,
-    meta.pairsTotal,
-  );
+  const state: BoardState = boardStateOf({
+    loaded: meta.loaded,
+    offline: meta.offline,
+    zones: meta.zones,
+    pairsTotal: meta.pairsTotal,
+    completeRun: meta.completeRun,
+    firstFetchMs: meta.firstFetchMs,
+  });
 
-  // Beim Kaltstart (`warmup`) bewusst KEINE Lanes rendern — sonst sieht ein
-  // halb geladenes Backend aus wie ein Board ohne Setups.
+  // Nur beim echten Kaltstart (`warmup`) KEINE Lanes rendern — sonst sieht ein
+  // halb geladenes Backend aus wie ein Board ohne Setups. Bei `partial` ist der
+  // Kaltstart durch: dann sind die vorhandenen Pairs mehr wert als das Warten.
   const lanes =
     state === "loading" || state === "warmup"
       ? EMPTY
       : assembleLanes(scanner, signals, quintiles);
 
   const freshness = snapshotFreshness(meta.updated);
+  const zonesTxt = zonesLabel(state, meta.zones, meta.pairsTotal);
 
   const notesFor = (c: CockpitCard): string => {
     const line = c.lineDir ? `${c.lineDir.toUpperCase()}-Linie` : "Linie";
@@ -309,6 +320,21 @@ export default function CockpitBoard({
         {freshness === "old" && (
           <span className="text-[10px] font-mono text-faint">
             älter als {SNAPSHOT_FRESH_MIN} min
+          </span>
+        )}
+        {/* Zonen-Stand: "startet noch" / "läuft, aber unvollständig" /
+            "läuft vollständig" muss jederzeit ablesbar sein. Bei `partial`
+            bewusst als Warnung und nicht wegklickbar. */}
+        {zonesTxt && (
+          <span
+            className={
+              state === "partial"
+                ? "inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-warn/15 text-warn text-[10px] font-bold font-mono"
+                : "px-1.5 py-0.5 rounded bg-surface2 text-faint text-[10px] font-mono"
+            }
+          >
+            {state === "partial" && <i className="ph-bold ph-warning" />}
+            {zonesTxt}
           </span>
         )}
         {!meta.live && state !== "offline" && (

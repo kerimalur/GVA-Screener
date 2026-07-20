@@ -28,6 +28,19 @@ _LOCK = threading.Lock()
 TRIGGERED_STATUSES = ("new", "watchlist")
 CONSUMED_STATUSES = ("journaled", "dismissed")
 
+# Offene Signale sind naturgemaess wenige: das Sticky-Modell kennt genau EINEN
+# offenen HIT je Paar, bei 28 Paaren also hoechstens 28. Das Fenster ist reiner
+# Ausreisser-Schutz (z.B. Altbestand aus einer Phase ohne /api/mark) und darf
+# begrenzt bleiben — im Gegensatz zu CONSUMED, siehe fetch_consumed_rows.
+OPEN_SIGNAL_LIMIT = 500
+
+# Seitengroesse fuer den vollstaendigen Consumed-Abruf. PostgREST kappt pro
+# Request; deshalb wird ueber den Range-Header geblaettert.
+_PAGE_SIZE = 1000
+# Harte Abbruchbedingung, damit ein kaputtes Range-Verhalten keine Endlosschleife
+# baut. 50 Seiten = 50'000 Zeilen; darueber ist etwas anderes faul.
+_MAX_PAGES = 50
+
 
 def _config():
     url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -88,8 +101,28 @@ def is_configured() -> bool:
     return _config()[0] is not None
 
 
+def to_iso_date(value) -> str | None:
+    """Linien-Bildungsdatum auf ISO 'YYYY-MM-DD' normalisieren.
+
+    Der Live-Pfad liefert das Datum aus analyzer.py als 'DD.MM.YYYY', der
+    Nachtrag-Pfad aus collect_hits bereits als ISO. In der DB soll genau EIN
+    Format liegen, sonst zeigt die UI zwei verschiedene an.
+    Unbekanntes Format -> None (Feld bleibt leer, nie kaputte Daten schreiben).
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return text[:10]  # schon ISO
+    try:
+        tag, monat, jahr = text.split(".")
+        return f"{int(jahr):04d}-{int(monat):02d}-{int(tag):02d}"
+    except Exception:
+        return None
+
+
 def _insert(pair: str, side: str, level: float, snapshot: dict | None,
-            detected_late: bool = False):
+            detected_late: bool = False, line_formed_date=None):
     url, key, user_id = _context()
     if not url:
         if is_configured():
@@ -104,6 +137,7 @@ def _insert(pair: str, side: str, level: float, snapshot: dict | None,
         "fundamental_snapshot": snapshot,
         "status": "new",
         "detected_late": bool(detected_late),
+        "line_formed_date": to_iso_date(line_formed_date),
     }
     try:
         r = requests.post(
@@ -138,17 +172,25 @@ def build_snapshot(pair: str, macro_currencies: list) -> dict | None:
 
 
 def record_hit_async(pair: str, side: str, level: float, snapshot: dict | None,
-                     detected_late: bool = False):
+                     detected_late: bool = False, line_formed_date=None):
     """Fire-and-forget: INSERT in eigenem Daemon-Thread."""
     threading.Thread(
         target=_insert,
-        args=(pair, side, level, snapshot, detected_late),
+        args=(pair, side, level, snapshot, detected_late, line_formed_date),
         daemon=True,
     ).start()
 
 
-def fetch_signal_rows(limit: int = 1000) -> list | None:
-    """Alle GVA-Signale des Users (neueste zuerst) für den Lebenszyklus-Aufbau.
+# Felder, die der Lebenszyklus braucht. Bewusst schmal gehalten — der
+# Consumed-Abruf laedt die komplette Historie.
+_LIFECYCLE_SELECT = (
+    "id,pair,line_type,line_level,status,hit_at,detected_late,line_formed_date"
+)
+_CONSUMED_SELECT = "pair,line_type,line_level,status"
+
+
+def fetch_open_signal_rows(limit: int = OPEN_SIGNAL_LIMIT) -> list | None:
+    """Offene Signale (new/watchlist), neueste zuerst.
 
     Rückgabe:
       list  -> Zeilen (auch leere Liste = gültig, es gibt schlicht keine)
@@ -163,9 +205,10 @@ def fetch_signal_rows(limit: int = 1000) -> list | None:
         r = requests.get(
             f"{url}/rest/v1/signals",
             params={
-                "select": "id,pair,line_type,line_level,status,hit_at,detected_late",
+                "select": _LIFECYCLE_SELECT,
                 "user_id": f"eq.{user_id}",
                 "source": "eq.gva",
+                "status": f"in.({','.join(TRIGGERED_STATUSES)})",
                 "order": "hit_at.desc",
                 "limit": str(limit),
             },
@@ -176,8 +219,76 @@ def fetch_signal_rows(limit: int = 1000) -> list | None:
         data = r.json()
         return data if isinstance(data, list) else None
     except Exception as e:
-        print(f"signals: Laden fehlgeschlagen: {e}")
+        print(f"signals: Laden offener Signale fehlgeschlagen: {e}")
         return None
+
+
+def fetch_consumed_rows() -> list | None:
+    """ALLE verbrauchten Linien (journaled/dismissed) — ohne Limit, paginiert.
+
+    Ein Limit wäre hier ein Zeitzünder: fällt eine alte consumed-Linie aus dem
+    Fenster, gilt sie wieder als frei und erzeugt Alert + Karte auf ein längst
+    getradetes Setup. Deshalb wird über den Range-Header geblättert, bis alles
+    da ist. Gleiche None-Semantik wie fetch_open_signal_rows.
+    """
+    url, key, user_id = _context()
+    if not url:
+        return None
+    params = {
+        "select": _CONSUMED_SELECT,
+        "user_id": f"eq.{user_id}",
+        "source": "eq.gva",
+        "status": f"in.({','.join(CONSUMED_STATUSES)})",
+        # Stabile Sortierung: ohne order kann PostgREST zwischen zwei Seiten
+        # umsortieren und Zeilen doppelt liefern oder auslassen.
+        "order": "id.asc",
+    }
+    rows: list = []
+    offset = 0
+    try:
+        for _ in range(_MAX_PAGES):
+            r = requests.get(
+                f"{url}/rest/v1/signals",
+                params=params,
+                headers=_headers(key, {
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + _PAGE_SIZE - 1}",
+                }),
+                timeout=20,
+            )
+            r.raise_for_status()
+            chunk = r.json()
+            if not isinstance(chunk, list):
+                return None
+            rows.extend(chunk)
+            if len(chunk) < _PAGE_SIZE:
+                return rows
+            offset += _PAGE_SIZE
+        print(
+            f"signals: Consumed-Abruf nach {_MAX_PAGES} Seiten abgebrochen "
+            f"({len(rows)} Zeilen) — Historie unerwartet gross, bitte prüfen"
+        )
+        return rows
+    except Exception as e:
+        print(f"signals: Laden verbrauchter Linien fehlgeschlagen: {e}")
+        return None
+
+
+def fetch_lifecycle_rows() -> list | None:
+    """Offene + verbrauchte Zeilen für den Lebenszyklus-Aufbau.
+
+    Reihenfolge ist bedeutsam: offene Signale zuerst (nach hit_at absteigend),
+    damit state_from_rows pro Paar den jüngsten offenen HIT wählt.
+    None sobald EINE der beiden Abfragen scheitert — ein halber Zustand wäre
+    schlimmer als gar keiner (fehlende consumed-Zeilen = Alert auf alte Linien).
+    """
+    open_rows = fetch_open_signal_rows()
+    if open_rows is None:
+        return None
+    consumed_rows = fetch_consumed_rows()
+    if consumed_rows is None:
+        return None
+    return list(open_rows) + list(consumed_rows)
 
 
 def update_signal_status(pair: str, side: str, status: str) -> bool:

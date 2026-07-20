@@ -5,6 +5,70 @@
 
 Stand: 2026-07-20
 
+## Nachschärfung des Kern-Workflows — 5 Review-Restpunkte (2026-07-20, Teil 2)
+Review von `341d425`. Architektur unverändert (Supabase = Wahrheit, `state.json`
+= Cache, keine Disk in `render.yaml`, `collect_hits` = einzige Hit-Logik,
+`freshnessOf`/`FreshBadge` = einzige Frische-Logik).
+
+**1 (🟠) `warmup` konnte sich verklemmen.** `compute_zones` überspringt Pairs mit
+leerem `daily` oder Exception — `ZONES` bekommt für sie nie einen Eintrag. Ein
+einziges dauerhaft kaputtes Pair hielt das Board für immer auf „Backend startet
+(Zonen 27/28)" und machte die 27 funktionierenden Pairs unsichtbar. Damit wäre
+„leeres Board sieht aus wie kein Setup" nur gegen „blockiertes Board trotz
+gültiger Daten" getauscht gewesen — derselbe Fehlermodus Stille.
+- Backend zählt abgeschlossene Zonen-Läufe (`ZONES_RUNS`), `GET /api/screener`
+  liefert `zones_complete_run` + `zones_runs`.
+- Neuer Board-Zustand **`partial`**: erster Zyklus durch, aber `zones <
+  pairsTotal` → Lanes werden **normal gerendert**, dazu ein nicht wegklickbarer
+  Warn-Chip „nur 27/28 Pairs geladen — 1 Pair liefert keine Daten".
+- Sicherheitsnetz für das Deploy-Fenster (altes Backend ohne das Feld):
+  `WARMUP_GRACE_MS` = 3 min ab erstem erfolgreichen Fetch, danach `partial`.
+- Kopfzeile macht alle drei Fälle jederzeit ablesbar (`zonesLabel`):
+  „startet · Zonen 6/28" / Warn-Chip / „28/28 Pairs".
+
+**2 (🟠) Nachtrag-Fenster schloss bei Teilausfällen zu früh.**
+`_mark_late_scan_done()` lief, sobald EIN Pair durchkam. Fiel Pair X in genau
+diesem Lauf aus, rückte `last_backfill_scan` trotzdem vor — und da der Wert auf
+Tagesgenauigkeit gekürzt wird, fiel ein verpasster Hit bei X vom Vortag danach
+dauerhaft aus dem Suchfenster.
+- Zeitstempel jetzt **pro Pair** in `screener_state.last_backfill_scan_by_pair`
+  (EIN Key mit Dict statt 28 Keys: 1 Lese- + 1 Schreibvorgang pro Lauf statt 56).
+- Fortgeschrieben wird nur, wenn das Pair sauber durchlief — inklusive
+  `_handle_late_hits`; wirft der Nachtrag, bleibt das Fenster offen.
+- Migration: gesetzter globaler Altwert gilt als Startwert für alle Pairs, sonst
+  wäre nach dem Deploy jedes Pair fälschlich „erster Lauf" und der Nachtrag
+  einmalig stumm. Alt-Key wird nur noch gelesen, solange ein Pair fehlt.
+- Ausfälle stehen im Log: „… — Nachtrag-Fenster bleibt offen".
+
+**3 (🟡) Kommentar bei `found[-1]` stimmte nicht.** Ältere Treffer kommen NICHT
+im nächsten Refresh dran — das Fenster rückt nach. Kommentar und
+`late_hits.py`-Docstring sagen das jetzt: bewusst nur der jüngste Treffer je
+Pair und Fenster, ältere gehen verloren. Keine Verhaltensänderung.
+
+**4 (🟡) `fetch_signal_rows(limit=1000)` war eine Zeitbombe.** Wächst die
+Historie über 1000 Zeilen, fallen alte consumed-Linien aus dem Fenster und
+gelten wieder als frei → Alert auf ein längst getradetes Setup.
+- `fetch_consumed_rows()` lädt **ohne Limit**, paginiert über den
+  PostgREST-`Range`-Header (Seite 1000, Abbruch bei 50 Seiten, `order=id.asc`
+  für stabile Seitengrenzen), nur die drei nötigen Felder.
+- `fetch_open_signal_rows()` behält ein Fenster (`OPEN_SIGNAL_LIMIT = 500`) —
+  es gibt höchstens einen offenen HIT je Pair.
+- `fetch_lifecycle_rows()` setzt beide zusammen (offene zuerst, damit
+  `state_from_rows` den jüngsten HIT wählt) und liefert `None`, sobald EINE
+  Abfrage scheitert: ein halber Zustand wäre schlimmer als keiner.
+- Start-Log nennt die Zahl der consumed-Linien; ein Abschneiden wäre sichtbar.
+
+**5 (🟡) Bildungsdatum ging beim Restart verloren.** Migration
+`signals_line_formed_date` (additiv, nullable). Beide Schreibpfade (Live-Hit und
+Nachtrag) füllen die Spalte, `to_iso_date()` normalisiert die zwei Quellformate
+('DD.MM.YYYY' aus analyzer, ISO aus `collect_hits`) auf ISO. `state_from_rows`
+stellt `TRIGGERED[pair]["date"]` wieder her; das Modal zeigt „Formiert am".
+Altzeilen ohne Wert bleiben gültig und zeigen einen Platzhalter.
+
+**Verifiziert:** 132 pytest grün (25 neu: `test_scan_windows.py` 11,
+`test_signal_fetch.py` 14). 34 Frontend-Kontrollwerte grün. tsc + `next build`
+sauber; ESLint unverändert 18 vorbestehende Meldungen in 12 nicht berührten Dateien.
+
 ## Kern-Workflow repariert: Lebenszyklus, Downtime, Sichtbarkeit (2026-07-20)
 Review-Befund: vier strukturelle Defekte im Kern-Workflow, alle mit dem
 Fehlermodus **Stille** — das Board sah funktionsfähig aus, während nichts mehr

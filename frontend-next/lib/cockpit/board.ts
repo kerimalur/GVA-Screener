@@ -52,6 +52,12 @@ export interface CockpitCard {
   stale: boolean;
   /** true = HIT wurde nachträglich aus der Kerzen-Historie erkannt (Downtime). */
   detectedLate: boolean;
+  /**
+   * Tag der Linien-Bildung. Aus dem Scanner als 'DD.MM.YYYY', aus der
+   * signals-Tabelle als ISO — die Anzeige normalisiert beides.
+   * null bei Altzeilen, die das Feld noch nicht kennen.
+   */
+  lineFormedDate: string | null;
 }
 
 export interface CockpitLanes {
@@ -61,21 +67,70 @@ export interface CockpitLanes {
 }
 
 /**
- * Zustand des Boards. `warmup` ist bewusst NICHT `ok`: beim Kaltstart hat das
- * Backend erst einen Teil der Zonen berechnet — drei leere Lanes würden dann
- * wie „diese Woche ist nichts los" aussehen statt wie „startet noch".
+ * Zustand des Boards.
+ *
+ * `warmup` ist bewusst NICHT `ok`: beim Kaltstart hat das Backend erst einen
+ * Teil der Zonen berechnet — drei leere Lanes würden dann wie „diese Woche ist
+ * nichts los" aussehen statt wie „startet noch".
+ *
+ * `partial` ist die Gegenprobe dazu: Der Kaltstart ist durch, aber einzelne
+ * Pairs liefern dauerhaft keine Daten (OANDA-Fehler, Instrument-Problem).
+ * `compute_zones` überspringt solche Pairs, `ZONES` bekommt nie einen Eintrag —
+ * ohne diesen Zustand würde EIN kaputtes Pair das Board für immer auf
+ * „Backend startet (Zonen 27/28)" nageln und die 27 funktionierenden Pairs
+ * unsichtbar machen. Lanes werden gerendert, der Hinweis bleibt stehen.
  */
-export type BoardState = "loading" | "warmup" | "offline" | "ok";
+export type BoardState = "loading" | "warmup" | "offline" | "partial" | "ok";
 
-export function boardStateOf(
-  loaded: boolean,
-  offline: boolean,
-  zones: number,
-  pairsTotal: number,
-): BoardState {
+/**
+ * Sicherheitsnetz, falls `zonesCompleteRun` ausbleibt (altes Backend während
+ * eines Deploy-Fensters): so lange nach dem ersten erfolgreichen Fetch darf
+ * `warmup` stehen, danach wird mit Hinweis gerendert.
+ */
+export const WARMUP_GRACE_MS = 3 * 60_000;
+
+export interface BoardStatusInput {
+  /** mindestens ein Fetch war erfolgreich */
+  loaded: boolean;
+  offline: boolean;
+  zones: number;
+  pairsTotal: number;
+  /** Backend meldet mindestens einen abgeschlossenen Zonen-Refresh */
+  completeRun: boolean;
+  /** ms-Zeitstempel des ersten erfolgreichen Fetches, null solange keiner war */
+  firstFetchMs: number | null;
+  nowMs?: number;
+}
+
+export function boardStateOf({
+  loaded,
+  offline,
+  zones,
+  pairsTotal,
+  completeRun,
+  firstFetchMs,
+  nowMs = Date.now(),
+}: BoardStatusInput): BoardState {
   if (offline) return "offline";
   if (!loaded) return "loading";
-  return zones < pairsTotal ? "warmup" : "ok";
+  if (zones >= pairsTotal) return "ok";
+  // Unvollständig: nur solange der erste Zyklus plausibel noch läuft, gilt das
+  // als Kaltstart. Danach sind die vorhandenen Pairs mehr wert als das Warten.
+  if (completeRun) return "partial";
+  if (firstFetchMs !== null && nowMs - firstFetchMs > WARMUP_GRACE_MS) return "partial";
+  return "warmup";
+}
+
+/** Kopfzeilen-Text zum Zonen-Stand — muss jederzeit ablesbar sein. */
+export function zonesLabel(state: BoardState, zones: number, pairsTotal: number): string {
+  if (state === "warmup") return `startet · Zonen ${zones}/${pairsTotal}`;
+  if (state === "partial") {
+    const fehlend = Math.max(0, pairsTotal - zones);
+    const subjekt = fehlend === 1 ? "1 Pair liefert" : `${fehlend} Pairs liefern`;
+    return `nur ${zones}/${pairsTotal} Pairs geladen — ${subjekt} keine Daten`;
+  }
+  if (state === "ok") return `${zones}/${pairsTotal} Pairs`;
+  return "";
 }
 
 /**
@@ -134,6 +189,7 @@ function cardFromSignal(s: SignalRecord, quintiles: Record<string, number>): Coc
     confluence: confluenceOf(base, quote, lineDir, quintiles),
     stale: false, // HIT-Karten zeigen keine Live-Distanz
     detectedLate: s.detectedLate,
+    lineFormedDate: s.lineFormedDate,
   };
 }
 
@@ -156,6 +212,8 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
     confluence: confluenceOf(base, quote, lineDir, quintiles),
     stale: md.stale === true,
     detectedLate: md.detected_late === true,
+    lineFormedDate:
+      md.near === "SHORT" ? md.short_date : md.near === "LONG" ? md.long_date : null,
   };
 }
 

@@ -70,6 +70,11 @@ CONSUMED = {}
 # Frontend sichtbar sein, sonst sehen die Pip-Distanzen live aus, sind es aber nicht.
 LIVE_CACHE = {"data": [], "updated": None, "live": False}
 
+# Abgeschlossene compute_zones-Durchlaeufe seit Prozessstart. Sobald > 0 ist der
+# Kaltstart vorbei: fehlende Zonen sind dann ein Datenproblem einzelner Paare,
+# kein "startet noch" — das Frontend unterscheidet genau daran.
+ZONES_RUNS = {"completed": 0}
+
 REFRESH_INTERVAL = 60 * 15  # Zonen-Neuberechnung: 15 Minuten
 PRICE_INTERVAL = 30         # Live-Preis + HIT-Check: 30 Sekunden
 MACRO_INTERVAL = 60 * 60 * 6  # Makro (FRED/CFTC/Kalender): alle 6h, ändert sich langsam
@@ -99,9 +104,12 @@ def load_state():
     CONSUMED = consumed
     ALERT_CACHE = alert_cache
     consumed_count = sum(len(v) for sides in CONSUMED.values() for v in sides.values())
+    # Consumed-Zahl bewusst im Log: waechst sie nicht mehr, obwohl Trades
+    # dazukommen, wurde der Abruf irgendwo abgeschnitten (siehe
+    # supabase_signals.fetch_consumed_rows — paginiert, ohne Limit).
     print(
         f"Lebenszyklus geladen ({source}): {len(TRIGGERED)} offene HITs, "
-        f"{consumed_count} verbrauchte Linien"
+        f"{consumed_count} verbrauchte Linien ueber {len(CONSUMED)} Paare"
     )
     save_state()
 
@@ -112,7 +120,7 @@ def reconcile_state():
     Faengt Statuswechsel ab, die nicht ueber /api/mark laufen (z.B. direkt im
     Journal). Damit kann kein Paar dauerhaft sticky in TRIGGERED haengen.
     """
-    rows = supabase_signals.fetch_signal_rows()
+    rows = supabase_signals.fetch_lifecycle_rows()
     if rows is None:
         return
     with _state_lock:
@@ -211,7 +219,9 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                     # Additiv: HIT auch als Signal in Supabase ablegen (Journal-Inbox).
                     # Fire-and-forget im eigenen Thread, no-op ohne Konfiguration.
                     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
-                    supabase_signals.record_hit_async(pair, side, level, snapshot)
+                    supabase_signals.record_hit_async(
+                        pair, side, level, snapshot, line_formed_date=date
+                    )
                     ALERT_CACHE[cache_key] = level
                 save_state()
             near = side
@@ -246,28 +256,50 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
     }
 
 
-def _late_scan_since() -> str | None:
-    """ISO-Datum, ab dem nachtraeglich erkannte Hits zaehlen.
+def _load_scan_state() -> dict:
+    """Scan-Zeitstempel je Paar laden (ein Supabase-Roundtrip).
 
-    None = erster Lauf ueberhaupt: dann wird NICHTS nachgetragen, sonst wuerde
-    die komplette Historie als Alert-Sturm hereinbrechen. Der Zeitstempel liegt
-    in Supabase, weil er genau die Downtime ueberleben muss, die er misst.
+    Migration: ist der alte globale Wert gesetzt, gilt er als Startwert fuer
+    alle Paare, die noch keinen eigenen haben. Ohne das wuerde nach dem Deploy
+    jedes Paar als "erster Lauf" gelten und der Nachtrag einmalig stumm bleiben.
     """
-    stored = supabase_signals.get_state_value(late_hits.LAST_SCAN_KEY)
-    if isinstance(stored, dict):
-        stored = stored.get("at")
+    stored = supabase_signals.get_state_value(late_hits.LAST_SCAN_BY_PAIR_KEY)
+    state = {k: v for k, v in stored.items()} if isinstance(stored, dict) else {}
+
+    # Den Alt-Key nur lesen, solange ueberhaupt ein Paar ohne eigenen Wert ist —
+    # im Normalbetrieb bleibt es damit bei EINEM Lesevorgang pro Lauf.
+    if any(pair not in state for pair in PAIRS):
+        legacy = supabase_signals.get_state_value(late_hits.LAST_SCAN_KEY)
+        if isinstance(legacy, dict):
+            legacy = legacy.get("at")
+        if legacy:
+            for pair in PAIRS:
+                state.setdefault(pair, str(legacy))
+    return state
+
+
+def _since_day(scan_state: dict, pair: str) -> str | None:
+    """ISO-Datum, ab dem nachtraeglich erkannte Hits fuer DIESES Paar zaehlen.
+
+    None = fuer dieses Paar gab es noch nie einen erfolgreichen Lauf: dann wird
+    bewusst NICHTS nachgetragen, sonst braeche die komplette Historie als
+    Alert-Sturm herein.
+    """
+    stored = scan_state.get(pair)
     if not stored:
         return None
-    try:
-        return str(stored)[:10]  # 'YYYY-MM-DD'
-    except Exception:
-        return None
+    return str(stored)[:10]  # 'YYYY-MM-DD'
 
 
-def _mark_late_scan_done():
-    supabase_signals.set_state_value(
-        late_hits.LAST_SCAN_KEY, {"at": datetime.now(timezone.utc).isoformat()}
-    )
+def _save_scan_state(scan_state: dict, scanned_ok: list[str]):
+    """Fenster NUR fuer die Paare schliessen, die in diesem Lauf sauber
+    durchgelaufen sind (ein Supabase-Roundtrip fuer alle)."""
+    if not scanned_ok:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    for pair in scanned_ok:
+        scan_state[pair] = now
+    supabase_signals.set_state_value(late_hits.LAST_SCAN_BY_PAIR_KEY, scan_state)
 
 
 def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
@@ -287,9 +319,12 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
     if not found:
         return
 
-    # Nur der juengste Treffer wird aktiv: das Sticky-Modell kennt genau einen
-    # offenen HIT je Paar. Aeltere verpasste Linien bleiben unangetastet und
-    # kommen im naechsten Refresh dran, sobald dieser hier geloest ist.
+    # Bewusst NUR der juengste Treffer des Fensters: das Sticky-Modell kennt
+    # genau einen offenen HIT je Paar. Aeltere Treffer desselben Paars im selben
+    # Fenster gehen damit endgueltig verloren — das Fenster rueckt mit dem
+    # naechsten erfolgreichen Lauf nach und holt sie nicht mehr ein. Betrifft nur
+    # den seltenen Fall mehrtaegiger Downtime mit mehreren Treffern auf einem
+    # Paar; siehe Modul-Docstring von late_hits.py.
     hit = found[-1]
     side, level = hit["direction"], hit["level"]
     cache_key = f"{pair}_{side}"
@@ -313,16 +348,24 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
     save_state()
     send_telegram_alert(late_hits.alert_text(pair, hit))
     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
-    supabase_signals.record_hit_async(pair, side, level, snapshot, detected_late=True)
+    supabase_signals.record_hit_async(
+        pair, side, level, snapshot,
+        detected_late=True, line_formed_date=hit.get("line_formed_date"),
+    )
     print(f"Nachtraeglich erkannt: {pair} {side} @ {level} (Hit-Tag {hit['hit_date']})")
 
 
 def compute_zones():
     """Schwerer Durchlauf (15 min): berechnet die GVA-Zonen je Paar neu und
-    traegt Hits nach, die waehrend einer Downtime live verpasst wurden."""
+    traegt Hits nach, die waehrend einer Downtime live verpasst wurden.
+
+    Das Nachtrag-Fenster wird pro Paar gefuehrt: faellt ein Paar in diesem Lauf
+    aus, bleibt SEIN Fenster offen, waehrend die anderen weiterruecken.
+    """
     reconcile_state()
-    since_day = _late_scan_since()
-    scanned_any = False
+    scan_state = _load_scan_state()
+    scanned_ok: list[str] = []
+    failed: list[str] = []
 
     for pair in PAIRS:
         try:
@@ -330,9 +373,13 @@ def compute_zones():
             # daily fuer die tagesgenaue Verfeinerung der nachgetragenen Hits.
             daily = fetch_daily_oanda(pair, count=5000)
             if daily.empty:
+                failed.append(pair)
+                print(f"Zonen: keine Tageskerzen fuer {pair} — Nachtrag-Fenster bleibt offen")
                 continue
             df_3d = resample_3d_bars(daily)
             if df_3d.empty:
+                failed.append(pair)
+                print(f"Zonen: keine 3D-Kerzen fuer {pair} — Nachtrag-Fenster bleibt offen")
                 continue
 
             # Parameter kommen aus analyzer.py (Pine v4: 5% Body-Toleranz, Faktor 1.4)
@@ -344,20 +391,28 @@ def compute_zones():
                 "last_touched": last_touched,
                 "daily_close": price,  # Fallback-Preis bis Live-Tick kommt
             }
-            scanned_any = True
 
-            try:
-                _handle_late_hits(pair, df_3d, daily, since_day)
-            except Exception as e:
-                print(f"Nachtrag-Fehler bei {pair}: {e}")
+            # Erst NACH dem Nachtrag als erfolgreich zaehlen — wirft der
+            # Nachtrag, darf das Fenster dieses Paars nicht zugehen.
+            _handle_late_hits(pair, df_3d, daily, _since_day(scan_state, pair))
+            scanned_ok.append(pair)
         except Exception as e:
-            print(f"Zonen-Fehler bei {pair}: {e}")
+            failed.append(pair)
+            print(f"Zonen-Fehler bei {pair}: {e} — Nachtrag-Fenster bleibt offen")
         time.sleep(0.1)
 
-    # Erst nach einem echten Durchlauf weiterstellen — bricht der Lauf ab,
-    # bleibt das Fenster offen und der Hit wird beim naechsten Mal gefunden.
-    if scanned_any:
-        _mark_late_scan_done()
+    _save_scan_state(scan_state, scanned_ok)
+
+    # Zaehler markiert: mindestens ein vollstaendiger Zyklus ist durch. Das
+    # Frontend verlaesst daraufhin den warmup-Zustand, auch wenn Paare fehlen —
+    # sonst wuerde ein einziges dauerhaft kaputtes Paar das Board fuer immer
+    # blockieren (27 funktionierende Paare unsichtbar).
+    ZONES_RUNS["completed"] += 1
+    if failed:
+        print(
+            f"Zonen-Lauf {ZONES_RUNS['completed']} fertig: {len(scanned_ok)}/{len(PAIRS)} Paare, "
+            f"offen geblieben: {', '.join(failed)}"
+        )
 
 
 def build_live_snapshot():
@@ -451,9 +506,13 @@ def get_screener():
     return {
         "data": LIVE_CACHE["data"],
         "updated": LIVE_CACHE["updated"],  # Unix-Sekunden oder null
-        "zones": len(ZONES),               # < len(PAIRS) = Backend startet noch
+        "zones": len(ZONES),
         "pairs_total": len(PAIRS),
         "live": bool(LIVE_CACHE["live"]),  # False = Preise vom Tagesschluss
+        # False = Kaltstart laeuft noch ("Backend startet"). True + zones <
+        # pairs_total = laeuft, aber einzelne Paare liefern keine Daten.
+        "zones_complete_run": ZONES_RUNS["completed"] > 0,
+        "zones_runs": ZONES_RUNS["completed"],
     }
 
 

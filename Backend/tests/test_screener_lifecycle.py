@@ -40,9 +40,8 @@ def clean_state(monkeypatch):
     monkeypatch.setattr(main.supabase_signals, "build_snapshot", lambda *a, **k: None)
     monkeypatch.setattr(
         main.supabase_signals, "record_hit_async",
-        lambda pair, side, level, snap, detected_late=False: signals.append(
-            (pair, side, level, detected_late)
-        ),
+        lambda pair, side, level, snap, detected_late=False, line_formed_date=None:
+            signals.append((pair, side, level, detected_late, line_formed_date)),
     )
     monkeypatch.setattr(main.supabase_signals, "update_signal_status_async", lambda *a, **k: None)
     monkeypatch.setattr(main, "build_live_snapshot", lambda: None)
@@ -123,7 +122,7 @@ def test_neustart_haelt_consumed_und_alarmiert_nicht_erneut(monkeypatch, tmp_pat
         "id": "1", "pair": "EURUSD", "line_type": "short", "line_level": 1.1,
         "status": "journaled", "hit_at": "2026-07-20T10:00:00Z", "detected_late": False,
     }]
-    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_signal_rows", lambda: rows)
+    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_lifecycle_rows", lambda: rows)
     monkeypatch.setattr(main, "STATE_FILE", str(tmp_path / "state.json"))
 
     main.TRIGGERED.clear()
@@ -145,7 +144,7 @@ def test_reconcile_loest_extern_geschlossene_signale(monkeypatch):
         "id": "1", "pair": "EURUSD", "line_type": "short", "line_level": 1.1,
         "status": "dismissed", "hit_at": "2026-07-20T10:00:00Z", "detected_late": False,
     }]
-    monkeypatch.setattr(main.supabase_signals, "fetch_signal_rows", lambda limit=1000: rows)
+    monkeypatch.setattr(main.supabase_signals, "fetch_lifecycle_rows", lambda: rows)
     main.reconcile_state()
 
     assert "EURUSD" not in main.TRIGGERED
@@ -185,7 +184,8 @@ def test_nachtrag_erzeugt_signal_mit_flag(clean_state):
     assert main.TRIGGERED["EURUSD"]["detected_late"] is True
     assert main.TRIGGERED["EURUSD"]["level"] == 1.01
     assert "NACHTRÄGLICH ERKANNT" in clean_state["sent"][0]
-    assert clean_state["signals"] == [("EURUSD", "SHORT", 1.01, True)]
+    # Bildungsdatum der Linie wandert mit nach Supabase (Punkt 5)
+    assert clean_state["signals"] == [("EURUSD", "SHORT", 1.01, True, "2026-07-06")]
     # Flag reicht bis in die Screener-Antwort durch
     assert _eval(1.0000)["detected_late"] is True
 
@@ -231,7 +231,10 @@ def test_offener_hit_blockiert_den_nachtrag(clean_state):
 def test_screener_endpoint_liefert_zustandskontext():
     main.LIVE_CACHE.update({"data": [{"pair": "EURUSD"}], "updated": 1_700_000_000.0, "live": True})
     out = main.get_screener()
-    assert set(out) == {"data", "updated", "zones", "pairs_total", "live"}
+    assert set(out) == {
+        "data", "updated", "zones", "pairs_total", "live",
+        "zones_complete_run", "zones_runs",
+    }
     assert out["updated"] == 1_700_000_000.0
     assert out["zones"] == 1               # nur EURUSD in ZONES -> Kaltstart
     assert out["pairs_total"] == len(main.PAIRS) == 28

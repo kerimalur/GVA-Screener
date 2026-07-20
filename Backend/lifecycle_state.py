@@ -25,9 +25,9 @@ import os
 
 import supabase_signals
 
-# Nach dem Neustart kennen wir das Bildungsdatum der Linie nicht mehr (die
-# signals-Tabelle speichert es nicht). Reine Anzeige-Information; die Linien-
-# Auswahl in select_lines() arbeitet ausschliesslich mit Level + Side.
+# Fallback fuer Altzeilen ohne `line_formed_date` (vor der Migration
+# `signals_line_formed_date` gab es die Spalte nicht). Reine Anzeige-
+# Information; select_lines() arbeitet ausschliesslich mit Level + Side.
 _UNKNOWN_DATE = None
 
 
@@ -75,7 +75,8 @@ def state_from_rows(rows: list[dict]) -> tuple[dict, dict, dict]:
         triggered[pair] = {
             "side": side,
             "level": level,
-            "date": _UNKNOWN_DATE,
+            # Bildungsdatum ueberlebt den Neustart, seit signals es speichert.
+            "date": row.get("line_formed_date") or _UNKNOWN_DATE,
             "pending": status == "watchlist",
             "detected_late": bool(row.get("detected_late")),
         }
@@ -138,7 +139,9 @@ def load_lifecycle(state_file: str) -> tuple[dict, dict, dict, str]:
     quelle ist 'supabase' oder 'cache' — nur fürs Log.
     """
     file_triggered, file_consumed = read_cache_file(state_file)
-    rows = supabase_signals.fetch_signal_rows()
+    # Offene Signale kommen aus einem begrenzten Fenster, verbrauchte Linien
+    # vollstaendig — ein Limit auf CONSUMED wuerde alte Linien wieder freigeben.
+    rows = supabase_signals.fetch_lifecycle_rows()
 
     if rows is None:
         # Supabase nicht konfiguriert/erreichbar -> Cache ist alles, was wir haben.

@@ -116,7 +116,7 @@ def test_load_ohne_supabase_nutzt_cache(monkeypatch, tmp_path):
         {"EURUSD": {"side": "SHORT", "level": 1.1, "date": None, "pending": False}},
         {"GBPUSD": {"LONG": {1.2}}},
     )
-    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_signal_rows", lambda: None)
+    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_lifecycle_rows", lambda: None)
 
     triggered, consumed, cache, source = lifecycle_state.load_lifecycle(path)
     assert source == "cache"
@@ -130,7 +130,7 @@ def test_load_supabase_gewinnt_und_vereinigt_consumed(monkeypatch, tmp_path):
     # Cache kennt eine verbrauchte Linie, die Supabase (noch) nicht kennt.
     lifecycle_state.write_cache_file(path, {}, {"EURUSD": {"SHORT": {1.05}}})
     monkeypatch.setattr(
-        lifecycle_state.supabase_signals, "fetch_signal_rows",
+        lifecycle_state.supabase_signals, "fetch_lifecycle_rows",
         lambda: [_row("EURUSD", "SHORT", 1.1, "journaled", "2026-07-20T10:00:00Z")],
     )
     triggered, consumed, _, source = lifecycle_state.load_lifecycle(path)
@@ -148,7 +148,7 @@ def test_migration_unklarer_trigger_gilt_als_consumed(monkeypatch, tmp_path):
         {"EURUSD": {"side": "SHORT", "level": 1.1, "date": "01.07.2026", "pending": False}},
         {},
     )
-    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_signal_rows", lambda: [])
+    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_lifecycle_rows", lambda: [])
 
     triggered, consumed, _, _ = lifecycle_state.load_lifecycle(path)
     assert triggered == {}
@@ -157,7 +157,7 @@ def test_migration_unklarer_trigger_gilt_als_consumed(monkeypatch, tmp_path):
 
 def test_geloeschte_cache_datei_verhaelt_sich_identisch(monkeypatch, no_file):
     rows = [_row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z")]
-    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_signal_rows", lambda: rows)
+    monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_lifecycle_rows", lambda: rows)
     triggered, consumed, cache, source = lifecycle_state.load_lifecycle(no_file)
     assert source == "supabase"
     assert triggered["EURUSD"]["level"] == 1.1

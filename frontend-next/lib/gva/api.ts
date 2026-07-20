@@ -32,11 +32,18 @@ export interface ScreenerSnapshot {
   data: MarketData[];
   /** Unix-Sekunden des letzten Snapshots, null solange keiner gebaut wurde. */
   updated: number | null;
-  /** Berechnete Zonen. < pairsTotal = Backend startet noch. */
+  /** Berechnete Zonen. */
   zones: number;
   pairsTotal: number;
   /** false = OANDA-Pricing ausgefallen, gerechnet wird mit dem Tagesschluss. */
   live: boolean;
+  /**
+   * true = das Backend hat mindestens einen vollständigen Zonen-Refresh hinter
+   * sich. Erst damit ist `zones < pairsTotal` als Datenproblem einzelner Pairs
+   * lesbar und nicht mehr als Kaltstart. Altes Backend liefert das Feld nicht
+   * → false, das Zeitfenster in `boardStateOf` fängt den Fall ab.
+   */
+  zonesCompleteRun: boolean;
 }
 
 /** Alle vom Backend gescannten Pairs (Fallback, wenn das Backend es nicht meldet). */
@@ -56,8 +63,18 @@ const API_URL = (
  */
 export function toSnapshot(raw: any): ScreenerSnapshot {
   if (Array.isArray(raw)) {
+    // Uraltes Backend: rohes Array, kein Zustandskontext. Als vollständiger
+    // Lauf werten — mehr weiss diese Antwortform nicht her, und ein ewiges
+    // „startet noch" wäre schlechter als die Lanes zu zeigen.
     const data = raw as MarketData[];
-    return { data, updated: null, zones: data.length, pairsTotal: PAIRS_TOTAL, live: true };
+    return {
+      data,
+      updated: null,
+      zones: data.length,
+      pairsTotal: PAIRS_TOTAL,
+      live: true,
+      zonesCompleteRun: data.length > 0,
+    };
   }
   const data: MarketData[] = Array.isArray(raw?.data) ? raw.data : [];
   return {
@@ -66,6 +83,7 @@ export function toSnapshot(raw: any): ScreenerSnapshot {
     zones: typeof raw?.zones === "number" ? raw.zones : data.length,
     pairsTotal: typeof raw?.pairs_total === "number" ? raw.pairs_total : PAIRS_TOTAL,
     live: raw?.live !== false,
+    zonesCompleteRun: raw?.zones_complete_run === true,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

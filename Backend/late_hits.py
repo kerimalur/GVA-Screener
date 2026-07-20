@@ -11,9 +11,18 @@ jedem Zonen-Refresh (15 min) mit **derselben** Erkennungslogik wie der Replay
 (`replay.gva_history.collect_hits`), ob seit dem letzten Lauf eine Linie berührt
 wurde. Keine zweite Hit-Logik — nur ein zweiter Zeitpunkt.
 
-Grenze der Methode: OANDA liefert nur abgeschlossene Tageskerzen. Ein Treffer
-wird also spätestens mit dem nächsten Tagesschluss (NY 17:00) nachgetragen,
-nicht sekundengenau. Genau dafür ist er als "nachträglich erkannt" markiert.
+Grenzen der Methode — bewusst akzeptiert, damit sie hier dokumentiert und nicht
+im Betrieb entdeckt werden:
+
+1. OANDA liefert nur abgeschlossene Tageskerzen. Ein Treffer wird also
+   spätestens mit dem nächsten Tagesschluss (NY 17:00) nachgetragen, nicht
+   sekundengenau. Genau dafür ist er als "nachträglich erkannt" markiert.
+2. Je Paar und Fenster wird **nur der jüngste** Treffer nachgetragen. Das
+   Sticky-Modell kennt genau einen offenen HIT je Paar; ältere Treffer
+   desselben Paars im selben Fenster gehen endgültig verloren, weil das
+   Fenster mit dem nächsten erfolgreichen Lauf nachrückt. In der Praxis ist
+   das der seltene Fall einer mehrtägigen Downtime mit mehreren Treffern auf
+   demselben Paar.
 """
 from __future__ import annotations
 
@@ -22,8 +31,18 @@ import pandas as pd
 from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
 from replay.gva_history import collect_hits, refine_hit_day
 
-# Key in `screener_state` — muss die Downtime überleben, deshalb Supabase.
+# Alt-Key aus dem ersten Wurf: EIN globaler Zeitstempel für alle Paare. Wird nur
+# noch gelesen, um beim ersten Lauf nach dem Deploy die Pair-Zeitstempel zu
+# füllen (sonst gälte jedes Paar fälschlich als "erster Lauf" und der Nachtrag
+# bliebe einmalig stumm).
 LAST_SCAN_KEY = "last_backfill_scan"
+
+# Aktueller Key: {pair: iso_timestamp}. Bewusst EIN Key mit Dict statt 28
+# Einzel-Keys — das sind pro Zonen-Refresh ein Lesevorgang und ein Schreibvorgang
+# statt 56 Roundtrips. Nötig ist die Aufschlüsselung, weil ein global
+# fortgeschriebener Zeitstempel das Fenster auch für Paare schliesst, die im
+# selben Lauf ausgefallen sind — deren verpasste Hits wären dann für immer weg.
+LAST_SCAN_BY_PAIR_KEY = "last_backfill_scan_by_pair"
 
 
 def find_late_hits(

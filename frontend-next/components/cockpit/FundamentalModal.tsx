@@ -35,6 +35,19 @@ function signed(n: number, digits = 2): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
 }
 
+/**
+ * Linien-Bildungsdatum anzeigen. Der Scanner liefert 'DD.MM.YYYY', die
+ * signals-Tabelle ISO — beides wird auf die Schweizer Schreibweise gebracht.
+ * Altzeilen ohne Feld zeigen einen Platzhalter statt eines Fehlers.
+ */
+function fmtLineDate(v: string | null): string {
+  if (!v) return "–";
+  const iso = /^\d{4}-\d{2}-\d{2}/.exec(v);
+  if (!iso) return v; // schon 'DD.MM.YYYY'
+  const [y, m, d] = v.slice(0, 10).split("-");
+  return `${d}.${m}.${y}`;
+}
+
 function CcyBlock({
   code,
   role,
@@ -169,6 +182,10 @@ export default function FundamentalModal({
               {dirTxt}
               {card.lineLevel != null ? ` · ${card.lineLevel}` : ""}
             </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Formiert am</span>
+            <span>{fmtLineDate(card.lineFormedDate)}</span>
           </div>
           {card.distance != null && (
             <div className="flex justify-between">
