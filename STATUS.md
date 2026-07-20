@@ -21,15 +21,56 @@ Nur GVA-Setups werden getradet; Fundamentales ist Konfluenz, kein Gate.
   Beobachten→`watchlist`, Verwerfen→`dismissed`. Winrate bleibt sauber.
 - **Popup** (Klick auf Pair): Verdikt + beide Quintile (Score + Top-Faktoren) +
   Linien-Info + High-Impact-Kalender der Woche.
-- **Nav:** neue Gruppe „Trading" (Cockpit, Währungs-Ranking) oben; alles
-  Fundamentale in eingeklappte Gruppe „Labor · versteckt" (= Basis für Projekt B,
-  Faktor-Tracking über ~1 Jahr — noch offen).
+- **Nav:** neue Gruppe „Trading" (Cockpit, Währungs-Ranking) oben; Fundamentales
+  in die Gruppe „Labor · versteckt" (siehe nächster Abschnitt).
 - **Neue Files:** `lib/cockpit/board.ts` (pure Lane-Assembly), `components/cockpit/
   {CockpitBoard,FundamentalModal}.tsx`, `app/(app)/cockpit/page.tsx`.
 - **Verifiziert:** tsc + ESLint grün. **Nicht** lokal lauffähig (braucht FastAPI-
   Backend + Supabase-Session) → Live-Check nach Vercel-Deploy.
-- **Offen (Projekt B):** Silent Factor Lab — jeden Faktor separat auf Forward-
-  Trefferquote tracken; Design noch nicht gemacht.
+
+## Silent Factor Lab — Projekt B (2026-07-20)
+Spec: `docs/superpowers/specs/2026-07-20-silent-factor-lab-design.md`
+Plan: `docs/superpowers/plans/2026-07-20-silent-factor-lab.md`
+
+Misst still im Hintergrund, **welcher Faktor tatsächlich Richtung trifft** —
+je Währung, forward gegen `fwd_ret` (demeaned Korb) gereift. Kein neues ML,
+keine Entscheidungsautomatik. Verallgemeinert den `run_weekly`-Paper-Track.
+- **Faktoren v1:** `cot`, `rates`, `season` (atomar, aus `panel.py`-Scores) +
+  `ranking_baseline` (0.5·rates+0.5·season) als Kombi-Referenz. Horizonte 1W/4W.
+  `real_yield`/`macro_score`/`setup_finder` = **v2** (kein Python-Wochen-Produzent).
+- **Tabelle** `factor_track` (PK week_start,factor,ccy,horizon) + View
+  `factor_track_stats` (Aggregat; nötig, weil PostgREST Rohabrufe bei 1000 Zeilen
+  kappt und die wenigen `live`-Zeilen sonst unsichtbar blieben).
+- **Zwei Quellen, streng getrennt:** `source='seed'` = **Historisch/Backtest**
+  (roher Faktor-Sign-Hitrate über die Panel-Historie, NICHT purged) ·
+  `source='live'` = **Forward**, der eigentliche Beweis. Neutral (`hit IS NULL`)
+  zählt nie mit.
+- **Jobs:** `ml_engine/seed_factors.py` (einmalig, Workflow „ML Seed Factors") ·
+  `ml_engine/run_factors.py` (samstags im Workflow „ML Weekly Ranking",
+  Step mit `if: always()`, damit ein `run_weekly`-Fehler den forward-only
+  Snapshot nicht dauerhaft überspringt). `run_weekly.py` unangetastet.
+- **UI** `/ml/factor-lab`: Live-Hitrate + n neben Historisch + n, ehrlich gelabelt.
+- **Stand:** Seed gelaufen (Historisch gefüllt). **Live ist noch leer** — füllt
+  sich ab dem ersten `run_factors`-Lauf und wird erst über Monate aussagekräftig.
+
+## Nav-Ausdünnung + harte Routen-Sperre (2026-07-20)
+Zu viele sich widersprechende Tabs = Entscheidungslähmung. Deshalb radikal reduziert.
+- **Sichtbar in „Labor · versteckt":** Factor-Lab · Engine-Log · Macro Terminal ·
+  Real Yield · News.
+- **Hart NICHT erreichbar** (Redirect → `/cockpit`, auch per direkter URL):
+  Weekly Outlook, COT Intelligence, Season 2.0, Fundamental-Track, Setup-Finder,
+  ML-Modell, Daten-Check, Training, Labor. **Code + Seiten bleiben im Projekt.**
+- **Mechanik:** `frontend-next/proxy.ts` → `HIDDEN_PREFIXES` (Prefix-Match) plus
+  Exakt-Regel `pathname === "/ml"` (Daten-Check; Unterseiten wie `/ml/ranking`,
+  `/ml/factor-lab`, `/ml/engine-log`, `/ml/replay` bleiben erreichbar).
+- **Wieder aktivieren (2 Schritte):** Pfad aus `HIDDEN_PREFIXES` streichen **und**
+  Eintrag in `components/layout/nav.ts` zurück. Nur eins von beidem reicht nicht.
+- `/dashboard` heisst jetzt **News** und zeigt nur noch den Wirtschaftskalender —
+  Wochenplan + GVA-Nähe waren Doppelspur zum Cockpit.
+- Login-/Admin-Fallback-Redirects zeigen auf `/cockpit`.
+
+> Langsame Scanner-Seiten (Radar/Signale/Heatmap) = Render-Kaltstart des FastAPI-
+> Backends, kein Code-Problem. Währungs-Ranking ist schnell (Supabase + 5 min Cache).
 
 ## ⭐ Kanonische Zielgrösse & Vokabular (VERBINDLICH, 2026-07-20)
 Damit «Q5» und «Trefferquote» nie wieder zwei Dinge bedeuten:
