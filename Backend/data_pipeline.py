@@ -138,3 +138,33 @@ def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     if df.empty:
         return df
     return resample_3d_bars(df)
+
+
+def simple_candles(daily: pd.DataFrame, granularity: str = "D", since: str = "") -> list:
+    """Vereinfachte OHLC-Liste für den Performance-Chart im Währungs-Ranking.
+
+    'W' resampled die Tageskerzen auf Wochen (Freitags-Ende); `since` (ISO
+    'YYYY-MM-DD') schneidet ab dem Signal-Start ab. Reine Transformation der
+    bereits geholten Tageskerzen — testbar ohne OANDA/HTTP."""
+    if daily is None or daily.empty:
+        return []
+    df = daily[["open", "high", "low", "close"]]
+    if str(granularity).upper() == "W":
+        df = df.resample("W-FRI").agg(
+            {"open": "first", "high": "max", "low": "min", "close": "last"}
+        ).dropna()
+    if since:
+        try:
+            df = df[df.index >= pd.to_datetime(since)]
+        except Exception:
+            pass
+    return [
+        {
+            "time": ts.strftime("%Y-%m-%d"),
+            "open": round(float(row["open"]), 5),
+            "high": round(float(row["high"]), 5),
+            "low": round(float(row["low"]), 5),
+            "close": round(float(row["close"]), 5),
+        }
+        for ts, row in df.iterrows()
+    ]

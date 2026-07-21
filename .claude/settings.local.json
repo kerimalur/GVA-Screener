@@ -31,7 +31,14 @@
       "Bash(git commit --quiet -m 'docs: STATUS.md — Backtest-Modul + 8 Jahre erledigt, Backfill-Hinweis *)",
       "mcp__claude_ai_Supabase__list_organizations",
       "PowerShell(Remove-Item \"c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\replay\\\\trade_result.py\" -Confirm:$false)",
-      "PowerShell(python -c \"import ast; ast.parse\\(open\\(r'c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\replay\\\\routes.py', encoding='utf-8'\\).read\\(\\)\\); print\\('routes.py OK'\\)\")"
+      "PowerShell(python -c \"import ast; ast.parse\\(open\\(r'c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\replay\\\\routes.py', encoding='utf-8'\\).read\\(\\)\\); print\\('routes.py OK'\\)\")",
+      "Bash(curl -s \"https://gva-screener.onrender.com/replay/blocks?pair=EUR_USD&from=2026-06-22&to=2026-07-14\" --max-time 120)",
+      "Bash(curl -s \"https://gva-screener.onrender.com/replay/blocks?pair=EUR_USD&from=2025-12-19&to=2026-01-08\" --max-time 120)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(b['start'],'->',b['days']\\) for b in d['blocks']]\")",
+      "Bash(curl -s \"https://gva-screener.onrender.com/replay/blocks?pair=EUR_USD&from=2026-03-30&to=2026-04-08\" --max-time 120)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(r'c:\\\\Users\\\\Kerim\\\\FX Terminal\\\\GVA-Screener\\\\Backend\\\\data_pipeline.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(python -m pytest tests/test_resample_3d.py -q)",
+      "Bash(pip install *)"
     ]
   }
 }
