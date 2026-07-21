@@ -12,6 +12,7 @@ import { SkeletonRows } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toaster";
 import EquityChart from "./charts/EquityChart";
 import ExpectancyCard from "./ExpectancyCard";
+import TradeBudgetCard from "./TradeBudgetCard";
 import type { AccountConfigs, AccountType, Trade } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
@@ -109,6 +110,10 @@ export default function DashboardView() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "22px" }} className="anim-fade-in">
+
+      {/* Trade-Budget: gilt kontenuebergreifend, deshalb ALLE Trades und
+          bewusst oberhalb des Konto-Umschalters. */}
+      <TradeBudgetCard trades={trades} />
 
       {/* Tab + Streak */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
