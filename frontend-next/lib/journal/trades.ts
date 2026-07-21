@@ -108,6 +108,29 @@ export async function loadTrades(accountType?: AccountType): Promise<Trade[]> {
   return (data || []).map(mapDbToApp);
 }
 
+/**
+ * Trades ohne Adherence-Bewertung — Zähler der Launcher-Kachel „Journalieren".
+ *
+ * Bewusst nur LIVE-Trades: Backtest-Zeilen durchlaufen das Adherence-Modal
+ * nicht und würden den Zähler dauerhaft rot halten. Alt-Trades von vor dem
+ * Disziplin-System haben ebenfalls `adherence_score IS NULL` — sie sind exakt
+ * das, was der Zähler meint: unbewertet.
+ */
+export async function countTradesWithoutAdherence(): Promise<number> {
+  const user = await getSessionUser();
+  if (!user) return 0;
+  const supabase = createBrowserSupabase();
+
+  const { count, error } = await supabase
+    .from("trades")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("session_type", "live")
+    .is("adherence_score", null);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 export async function saveTrade(
   tradeData: Omit<Trade, "id"> & { id?: string },
 ): Promise<Trade> {

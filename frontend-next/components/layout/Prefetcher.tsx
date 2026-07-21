@@ -24,7 +24,10 @@ const WARM_URLS = [
   "/api/ml/season",
 ];
 
-const PREFETCH_ROUTES = ["/ml/ranking", "/ml/fundamental-track", "/cot/intelligence", "/ml/season"];
+// Nur erreichbare Routen: /ml/fundamental-track, /cot/intelligence und
+// /ml/season sind über `lib/nav/hidden.ts` gesperrt — sie zu prefetchen hiesse,
+// einen Redirect auf den Launcher vorzuladen.
+const PREFETCH_ROUTES = ["/cockpit", "/ml/ranking", "/journal", "/journal/outlook"];
 
 export default function Prefetcher() {
   const router = useRouter();

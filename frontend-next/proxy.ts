@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
+import { isHiddenRoute } from "@/lib/nav/hidden";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -66,10 +67,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
-  const isPublic =
-    pathname === "/" ||
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/auth");
+  // "/" ist seit dem Modus-Umbau der Launcher und damit eine App-Seite —
+  // vorher lag dort nur ein Redirect und die Route durfte öffentlich sein.
+  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/auth");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -80,34 +80,18 @@ export async function proxy(request: NextRequest) {
 
   if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/cockpit";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
   }
 
   // ── Ausgeblendete Bereiche ────────────────────────────────────────────────
-  // Code + Seiten bleiben im Projekt, sind aber bewusst NICHT erreichbar —
-  // Fokus liegt auf Cockpit + GVA. Reaktivieren: Pfad hier rausnehmen und den
-  // Nav-Eintrag in components/layout/nav.ts wieder ergänzen.
-  const HIDDEN_PREFIXES = [
-    "/weekly",
-    "/cot",
-    "/ml/season",
-    "/ml/fundamental-track",
-    "/ml/setup-finder",
-    "/ml/modell",
-    "/ml/training",
-    "/ml/labor",
-  ];
-  // Exakt "/ml" = Daten-Check. Unterseiten (/ml/ranking, /ml/factor-lab,
-  // /ml/engine-log, /ml/replay) bleiben erreichbar — daher kein Prefix-Match.
-  const isHidden =
-    pathname === "/ml" ||
-    HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
-
-  if (user && isHidden) {
+  // Liste liegt in `lib/nav/hidden.ts` — dieselbe Quelle filtert die Tabs in
+  // `components/layout/nav.ts`. Damit kann kein sichtbarer Tab auf eine Route
+  // zeigen, die hier sofort wieder wegredirectet wird.
+  if (user && isHiddenRoute(pathname)) {
     const url = request.nextUrl.clone();
-    url.pathname = "/cockpit";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -131,7 +115,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && isAdminRoute && !isAdminUser) {
     const url = request.nextUrl.clone();
-    url.pathname = "/cockpit";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
   }

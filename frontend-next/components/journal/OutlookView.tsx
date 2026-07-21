@@ -9,6 +9,7 @@ import Segmented from "@/components/ui/Segmented";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toaster";
+import FundamentalDetail from "@/components/cockpit/FundamentalDetail";
 import OutlookWizardModal from "./OutlookWizardModal";
 import {
   loadOutlooks,
@@ -27,6 +28,8 @@ import {
   setupLabel,
   type SetupStatus,
 } from "@/lib/setup/lifecycle";
+import { cardForOutlook } from "@/lib/cockpit/board";
+import type { CcyRanking, CockpitEvent } from "@/lib/cockpit/detail";
 import {
   fetchFundamentals,
   splitPair,
@@ -54,17 +57,25 @@ function ConfidenceStars({ value }: { value: number }) {
 }
 
 /**
- * Herkunft eines automatisch erzeugten Outlooks. Zeigt, dass hinter dem
- * Eintrag ein echter GVA-Hit steckt — inklusive Linien-Level, Hit-Zeitpunkt
- * und dem Flag „nachträglich erkannt" aus `signals.detected_late`.
+ * Herkunft eines Outlooks. Bei `source='gva'` steckt ein echter Hit dahinter —
+ * inklusive Linien-Level, Hit-Zeitpunkt und dem Flag „nachträglich erkannt"
+ * aus `signals.detected_late`. Bei `source='manual'` steht genau das da:
+ * von Hand erfasst, kein Signal.
  */
-function GvaHerkunft({
+function Herkunft({
   outlook,
   signal,
 }: {
   outlook: OutlookRecord;
   signal: SignalRecord | undefined;
 }) {
+  if (outlook.source === "manual") {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-muted">
+        <span className="px-1.5 py-0.5 rounded bg-surface2 text-muted font-bold">✎ manuell</span>
+      </div>
+    );
+  }
   if (outlook.source !== "gva") return null;
   const level = signal?.lineLevel ?? outlook.interestingZone;
   return (
@@ -117,7 +128,52 @@ function FundamentalsCompare({
   );
 }
 
-export default function OutlookView() {
+/** Lebenszyklus-Knöpfe — identisch in Liste und Detailansicht. */
+function StatusAktionen({
+  outlook,
+  onStatus,
+  onJournal,
+}: {
+  outlook: OutlookRecord;
+  onStatus: (o: OutlookRecord, next: SetupStatus) => void;
+  onJournal: (o: OutlookRecord) => void;
+}) {
+  const aktuell = fromOutlookStatus(outlook.status);
+  return (
+    <>
+      {aktuell === "beobachtung" && (
+        <Button variant="subtle" size="sm" onClick={() => onStatus(outlook, "wartend")}>
+          {setupLabel("wartend")}
+        </Button>
+      )}
+      {(aktuell === "beobachtung" || aktuell === "wartend") && (
+        <Button variant="subtle" size="sm" onClick={() => onStatus(outlook, "aktiv")}>
+          {setupLabel("aktiv")}
+        </Button>
+      )}
+      {aktuell === "aktiv" && (
+        <Button variant="primary" size="sm" icon="ph-notebook" onClick={() => onJournal(outlook)}>
+          Journalieren
+        </Button>
+      )}
+      {!isClosedSetup(aktuell) && (
+        <Button variant="ghost" size="sm" onClick={() => onStatus(outlook, "verworfen")}>
+          {setupLabel("verworfen")}
+        </Button>
+      )}
+    </>
+  );
+}
+
+export default function OutlookView({
+  quintiles = {},
+  rankingByCcy = {},
+  eventsByCcy = {},
+}: {
+  quintiles?: Record<string, number>;
+  rankingByCcy?: Record<string, CcyRanking>;
+  eventsByCcy?: Record<string, CockpitEvent[]>;
+}) {
   const router = useRouter();
   const [outlooks, setOutlooks] = useState<OutlookRecord[]>([]);
   const [signals, setSignals] = useState<Record<string, SignalRecord>>({});
@@ -126,7 +182,7 @@ export default function OutlookView() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [showWizard, setShowWizard] = useState(false);
   const [editing, setEditing] = useState<OutlookRecord | undefined>();
-  /** Aus dem Cockpit verlinkter Eintrag („Im Outlook öffnen"). */
+  /** Aus dem Cockpit verlinkter Eintrag — schaltet auf die Detailansicht. */
   const [fokusId, setFokusId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -186,23 +242,32 @@ export default function OutlookView() {
       if (!!b.isStarred !== !!a.isStarred) return b.isStarred ? 1 : -1;
       return (b.createdAt || "").localeCompare(a.createdAt || "");
     });
-    let liste: OutlookRecord[];
     if (filter === "all") {
       // „Offen" = alles ausser abgeschlossen (ausgeführt / verworfen).
-      liste = sorted.filter((o) => !isClosedSetup(fromOutlookStatus(o.status)));
-    } else if (filter === "starred") {
-      liste = sorted.filter((o) => o.isStarred);
-    } else {
-      liste = sorted.filter((o) => o.status === filter);
+      return sorted.filter((o) => !isClosedSetup(fromOutlookStatus(o.status)));
     }
-    // Ein aus dem Cockpit verlinkter Eintrag muss sichtbar sein, auch wenn der
-    // aktive Filter ihn sonst ausblenden würde — sonst führt der Link ins Leere.
-    if (fokusId && !liste.some((o) => o.id === fokusId)) {
-      const ziel = sorted.find((o) => o.id === fokusId);
-      if (ziel) liste = [ziel, ...liste];
-    }
-    return liste;
-  }, [outlooks, filter, fokusId]);
+    if (filter === "starred") return sorted.filter((o) => o.isStarred);
+    return sorted.filter((o) => o.status === filter);
+  }, [outlooks, filter]);
+
+  /** Ziel eines Cockpit-Klicks: genau ein Setup, in voller Tiefe. */
+  const fokus = useMemo(
+    () => (fokusId ? outlooks.find((o) => o.id === fokusId) : undefined),
+    [outlooks, fokusId],
+  );
+
+  // Die Detailansicht hängt an der URL, nicht nur am State — sonst wäre sie
+  // weder verlinkbar noch überlebte sie ein Neuladen.
+  const oeffneDetail = (id: string | undefined | null) => {
+    if (!id) return;
+    setFokusId(id);
+    router.replace(`/journal/outlook?outlook=${id}`);
+  };
+
+  const zurueckZurListe = () => {
+    setFokusId(null);
+    router.replace("/journal/outlook");
+  };
 
   const handleSave = async (data: OutlookRecord) => {
     try {
@@ -252,6 +317,7 @@ export default function OutlookView() {
     if (!o.id || !confirm(`Outlook ${o.symbol} löschen?`)) return;
     await removeOutlook(o.id);
     toast.success("Outlook gelöscht");
+    if (fokusId === o.id) zurueckZurListe();
     await reload();
   };
 
@@ -277,6 +343,159 @@ export default function OutlookView() {
     router.push("/journal");
   };
 
+  /** Zone/Entry/SL/TP — in Liste und Detail identisch dargestellt. */
+  const Levels = ({ o }: { o: OutlookRecord }) =>
+    o.interestingZone || o.targetEntry || o.targetSl || o.targetTp ? (
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-muted">
+        {o.interestingZone && <span>Zone {o.interestingZone}</span>}
+        {o.targetEntry && <span>E {o.targetEntry}</span>}
+        {o.targetSl && <span className="text-down">SL {o.targetSl}</span>}
+        {o.targetTp && <span className="text-up">TP {o.targetTp}</span>}
+      </div>
+    ) : null;
+
+  // ── Detailansicht: ein Setup, alles dazu ───────────────────────────────────
+  if (fokus) {
+    const statusCfg = OUTLOOK_STATUS_CONFIG[fokus.status];
+    const signal = fokus.signalId ? signals[fokus.signalId] : undefined;
+    const card = cardForOutlook(fokus, signal, quintiles);
+    return (
+      <div className="space-y-4 anim-fade-in max-w-[900px] mx-auto">
+        <button
+          onClick={zurueckZurListe}
+          className="inline-flex items-center gap-1.5 text-[12px] text-muted hover:text-text transition-colors"
+        >
+          <i className="ph-bold ph-arrow-left" />
+          Alle Outlooks
+        </button>
+
+        <Panel>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => toggleStar(fokus)}
+                className={`text-base ${fokus.isStarred ? "text-warn" : "text-faint hover:text-muted"}`}
+                title="Favorit"
+              >
+                <i className={`ph-${fokus.isStarred ? "fill" : "bold"} ph-star`} />
+              </button>
+              <span className="font-bold text-[18px] font-mono">{fokus.symbol}</span>
+              <Badge tone={fokus.direction === "long" ? "up" : "down"}>{fokus.direction}</Badge>
+              <Badge tone={statusCfg.tone}>{statusCfg.label}</Badge>
+              <span className="ml-auto">
+                <ConfidenceStars value={fokus.confidence} />
+              </span>
+            </div>
+
+            <Herkunft outlook={fokus} signal={signal} />
+
+            {/* Verdikt, Quintile, Linien-Info und High-Impact-Kalender —
+                die Inhalte des früheren Cockpit-Popups. */}
+            <FundamentalDetail
+              card={card}
+              rankingByCcy={rankingByCcy}
+              eventsByCcy={eventsByCcy}
+            />
+
+            {fokus.thesis && (
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-faint mb-1">
+                  These
+                </div>
+                <p className="text-[13px] text-text whitespace-pre-wrap">{fokus.thesis}</p>
+              </div>
+            )}
+
+            {fokus.fundamentalOutlook && (
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-faint mb-1">
+                  Fundamentale Einschätzung
+                </div>
+                <p className="text-[12px] text-muted whitespace-pre-wrap">
+                  {fokus.fundamentalOutlook}
+                </p>
+              </div>
+            )}
+
+            <Levels o={fokus} />
+
+            {(fokus.confluences?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {fokus.confluences!.map((c) => (
+                  <span
+                    key={c}
+                    className="px-1.5 py-0.5 rounded bg-surface2 text-[10px] text-muted"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {(fokus.strategyChecklist?.length ?? 0) > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-faint">
+                  Checkliste {fokus.strategyChecklist!.filter((i) => i.checked).length}/
+                  {fokus.strategyChecklist!.length}
+                </div>
+                {fokus.strategyChecklist!.map((item, i) => (
+                  <div
+                    key={item.ruleId || i}
+                    className={`flex items-center gap-2 text-[12px] ${item.checked ? "text-text" : "text-faint"}`}
+                  >
+                    <i className={`ph-bold ${item.checked ? "ph-check-square" : "ph-square"}`} />
+                    {item.text}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <FundamentalsCompare symbol={fokus.symbol} fundamentals={fundamentals} />
+
+            <div className="flex items-center gap-1 pt-3 border-t border-border/60">
+              <StatusAktionen
+                outlook={fokus}
+                onStatus={setStatus}
+                onJournal={transferToJournal}
+              />
+              <span className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    setEditing(fokus);
+                    setShowWizard(true);
+                  }}
+                  className="p-1.5 rounded text-faint hover:text-accent transition-colors"
+                  title="Bearbeiten"
+                >
+                  <i className="ph-bold ph-pencil-simple" />
+                </button>
+                <button
+                  onClick={() => handleDelete(fokus)}
+                  className="p-1.5 rounded text-faint hover:text-down transition-colors"
+                  title="Löschen"
+                >
+                  <i className="ph-bold ph-trash" />
+                </button>
+              </span>
+            </div>
+          </div>
+        </Panel>
+
+        {showWizard && (
+          <OutlookWizardModal
+            outlook={editing}
+            onSave={handleSave}
+            onClose={() => {
+              setShowWizard(false);
+              setEditing(undefined);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── Listenansicht ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 anim-fade-in">
       <div className="flex flex-wrap items-center gap-3">
@@ -325,15 +544,12 @@ export default function OutlookView() {
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((o) => {
             const statusCfg = OUTLOOK_STATUS_CONFIG[o.status];
-            const aktuell = fromOutlookStatus(o.status);
             const signal = o.signalId ? signals[o.signalId] : undefined;
             return (
               <div
                 key={o.id}
                 id={`outlook-${o.id}`}
-                className={`bg-surface border rounded-md p-4 flex flex-col gap-2 anim-slide-up ${
-                  fokusId === o.id ? "border-accent" : "border-border"
-                }`}
+                className="bg-surface border border-border rounded-md p-4 flex flex-col gap-2 anim-slide-up"
               >
                 <div className="flex items-center gap-2">
                   <button
@@ -343,7 +559,13 @@ export default function OutlookView() {
                   >
                     <i className={`ph-${o.isStarred ? "fill" : "bold"} ph-star`} />
                   </button>
-                  <span className="font-semibold text-[14px]">{o.symbol}</span>
+                  <button
+                    onClick={() => oeffneDetail(o.id)}
+                    className="font-semibold text-[14px] hover:text-accent transition-colors"
+                    title="Details öffnen"
+                  >
+                    {o.symbol}
+                  </button>
                   <Badge tone={o.direction === "long" ? "up" : "down"}>{o.direction}</Badge>
                   <Badge tone={statusCfg.tone}>{statusCfg.label}</Badge>
                   <span className="ml-auto">
@@ -351,18 +573,11 @@ export default function OutlookView() {
                   </span>
                 </div>
 
-                <GvaHerkunft outlook={o} signal={signal} />
+                <Herkunft outlook={o} signal={signal} />
 
                 {o.thesis && <p className="text-[12px] text-muted line-clamp-3">{o.thesis}</p>}
 
-                {(o.interestingZone || o.targetEntry || o.targetSl || o.targetTp) && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-muted">
-                    {o.interestingZone && <span>Zone {o.interestingZone}</span>}
-                    {o.targetEntry && <span>E {o.targetEntry}</span>}
-                    {o.targetSl && <span className="text-down">SL {o.targetSl}</span>}
-                    {o.targetTp && <span className="text-up">TP {o.targetTp}</span>}
-                  </div>
-                )}
+                <Levels o={o} />
 
                 {(o.confluences?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -384,26 +599,7 @@ export default function OutlookView() {
                 <FundamentalsCompare symbol={o.symbol} fundamentals={fundamentals} />
 
                 <div className="flex items-center gap-1 mt-auto pt-2 border-t border-border/60">
-                  {aktuell === "beobachtung" && (
-                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "wartend")}>
-                      {setupLabel("wartend")}
-                    </Button>
-                  )}
-                  {(aktuell === "beobachtung" || aktuell === "wartend") && (
-                    <Button variant="subtle" size="sm" onClick={() => setStatus(o, "aktiv")}>
-                      {setupLabel("aktiv")}
-                    </Button>
-                  )}
-                  {aktuell === "aktiv" && (
-                    <Button variant="primary" size="sm" icon="ph-notebook" onClick={() => transferToJournal(o)}>
-                      Journalieren
-                    </Button>
-                  )}
-                  {!isClosedSetup(aktuell) && (
-                    <Button variant="ghost" size="sm" onClick={() => setStatus(o, "verworfen")}>
-                      {setupLabel("verworfen")}
-                    </Button>
-                  )}
+                  <StatusAktionen outlook={o} onStatus={setStatus} onJournal={transferToJournal} />
                   <span className="ml-auto flex items-center gap-1">
                     <button
                       onClick={() => {

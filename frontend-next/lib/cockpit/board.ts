@@ -1,16 +1,25 @@
 /**
  * Trade-Cockpit — reine Lane-Assembly (keine I/O, damit isoliert prüfbar).
  *
- * Drei Lanes, eingeordnet nach dem gemeinsamen Vokabular aus
+ * Vier Lanes, eingeordnet nach dem gemeinsamen Vokabular aus
  * `lib/setup/lifecycle.ts`:
  *  - Nähert sich : Live-Scanner `PREPARE`, Distanz ≤ Schwelle (ephemer,
  *                  `naehert` — NICHT gespeichert, verschwindet von selbst)
  *  - Getroffen   : `getroffen` (signals.status = 'new', unentschieden)
- *  - In Arbeit   : `beobachtung` + `wartend` + `aktiv`
+ *  - Watchlist   : `beobachtung` — gesehen, aber noch nichts vorbereitet
+ *  - In Arbeit   : `wartend` + `aktiv`
  *
  * Die Lane hiess früher „Wartend" und meinte damit das Gegenteil dessen, was
  * „Wartend" im Outlook bedeutet (dort: bewusste, bestehende Absicht). Deshalb
  * heisst sie jetzt „Nähert sich" — dasselbe Wort bedeutet überall dasselbe.
+ *
+ * **Zwei Herkünfte, dieselben Lanes.** Bis zum Modus-Umbau zeigte das Cockpit
+ * nur Setups aus einem GVA-Hit; wer nach einer anderen Strategie ein Setup von
+ * Hand erfasste, sah es hier nie — das Cockpit war damit nicht die Übersicht,
+ * die es zu sein behauptete. Manuelle Outlooks (`source='manual'`, ohne
+ * `signal_id`) laufen jetzt durch dieselbe Einsortierung und tragen nur ein
+ * eigenes Badge. Bewusst KEINE eigene Lane: die Herkunft ist eine Eigenschaft
+ * des Setups, kein eigener Zustand.
  *
  * Konfluenz = Stärke-Quintil-Ranking (pairBias) gegen die Linien-Richtung.
  * Nur `ausgefuehrt` (via „Genommen") landet im Journal → Winrate bleibt sauber.
@@ -18,7 +27,12 @@
 import { splitPair } from "@/lib/journal/fundamentals";
 import { pairBias, biasReason } from "@/lib/ml/pairBias";
 import { freshnessOf, type Freshness } from "@/lib/calc/realYield";
-import { effectiveSetupStatus, type SetupStatus } from "@/lib/setup/lifecycle";
+import {
+  effectiveSetupStatus,
+  fromOutlookStatus,
+  isClosedSetup,
+  type SetupStatus,
+} from "@/lib/setup/lifecycle";
 import type { MarketData } from "@/lib/gva/api";
 import type { SignalRecord } from "@/lib/journal/signals";
 import type { OutlookRecord } from "@/lib/journal/outlooks";
@@ -29,7 +43,7 @@ export const NAEHERT_PIP_LIMIT = 100;
 export const SNAPSHOT_FRESH_MIN = 2;
 export const SNAPSHOT_STALE_MIN = 5;
 
-export type LaneId = "naehert" | "getroffen" | "inArbeit";
+export type LaneId = "naehert" | "getroffen" | "watchlist" | "inArbeit";
 export type LineDir = "long" | "short";
 export type Verdict = "rueckenwind" | "gegenwind" | "neutral";
 
@@ -57,6 +71,14 @@ export interface CockpitCard {
   status: SetupStatus;
   /** Verknüpfter Outlook, sofern vorhanden (Altbestand hat keinen). */
   outlookId: string | null;
+  /**
+   * true = von Hand erfasstes Setup (`outlooks.source = 'manual'`), es gibt
+   * keinen GVA-Hit dahinter. Steuert nur das Badge — Lane und Lebenszyklus
+   * sind dieselben wie bei einem GVA-Setup.
+   */
+  manual: boolean;
+  /** Anlage-Zeitpunkt des Outlooks; sortiert Karten ohne HIT-Zeitstempel. */
+  createdAt: string | null;
   /** Anreicherung aus dem Outlook — entfällt still, wenn keiner verknüpft ist. */
   isStarred: boolean;
   hasThesis: boolean;
@@ -80,6 +102,7 @@ export interface CockpitCard {
 export interface CockpitLanes {
   naehert: CockpitCard[];
   getroffen: CockpitCard[];
+  watchlist: CockpitCard[];
   inArbeit: CockpitCard[];
 }
 
@@ -212,12 +235,54 @@ function cardFromSignal(
     hasThesis: (outlook?.thesis ?? "").trim().length > 0,
     checklistDone: checklist.filter((i) => i.checked).length,
     checklistTotal: checklist.length,
+    manual: false,
+    createdAt: s.createdAt,
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
     stale: false, // HIT-Karten zeigen keine Live-Distanz
     detectedLate: s.detectedLate,
     lineFormedDate: s.lineFormedDate,
+  };
+}
+
+/**
+ * Karte aus einem von Hand erfassten Outlook. Es gibt kein Signal, also auch
+ * keinen HIT-Zeitpunkt, keine Pip-Distanz und kein Bildungsdatum — die Richtung
+ * und das Level kommen aus dem Outlook selbst.
+ *
+ * Der Zustand wird NICHT neu erfunden: `fromOutlookStatus` ist dieselbe
+ * Übersetzung, die auch `effectiveSetupStatus` für verknüpfte Outlooks nutzt.
+ */
+function cardFromOutlook(o: OutlookRecord, quintiles: Record<string, number>): CockpitCard {
+  const { base, quote } = splitPair(o.symbol);
+  const lineDir = toLineDir(o.direction);
+  const checklist = o.strategyChecklist ?? [];
+  const level = o.interestingZone ?? o.targetEntry ?? null;
+  return {
+    key: `m-${o.id}`,
+    pair: o.symbol,
+    base,
+    quote,
+    lineDir,
+    lineLevel: level != null && Number.isFinite(level) ? level : null,
+    distance: null,
+    hitAt: null,
+    signalId: o.signalId ?? null,
+    status: fromOutlookStatus(o.status),
+    outlookId: o.id ?? null,
+    manual: true,
+    createdAt: o.createdAt ?? null,
+    isStarred: o.isStarred === true,
+    hasThesis: (o.thesis ?? "").trim().length > 0,
+    checklistDone: checklist.filter((i) => i.checked).length,
+    checklistTotal: checklist.length,
+    baseQuintile: quintiles[base],
+    quoteQuintile: quintiles[quote],
+    confluence: confluenceOf(base, quote, lineDir, quintiles),
+    stale: false,
+    detectedLate: false,
+    lineFormedDate: null,
   };
 }
 
@@ -243,6 +308,8 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
     hasThesis: false,
     checklistDone: 0,
     checklistTotal: 0,
+    manual: false,
+    createdAt: null,
     baseQuintile: quintiles[base],
     quoteQuintile: quintiles[quote],
     confluence: confluenceOf(base, quote, lineDir, quintiles),
@@ -253,24 +320,51 @@ function cardFromScanner(md: MarketData, quintiles: Record<string, number>): Coc
   };
 }
 
-/** In-Arbeit-Lane: alles, was angefasst, aber noch nicht abgeschlossen ist. */
-const IN_ARBEIT: readonly SetupStatus[] = ["beobachtung", "wartend", "aktiv"];
+/**
+ * Karte zu EINEM Outlook — für die Detailansicht unter `/journal/outlook`.
+ *
+ * Bewusst dieselben Fabriken wie im Board: die Detailseite darf Verdikt,
+ * Quintile und Linien-Info nicht anders herleiten als die Karte, von der aus
+ * man sie geöffnet hat. Mit verknüpftem Signal gewinnt die Signal-Karte (sie
+ * trägt HIT-Zeitpunkt und Bildungsdatum), sonst die Outlook-Karte.
+ */
+export function cardForOutlook(
+  outlook: OutlookRecord,
+  signal: SignalRecord | undefined,
+  quintiles: Record<string, number> = {},
+): CockpitCard {
+  return signal
+    ? cardFromSignal(signal, quintiles, outlook)
+    : cardFromOutlook(outlook, quintiles);
+}
 
 /**
- * Baut die drei Lanes. `scanner` = Live `/api/screener`, `signals` = signals-Tabelle,
- * `quintiles` = Stärke-Quintil je Währung (Champion), `outlookBySignal` = die
- * verknüpften Outlooks (Index signal_id → Outlook, darf leer sein).
+ * In-Arbeit-Lane: konkret vorbereitet oder laufend. `beobachtung` gehört
+ * bewusst NICHT mehr dazu — „gesehen" und „Einstieg definiert" sind zwei
+ * verschiedene Dinge, und in einer gemeinsamen Bahn verschwand der Unterschied.
+ */
+const IN_ARBEIT: readonly SetupStatus[] = ["wartend", "aktiv"];
+
+/**
+ * Baut die vier Lanes. `scanner` = Live `/api/screener`, `signals` =
+ * signals-Tabelle, `quintiles` = Stärke-Quintil je Währung (Champion),
+ * `outlookBySignal` = die verknüpften Outlooks (Index signal_id → Outlook,
+ * darf leer sein), `manualOutlooks` = von Hand erfasste Setups.
  * `pipLimit` steuert die Lane „Nähert sich".
  *
  * Eingeordnet wird nach dem VEREINHEITLICHTEN Status: ein Signal auf
- * 'watchlist', dessen Outlook auf `wartend` oder `aktiv` steht, bleibt in
+ * 'watchlist', dessen Outlook auf `wartend` oder `aktiv` steht, wandert nach
  * „In Arbeit" und zeigt dort denselben Zustand wie der Outlook.
+ *
+ * Abgeschlossene manuelle Setups (`ausgefuehrt` / `verworfen`) fallen raus —
+ * dieselbe Regel, nach der die Signal-Abfrage nur 'new' und 'watchlist' lädt.
  */
 export function assembleLanes(
   scanner: MarketData[],
   signals: SignalRecord[],
   quintiles: Record<string, number> = {},
   outlookBySignal: Record<string, OutlookRecord> = {},
+  manualOutlooks: OutlookRecord[] = [],
   pipLimit: number = NAEHERT_PIP_LIMIT,
 ): CockpitLanes {
   const naehert = scanner
@@ -285,14 +379,28 @@ export function assembleLanes(
     .map((md) => cardFromScanner(md, quintiles))
     .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
 
-  const byHitDesc = (a: CockpitCard, b: CockpitCard) =>
-    (b.hitAt ?? "").localeCompare(a.hitAt ?? "");
+  /** HIT-Zeit, ersatzweise Anlage-Zeit — manuelle Karten haben keinen HIT. */
+  const byRecentDesc = (a: CockpitCard, b: CockpitCard) =>
+    (b.hitAt ?? b.createdAt ?? "").localeCompare(a.hitAt ?? a.createdAt ?? "");
 
-  const karten = signals.map((s) => cardFromSignal(s, quintiles, outlookBySignal[s.id]));
+  const ausSignalen = signals.map((s) =>
+    cardFromSignal(s, quintiles, outlookBySignal[s.id]),
+  );
+
+  // Ein manueller Outlook, der doch an einem Signal hängt, wäre sonst zweimal
+  // im Board — die Signal-Karte gewinnt, sie trägt den Lebenszyklus.
+  const signalIds = new Set(signals.map((s) => s.id));
+  const ausOutlooks = manualOutlooks
+    .filter((o) => o.id && !(o.signalId && signalIds.has(o.signalId)))
+    .map((o) => cardFromOutlook(o, quintiles))
+    .filter((c) => !isClosedSetup(c.status));
+
+  const karten = [...ausSignalen, ...ausOutlooks];
 
   return {
     naehert,
-    getroffen: karten.filter((c) => c.status === "getroffen").sort(byHitDesc),
-    inArbeit: karten.filter((c) => IN_ARBEIT.includes(c.status)).sort(byHitDesc),
+    getroffen: karten.filter((c) => c.status === "getroffen").sort(byRecentDesc),
+    watchlist: karten.filter((c) => c.status === "beobachtung").sort(byRecentDesc),
+    inArbeit: karten.filter((c) => IN_ARBEIT.includes(c.status)).sort(byRecentDesc),
   };
 }

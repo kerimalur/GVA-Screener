@@ -8,6 +8,7 @@
 //   - toSnapshot hebt auch die alte Array-Antwort auf den neuen Vertrag
 import {
   assembleLanes,
+  cardForOutlook,
   boardStateOf,
   snapshotFreshness,
   zonesLabel,
@@ -112,7 +113,10 @@ const lanes = assembleLanes(
 check("«Nähert sich» zeigt nur nicht-getriggerte Pairs", lanes.naehert.map((c) => c.pair), ["EURUSD"]);
 check("«Nähert sich»-Karte erbt stale -> '~' vor der Distanz", lanes.naehert[0].stale, true);
 check("Getroffen-Karte trägt 'nachträglich erkannt'", lanes.getroffen[0].detectedLate, true);
-check("In-Arbeit-Karte ohne Flag", lanes.inArbeit[0].detectedLate, false);
+// 'watchlist' im Signal = `beobachtung` und liegt seit dem Modus-Umbau in der
+// eigenen Watchlist-Lane: „gesehen" und „Einstieg definiert" sind zwei Dinge.
+check("Watchlist-Karte ohne Flag", lanes.watchlist[0].detectedLate, false);
+check("In Arbeit bleibt leer, solange nichts vorbereitet ist", lanes.inArbeit.length, 0);
 check("HIT-Karten zeigen keine Live-Distanz", lanes.getroffen[0].stale, false);
 
 // Punkt 5: Bildungsdatum landet auf beiden Kartenquellen
@@ -157,10 +161,70 @@ check(
 
 // Signal ohne Outlook (Altbestand): Cockpit funktioniert, Anreicherung entfällt
 const ohneOutlook = assembleLanes([], [sig({ id: "s3", status: "watchlist" })], {}, {});
-check("Altbestand landet trotzdem in der Lane", ohneOutlook.inArbeit.length, 1);
-check("Altbestand ohne Outlook-Verknüpfung", ohneOutlook.inArbeit[0].outlookId, null);
-check("Altbestand fällt auf den Signal-Zustand zurück", ohneOutlook.inArbeit[0].status, "beobachtung");
+check("Altbestand landet trotzdem in der Lane", ohneOutlook.watchlist.length, 1);
+check("Altbestand ohne Outlook-Verknüpfung", ohneOutlook.watchlist[0].outlookId, null);
+check("Altbestand fällt auf den Signal-Zustand zurück", ohneOutlook.watchlist[0].status, "beobachtung");
 check("Scanner-Karten sind ephemer -> 'naehert'", lanes.naehert[0].status, "naehert");
+
+// --- Manuelle Setups: zweite Kartenquelle, dieselben Lanes ------------------
+// Vorher zeigte das Cockpit ausschliesslich Setups aus einem GVA-Hit — wer
+// nach einer anderen Strategie von Hand erfasste, sah davon hier nichts.
+const man = (over: Partial<OutlookRecord>): OutlookRecord => ({
+  id: "m1", symbol: "EURJPY", direction: "short", thesis: "", confidence: 3,
+  status: "observation", signalId: null, source: "manual",
+  createdAt: "2026-07-21T08:00:00Z", ...over,
+});
+
+const gemischt = assembleLanes(
+  [],
+  [sig({ id: "s9", pair: "GBPUSD", status: "new" })],
+  {},
+  {},
+  [
+    man({ interestingZone: 168.4 }),
+    man({ id: "m2", symbol: "AUDUSD", status: "waiting" }),
+    man({ id: "m3", symbol: "NZDUSD", status: "active" }),
+    // abgeschlossen -> fällt raus, genau wie ein 'journaled' Signal
+    man({ id: "m4", symbol: "USDCAD", status: "executed" }),
+    man({ id: "m5", symbol: "USDCHF", status: "cancelled" }),
+  ],
+);
+check("manuelles Setup landet ohne Signal in der Watchlist", gemischt.watchlist.map((c) => c.pair), ["EURJPY"]);
+check("manuelle Karte trägt das Badge", gemischt.watchlist[0].manual, true);
+check("GVA-Karte trägt es nicht", gemischt.getroffen[0].manual, false);
+check("Level kommt aus der interessanten Zone", gemischt.watchlist[0].lineLevel, 168.4);
+check("Richtung aus dem Outlook", gemischt.watchlist[0].lineDir, "short");
+check("Karte kennt ihren Outlook (Klickziel)", gemischt.watchlist[0].outlookId, "m1");
+check("manuelle Karte hat kein Signal", gemischt.watchlist[0].signalId, null);
+check(
+  "wartend/aktiv wandern nach «In Arbeit»",
+  gemischt.inArbeit.map((c) => [c.pair, c.status]),
+  // gleicher createdAt -> stabile Reihenfolge der Eingabe
+  [["AUDUSD", "wartend"], ["NZDUSD", "aktiv"]],
+);
+check("abgeschlossene manuelle Setups fallen raus", gemischt.watchlist.length + gemischt.inArbeit.length, 3);
+
+// Ein manueller Outlook, der doch an einem Signal hängt, darf nicht doppelt
+// im Board stehen — die Signal-Karte trägt den Lebenszyklus.
+const doppelt = assembleLanes(
+  [],
+  [sig({ id: "s9", pair: "GBPUSD", status: "new" })],
+  {},
+  {},
+  [man({ id: "m9", symbol: "GBPUSD", signalId: "s9" })],
+);
+check("kein Doppel-Eintrag bei verknüpftem Signal", doppelt.getroffen.length + doppelt.watchlist.length, 1);
+
+// --- Detailebene: Karte zu EINEM Outlook -------------------------------------
+const detailManuell = cardForOutlook(man({}), undefined, {});
+check("Detail-Karte eines manuellen Setups", [detailManuell.pair, detailManuell.manual], ["EURJPY", true]);
+const detailGva = cardForOutlook(
+  out({ id: "o7", symbol: "GBPUSD", signalId: "s7" }),
+  sig({ id: "s7", pair: "GBPUSD", status: "new" }),
+  {},
+);
+check("Detail-Karte mit Signal erbt den HIT", detailGva.hitAt, "2026-07-20T10:00:00Z");
+check("Detail-Karte mit Signal ist nicht manuell", detailGva.manual, false);
 
 // --- Rückwärtskompatibilität des Screener-Vertrags ---------------------------
 const legacy = toSnapshot([md({})]);

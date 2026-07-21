@@ -3,7 +3,77 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-20
+Stand: 2026-07-21
+
+## Modus-Navigation + Cockpit als einzige Setup-Oberfläche (2026-07-21)
+Die Sidebar zeigte sechs Gruppen mit ~20 Einträgen gleichzeitig, von überall
+erreichbar. Das ist keine Navigation, sondern eine Auswahl — und sie musste bei
+jedem Seitenaufruf neu getroffen werden. Design (Farben, Typo, Komponenten)
+unverändert; umgebaut wurde ausschliesslich die Informationsarchitektur.
+
+**Fünf Modi statt einer Sidebar.** `components/layout/nav.ts` definiert jetzt
+`MODES` (Key, Label, Icon, Basisroute, Zusammenfassung, Badge, Tabs) statt
+`NAV_GROUPS`: **Trades finden** (Cockpit · Ranking · Radar · Heatmap) ·
+**Journalieren** (Dashboard · Trades · Equity · Outlook · Kalender) ·
+**Backtesten** (Backtest-Lab · Replay) · **Labor** (Factor-Lab · Engine-Log ·
+Macro Terminal · Real Yield · News) · **System** (Strategien · Einstellungen ·
+Leitfaden). `modeForPath()` / `activeTabHref()` lösen Route → Modus über den
+**längsten** passenden Tab-Pfad auf — sonst zöge „/journal" den falschen Modus
+für „/journal/backtest" auf. Direktaufruf einer Unterseite rendert damit den
+richtigen Modus mit korrektem Tab. **Keine Route gelöscht oder umbenannt.**
+
+**Launcher unter `/`.** `app/(app)/page.tsx` (der alte Redirect und
+`app/page.tsx` sind weg — zwei Dateien lösten dieselbe Route auf). Live-Statuszeile
+(getroffen · nähert sich · in Beobachtung) aus **denselben** Loadern wie das
+Cockpit (`fetchScreener` + `signals` + `assembleLanes`), darunter die Kacheln.
+Bewusst **kein** Auto-Redirect und kein „letzter Modus". Jeder Zähler hängt an
+einem eigenen, einzeln abgesicherten Fetch: fällt einer aus, fehlt genau sein
+Badge — die Kachel rendert trotzdem. Badges: offene Hits · Trades ohne Adherence
+(`countTradesWithoutAdherence`, nur `session_type='live'`) · offene
+Replay-Sessions (FastAPI, strikt nebenläufig wegen Render-Kaltstart) · zuletzt
+ausgewertete ML-Nacht (serverseitig, `lib/nav/launcherServer.ts`).
+
+**Sidebar + TopBar entfallen** → `components/layout/ModeChrome.tsx`: Kopfzeile
+(Logo = Weg zurück zur Übersicht, Modus-Name, Suche, User, Logout) plus
+Tab-Leiste mit ausschliesslich den Seiten des aktiven Modus. Die volle Breite
+gehört dem Inhalt.
+
+**Routen-Sperre hat jetzt EINE Quelle.** `lib/nav/hidden.ts`
+(`HIDDEN_PREFIXES` + `HIDDEN_EXACT` + `isHiddenRoute`) — `proxy.ts` erzwingt
+sie, `nav.ts` filtert die Tabs damit. Vorher konnte ein Nav-Eintrag auf eine
+Route zeigen, die der Proxy sofort wegredirectet. Redirect-Ziel für
+Login-/Admin-Fallbacks und gesperrte Routen ist `/` statt `/cockpit`; `/` ist
+nicht mehr öffentlich (dort liegt jetzt eine App-Seite). `Prefetcher` prefetcht
+nur noch erreichbare Routen.
+
+**Cockpit zeigt alle Setups, nicht nur GVA.** Bisher erschienen nur Setups aus
+einem GVA-Hit — wer nach einer anderen Strategie von Hand erfasste, sah das
+Cockpit als Übersicht, die es nicht war. `assembleLanes` nimmt jetzt zusätzlich
+offene Outlooks mit `source='manual'` (`loadOpenManualOutlooks`, `signal_id`
+bleibt nullable — **keine Schema-Änderung**) und sortiert sie in dieselben
+Lanes. Badge „✎ MANUELL", keine eigene Lane. Ein manueller Outlook mit Signal
+wird dedupliziert (die Signal-Karte gewinnt). Neu **vier Lanes**: Nähert sich ·
+Getroffen · **Watchlist** (`beobachtung`) · In Arbeit (`wartend` + `aktiv`) —
+„gesehen" und „Einstieg definiert" sind zwei verschiedene Dinge.
+Statuswechsel laufen unverändert ausschliesslich über `setSetupStatus()`.
+
+**Eine Detailansicht je Setup.** `FundamentalModal` ist **ersetzt, nicht
+ergänzt**: Klick auf eine Karte führt auf `/journal/outlook?outlook=<id>`, das
+dort eine echte Detailansicht rendert (Liste bleibt ohne den Parameter). Die
+Modal-Inhalte leben in `components/cockpit/FundamentalDetail.tsx` (Verdikt,
+beide Quintile, Linien-Info, High-Impact-Kalender) und werden dort gezeigt;
+`lib/cockpit/detailServer.ts` lädt den fundamentalen Kontext für Cockpit **und**
+Outlook aus derselben Quelle. Lebenszyklus-Knöpfe (Genommen / Beobachten /
+Verwerfen) sitzen jetzt direkt auf der Karte. Neu **„+ Setup"** im Cockpit →
+bestehender `OutlookWizardModal` mit `source='manual'`, `signal_id=null`.
+
+**Verifiziert:** 140 pytest grün · `nav-modes-check.mts` (25 Kontrollwerte, neu)
+· `cockpit-board-check.mts` (inkl. 12 neue zu manuellen Setups und der
+Detail-Karte) · `setup-lifecycle-check.mts` unverändert grün · tsc + `next build`
+sauber · ESLint 18 Meldungen in 12 Dateien = exakt der Vorbestand (keine neue).
+**Angepasster Kontrollwert:** `beobachtung` liegt jetzt in `watchlist` statt in
+`inArbeit` — das ist die beabsichtigte Lane-Änderung, nicht ein Regress.
+**Visuell noch nicht gesichtet** (Auth nötig) — beim nächsten Login prüfen.
 
 ## Cockpit + Outlook zusammengeführt (2026-07-20, Teil 3)
 Vorher zwei getrennte Welten für dasselbe Konzept „Setup, das ich beobachte":

@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
 import FreshBadge from "@/components/ui/FreshBadge";
+import OutlookWizardModal from "@/components/journal/OutlookWizardModal";
 import { fetchScreener, PAIRS_TOTAL, type MarketData } from "@/lib/gva/api";
 import { loadSignals, type SignalRecord } from "@/lib/journal/signals";
 import {
   loadGvaOutlooks,
+  loadOpenManualOutlooks,
   outlooksBySignal,
+  saveOutlook,
   type OutlookRecord,
 } from "@/lib/journal/outlooks";
 import { setSetupStatus } from "@/lib/setup/setStatus";
@@ -25,19 +29,15 @@ import {
   type CockpitCard,
   type CockpitLanes,
 } from "@/lib/cockpit/board";
-import FundamentalModal, {
-  type CcyRanking,
-  type CockpitEvent,
-} from "./FundamentalModal";
 
 const POLL_MS = 15_000;
 
-const EMPTY: CockpitLanes = { naehert: [], getroffen: [], inArbeit: [] };
+const EMPTY: CockpitLanes = { naehert: [], getroffen: [], watchlist: [], inArbeit: [] };
 
 /**
  * Lane-Beschriftungen kommen aus dem gemeinsamen Vokabular — keine
  * hartkodierten Statusnamen mehr. „In Arbeit" ist bewusst ein Lane-Name und
- * kein Status: die Bahn fasst drei Zustände zusammen.
+ * kein Status: die Bahn fasst zwei Zustände zusammen.
  */
 const LANES: { id: keyof CockpitLanes; label: string; hint: string }[] = [
   {
@@ -46,10 +46,11 @@ const LANES: { id: keyof CockpitLanes; label: string; hint: string }[] = [
     hint: `Linie ≤ ${NAEHERT_PIP_LIMIT}p`,
   },
   { id: "getroffen", label: setupLabel("getroffen"), hint: "frischer GVA-HIT" },
+  { id: "watchlist", label: "Watchlist", hint: setupLabel("beobachtung") },
   {
     id: "inArbeit",
     label: "In Arbeit",
-    hint: [setupLabel("beobachtung"), setupLabel("wartend"), setupLabel("aktiv")].join(" · "),
+    hint: [setupLabel("wartend"), setupLabel("aktiv")].join(" · "),
   },
 ];
 
@@ -98,46 +99,126 @@ function OutlookHinweise({ card }: { card: CockpitCard }) {
   );
 }
 
-function Card({ card, onClick }: { card: CockpitCard; onClick: () => void }) {
+/**
+ * Eine Karte. Der Rumpf führt in die Detailebene (Outlook), die Fusszeile
+ * trägt den Lebenszyklus.
+ *
+ * Der Klick öffnete früher ein Modal mit fundamentalen Details — dieselben
+ * Inhalte, die auch der Outlook zeigte, nur anders. Jetzt gibt es einen Weg:
+ * die Karte führt auf den Outlook, und dort steht alles.
+ */
+function Card({
+  card,
+  busy,
+  onOpen,
+  onTake,
+  onWatch,
+  onDismiss,
+}: {
+  card: CockpitCard;
+  busy: boolean;
+  onOpen: (c: CockpitCard) => void;
+  onTake: (c: CockpitCard) => void;
+  onWatch: (c: CockpitCard) => void;
+  onDismiss: (c: CockpitCard) => void;
+}) {
   const dirCls =
     card.lineDir === "long" ? "text-up" : card.lineDir === "short" ? "text-down" : "text-muted";
   const dir = card.lineDir ? card.lineDir.toUpperCase() : "";
+  // Ohne Signal UND ohne Outlook gibt es nichts zu schreiben: „Nähert sich"-
+  // Karten sind ephemer und existieren nur im Scanner-Snapshot.
+  const bewegbar = card.signalId != null || card.outlookId != null;
+  const oeffenbar = card.outlookId != null;
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-md border border-border/60 bg-surface hover:border-faint transition-colors px-2.5 py-2"
-    >
-      <div className="font-mono font-bold text-[13px] flex items-center gap-1.5">
-        {card.pair}
-        {card.detectedLate && (
-          <span
-            title="Nachträglich aus der Kerzen-Historie erkannt — kein Live-Hit"
-            className="px-1 py-0.5 rounded bg-warn/15 text-warn text-[9px] font-bold"
+    <div className="rounded-md border border-border/60 bg-surface hover:border-faint transition-colors">
+      <button
+        onClick={() => onOpen(card)}
+        disabled={!oeffenbar}
+        title={
+          oeffenbar
+            ? "Details im Outlook öffnen"
+            : "Noch kein Outlook — entsteht mit dem HIT auf die Linie"
+        }
+        className="w-full text-left px-2.5 py-2 disabled:cursor-default"
+      >
+        <div className="font-mono font-bold text-[13px] flex items-center gap-1.5 flex-wrap">
+          {card.pair}
+          {card.manual && (
+            <span
+              title="Von Hand erfasstes Setup — kein GVA-Hit dahinter"
+              className="px-1 py-0.5 rounded bg-surface2 text-muted text-[9px] font-bold"
+            >
+              ✎ MANUELL
+            </span>
+          )}
+          {card.detectedLate && (
+            <span
+              title="Nachträglich aus der Kerzen-Historie erkannt — kein Live-Hit"
+              className="px-1 py-0.5 rounded bg-warn/15 text-warn text-[9px] font-bold"
+            >
+              ⏱ NACHTRÄGLICH
+            </span>
+          )}
+        </div>
+        <div className={`font-mono text-[11px] ${dirCls}`}>
+          {card.distance != null ? (
+            <>
+              {/* „~" = Distanz stammt vom Tagesschluss, nicht von einem Live-Preis */}
+              {card.stale ? "~" : ""}
+              {card.distance.toFixed(0)}p · {dir}
+            </>
+          ) : card.manual ? (
+            <>
+              {card.lineLevel != null ? `${card.lineLevel} · ` : ""}
+              {dir}
+            </>
+          ) : (
+            <>● HIT · {dir}</>
+          )}
+        </div>
+        {/* Karten in Watchlist/In Arbeit tragen mehrere mögliche Zustände —
+            der genaue steht drauf. */}
+        {card.status !== "naehert" && card.status !== "getroffen" && (
+          <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+            {setupLabel(card.status)}
+          </div>
+        )}
+        <Confluence card={card} />
+        <OutlookHinweise card={card} />
+      </button>
+
+      {bewegbar && (
+        <div className="flex items-center gap-0.5 border-t border-border/60 px-1 py-1">
+          <button
+            onClick={() => onTake(card)}
+            disabled={busy}
+            title="Genommen → Journal"
+            className="flex-1 py-1 rounded text-[10px] font-semibold text-accent hover:bg-active disabled:opacity-40"
           >
-            ⏱ NACHTRÄGLICH
-          </span>
-        )}
-      </div>
-      <div className={`font-mono text-[11px] ${dirCls}`}>
-        {card.distance != null ? (
-          <>
-            {/* „~" = Distanz stammt vom Tagesschluss, nicht von einem Live-Preis */}
-            {card.stale ? "~" : ""}
-            {card.distance.toFixed(0)}p · {dir}
-          </>
-        ) : (
-          <>● HIT · {dir}</>
-        )}
-      </div>
-      {/* In-Arbeit-Karten tragen drei mögliche Zustände — der genaue steht drauf. */}
-      {card.status !== "naehert" && card.status !== "getroffen" && (
-        <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
-          {setupLabel(card.status)}
+            <i className="ph-bold ph-notebook" /> Genommen
+          </button>
+          {card.status !== "beobachtung" && (
+            <button
+              onClick={() => onWatch(card)}
+              disabled={busy}
+              title={setupLabel("beobachtung")}
+              className="px-2 py-1 rounded text-[10px] text-muted hover:bg-active disabled:opacity-40"
+            >
+              <i className="ph-bold ph-eye" />
+            </button>
+          )}
+          <button
+            onClick={() => onDismiss(card)}
+            disabled={busy}
+            title={setupLabel("verworfen")}
+            className="px-2 py-1 rounded text-[10px] text-muted hover:bg-down-dim hover:text-down disabled:opacity-40"
+          >
+            <i className="ph-bold ph-x" />
+          </button>
         </div>
       )}
-      <Confluence card={card} />
-      <OutlookHinweise card={card} />
-    </button>
+    </div>
   );
 }
 
@@ -145,12 +226,20 @@ function Lane({
   label,
   hint,
   cards,
-  onCard,
+  busy,
+  onOpen,
+  onTake,
+  onWatch,
+  onDismiss,
 }: {
   label: string;
   hint: string;
   cards: CockpitCard[];
-  onCard: (c: CockpitCard) => void;
+  busy: boolean;
+  onOpen: (c: CockpitCard) => void;
+  onTake: (c: CockpitCard) => void;
+  onWatch: (c: CockpitCard) => void;
+  onDismiss: (c: CockpitCard) => void;
 }) {
   return (
     <div className="flex-1 min-w-0 rounded-lg border border-border bg-surface2/40 p-2.5">
@@ -164,26 +253,29 @@ function Lane({
         {cards.length === 0 ? (
           <p className="text-[11px] text-faint px-0.5 py-3">—</p>
         ) : (
-          cards.map((c) => <Card key={c.key} card={c} onClick={() => onCard(c)} />)
+          cards.map((c) => (
+            <Card
+              key={c.key}
+              card={c}
+              busy={busy}
+              onOpen={onOpen}
+              onTake={onTake}
+              onWatch={onWatch}
+              onDismiss={onDismiss}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-export default function CockpitBoard({
-  quintiles,
-  rankingByCcy,
-  eventsByCcy,
-}: {
-  quintiles: Record<string, number>;
-  rankingByCcy: Record<string, CcyRanking>;
-  eventsByCcy: Record<string, CockpitEvent[]>;
-}) {
+export default function CockpitBoard({ quintiles }: { quintiles: Record<string, number> }) {
   const router = useRouter();
   const [scanner, setScanner] = useState<MarketData[]>([]);
   const [signals, setSignals] = useState<SignalRecord[]>([]);
   const [outlooks, setOutlooks] = useState<Record<string, OutlookRecord>>({});
+  const [manuelle, setManuelle] = useState<OutlookRecord[]>([]);
   const [meta, setMeta] = useState({
     loaded: false,
     offline: false,
@@ -195,23 +287,27 @@ export default function CockpitBoard({
     /** ms des ERSTEN erfolgreichen Fetches — Basis fürs warmup-Zeitfenster */
     firstFetchMs: null as number | null,
   });
-  const [selected, setSelected] = useState<CockpitCard | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wizard, setWizard] = useState(false);
   const aliveRef = useRef(true);
 
   const loadSignalsSafe = useCallback(async () => {
     try {
       // 'new' + 'watchlist' = die beiden offenen Signalzustände. Die feinere
       // Einordnung (Beobachtung / Wartend / Aktiv) kommt aus dem Outlook.
-      const [fresh, watch, gvaOutlooks] = await Promise.all([
+      const [fresh, watch, gvaOutlooks, manual] = await Promise.all([
         loadSignals("new"),
         loadSignals("watchlist"),
         // Anreicherung ist optional: schlägt sie fehl, bleiben die Karten roh.
         loadGvaOutlooks().catch(() => [] as OutlookRecord[]),
+        // Manuelle Setups sind die zweite Kartenquelle — fällt sie aus, zeigt
+        // das Board weiterhin die GVA-Seite statt gar nichts.
+        loadOpenManualOutlooks().catch(() => [] as OutlookRecord[]),
       ]);
       if (!aliveRef.current) return;
       setSignals([...fresh, ...watch]);
       setOutlooks(outlooksBySignal(gvaOutlooks));
+      setManuelle(manual);
     } catch {
       /* Signals optional — Board bleibt aus Scanner nutzbar */
     }
@@ -267,7 +363,7 @@ export default function CockpitBoard({
   const lanes =
     state === "loading" || state === "warmup"
       ? EMPTY
-      : assembleLanes(scanner, signals, quintiles, outlooks);
+      : assembleLanes(scanner, signals, quintiles, outlooks, manuelle);
 
   const freshness = snapshotFreshness(meta.updated);
   const zonesTxt = zonesLabel(state, meta.zones, meta.pairsTotal);
@@ -280,13 +376,15 @@ export default function CockpitBoard({
         ? "Ranking neutral"
         : `${c.confluence.verdict === "rueckenwind" ? "Rückenwind" : "Gegenwind"} (${c.confluence.reason})`;
     const late = c.detectedLate ? "\nHinweis: nachträglich erkannt (Backend war offline)" : "";
-    return `GVA-Signal: ${line}${lvl}\nKonfluenz: ${conf}${late}`;
+    const herkunft = c.manual ? "Manuelles Setup" : `GVA-Signal: ${line}${lvl}`;
+    return `${herkunft}\nKonfluenz: ${conf}${late}`;
   };
 
   /**
    * Einziger Schreibpfad des Cockpits. `setSetupStatus` setzt Signal, spiegelt
    * den verknüpften Outlook und schliesst den Backend-Lebenszyklus in einem
    * Aufruf — ohne diesen letzten Schritt bliebe das Paar sticky auf HIT.
+   * Manuelle Setups laufen durch exakt dieselbe Funktion, nur ohne Signal.
    */
   const applyStatus = useCallback(
     async (c: CockpitCard, next: SetupStatus): Promise<boolean> => {
@@ -308,9 +406,18 @@ export default function CockpitBoard({
     [],
   );
 
+  /** Detailebene: EINE Ansicht je Setup — der Outlook. */
+  const onOpen = useCallback(
+    (c: CockpitCard) => {
+      if (!c.outlookId) return;
+      router.push(`/journal/outlook?outlook=${c.outlookId}`);
+    },
+    [router],
+  );
+
   const onTake = useCallback(
     async (c: CockpitCard) => {
-      if (!c.signalId) return;
+      if (!c.signalId && !c.outlookId) return;
       setBusy(true);
       // Linie verbrauchen ('done') + Outlook auf „Ausgeführt".
       await applyStatus(c, "ausgefuehrt");
@@ -321,7 +428,7 @@ export default function CockpitBoard({
           direction: c.lineDir === "short" ? "short" : "long",
           date: (c.hitAt ?? new Date().toISOString()).split("T")[0],
           notes: notesFor(c),
-          setups: ["setup_3day_gva"],
+          setups: c.manual ? [] : ["setup_3day_gva"],
           signalId: c.signalId,
           outlookId: c.outlookId,
         }),
@@ -333,15 +440,32 @@ export default function CockpitBoard({
 
   const mutateStatus = useCallback(
     async (c: CockpitCard, next: SetupStatus, okMsg: string) => {
-      if (!c.signalId) return;
+      if (!c.signalId && !c.outlookId) return;
       setBusy(true);
       const ok = await applyStatus(c, next);
       if (ok) toast.success(okMsg);
-      setSelected(null);
       await loadSignalsSafe();
       setBusy(false);
     },
     [loadSignalsSafe, applyStatus],
+  );
+
+  /**
+   * „+ Setup" — der einzige Weg, ein Setup von Hand anzulegen. Vorher entstand
+   * so etwas nur im Journal-Outlook und tauchte im Cockpit nie auf.
+   */
+  const anlegen = useCallback(
+    async (data: OutlookRecord) => {
+      try {
+        await saveOutlook({ ...data, source: "manual", signalId: null });
+        toast.success("Setup angelegt");
+        await loadSignalsSafe();
+      } catch {
+        toast.error("Setup konnte nicht angelegt werden");
+        throw new Error("save failed");
+      }
+    },
+    [loadSignalsSafe],
   );
 
   return (
@@ -385,11 +509,16 @@ export default function CockpitBoard({
             OANDA-Preise fehlen — Distanzen mit «~» stammen vom letzten Tagesschluss.
           </span>
         )}
+        <div className="ml-auto">
+          <Button size="sm" icon="ph-plus" onClick={() => setWizard(true)}>
+            Setup
+          </Button>
+        </div>
       </div>
 
       {state === "offline" && (
         <p className="text-[12px] text-warn">
-          GVA-Scanner offline — nur Signal-Historie sichtbar.
+          GVA-Scanner offline — nur Signal-Historie und manuelle Setups sichtbar.
         </p>
       )}
 
@@ -411,22 +540,19 @@ export default function CockpitBoard({
               label={l.label}
               hint={l.hint}
               cards={lanes[l.id]}
-              onCard={setSelected}
+              busy={busy}
+              onOpen={onOpen}
+              onTake={onTake}
+              onWatch={(c) => mutateStatus(c, "beobachtung", "Auf die Watchlist gesetzt")}
+              onDismiss={(c) => mutateStatus(c, "verworfen", "Verworfen")}
             />
           ))}
         </div>
       )}
 
-      <FundamentalModal
-        card={selected}
-        rankingByCcy={rankingByCcy}
-        eventsByCcy={eventsByCcy}
-        busy={busy}
-        onClose={() => setSelected(null)}
-        onTake={onTake}
-        onWatch={(c) => mutateStatus(c, "beobachtung", "Als beobachtet markiert")}
-        onDismiss={(c) => mutateStatus(c, "verworfen", "Verworfen")}
-      />
+      {wizard && (
+        <OutlookWizardModal onSave={anlegen} onClose={() => setWizard(false)} />
+      )}
     </div>
   );
 }

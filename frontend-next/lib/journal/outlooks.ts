@@ -83,6 +83,24 @@ export async function loadGvaOutlooks(): Promise<OutlookRecord[]> {
   });
 }
 
+/**
+ * Von Hand erfasste, noch offene Setups — die zweite Kartenquelle des Cockpits.
+ *
+ * Ohne sie zeigte das Cockpit nur, was aus einem GVA-Hit stammte; ein Setup
+ * nach einer anderen Strategie existierte dort schlicht nicht. `signal_id` ist
+ * nullable, es braucht dafür keine Schema-Änderung.
+ */
+export async function loadOpenManualOutlooks(): Promise<OutlookRecord[]> {
+  const rows = await fetchAll<OutlookRecord>({
+    table: "outlooks",
+    orderBy: "created_at",
+    filters: { source: "manual" },
+  });
+  // `fetchAll` kann nur auf Gleichheit filtern — abgeschlossene Zeilen fallen
+  // hier raus, nach derselben Regel wie `isClosedSetup` im Board.
+  return rows.filter((o) => o.status !== "executed" && o.status !== "cancelled");
+}
+
 /** Index signal_id → Outlook. Zeilen ohne Signal (manuell) fallen raus. */
 export function outlooksBySignal(rows: OutlookRecord[]): Record<string, OutlookRecord> {
   const map: Record<string, OutlookRecord> = {};
