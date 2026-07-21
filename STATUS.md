@@ -75,6 +75,58 @@ sauber · ESLint 18 Meldungen in 12 Dateien = exakt der Vorbestand (keine neue).
 `inArbeit` — das ist die beabsichtigte Lane-Änderung, nicht ein Regress.
 **Visuell noch nicht gesichtet** (Auth nötig) — beim nächsten Login prüfen.
 
+## Fertigstellungs-Paket: Radar-Übernahme, Leitfaden, Ranking-Chart (2026-07-21)
+Vier Arbeitspakete abgearbeitet (Prio 1→4), Design (5) offen gelassen.
+
+**1 — Manuelle Übernahme aus dem visuellen Radar.** Der „Pending"-Button in der
+Scanner-DetailsModal (heißt jetzt **„PENDING → COCKPIT"**) übernimmt ein
+gehittetes Pair manuell: neue `lib/setup/adopt.ts` → `adoptHitPair(pair, near,
+level)`. Reuse statt Sonderweg: vorhandener (auto-angelegter) Outlook wird über
+`setSetupStatus({signalId:null, next:"aktiv"})` auf **Aktiv** gehoben; fehlt
+einer, legt `saveOutlook` einen an (status 'active', source 'gva', ans offene
+Signal gekoppelt). Das **Signal bleibt bewusst 'new'** → das Pair steht im
+Cockpit weiter als **Getroffen** (wie ein Hit), im Outlook als **Aktiv**. Kein
+`markPair` mehr auf diesem Pfad, keine automatische Massenübernahme — nur auf
+Klick. `ScannerShell.handleAdopt` + Toast. Kontrollwerte:
+`scripts/adopt-check.mts` (3 Fälle grün). ⚠️ Braucht `outlooks.source` /
+`outlooks.signal_id` → hängt an der **offenen Migration `outlook_signal_link.sql`**
+(siehe Teil-3-Abschnitt unten); ohne sie schlägt die Übernahme mit Toast fehl.
+
+**2 — Test-Accounts (anlegen/löschen).** Geprüft, **funktioniert bereits**:
+`AccountSetupModal`/`AccountManageModal` (Journal, ⚙ „Konten") + `createAccount`/
+`deleteAccount` (löscht Konto inkl. Trades) für EK („Eigenkapital") und Funded.
+Kein Code geändert.
+
+**3 — Leitfaden auf aktuellen Stand.** `app/(app)/leitfaden/page.tsx`: altes
+Zwei-Modell-/5-Faktoren-Signalbild ersetzt durch **GVA-first**: „Was du tradest —
+GVA" (Linie = Signal, Fundamentales = Konfluenz), „Dein Workflow" (Radar → Hit →
+PENDING → Cockpit → Outlook → Journal), „Begriffe" (der eine Lebenszyklus
+Nähert/Getroffen/Beobachtung/Wartend/Aktiv/…), „Konfluenz — Ranking Q5/Q1". Die
+Faktor-Panels (COT/Zinsen/Retail/Saison/Intermarket/Kalender) bleiben als
+Referenz.
+
+**4 — Performance-Chart im Währungs-Ranking.** Neuer Panel „Performance seit
+Signal" (`/ml/ranking`): Kandidaten-Pairs (Q5×Q1 + Gruppen) als Pills,
+Umschalter **Daily/Weekly** und **Kerze/Linie**, Kursverlauf ab `weekStart` der
+Konstellation, %-Bewegung seit Signal (grün = in Signalrichtung). Backend neu
+`GET /api/candles?pair=&granularity=&since=` (main.py) + reine Transformation
+`data_pipeline.simple_candles` (D-Passthrough / W-Resample / since-Filter) —
+reused die **warme Tageskerzen-Cache des Scanners** (count=5000, kein extra
+OANDA-Call). Frontend: `fetchCandles` (lib/gva/api.ts), pures SVG
+`components/charts/CandleChart.tsx` (Kerze|Linie + Referenzlinie beim Start, keine
+neue Abhängigkeit), Client `components/ml/RankingPerformance.tsx`. Machbarkeit
+OANDA: **bestätigt** (D nativ, W resampled). Grenze: Startpunkt = Wochenstart der
+aktuellen Konstellation, nicht der exakte Q5-Eintritt einer Währung (bewusst
+einfach gehalten).
+
+**Offen: 5 — Design-Feinschliff** (Startseite/erster Eindruck) — bewusst nicht
+angefasst, wartet auf Kerims Richtung.
+
+**Verifiziert:** tsc + `next build` sauber; ESLint der berührten Dateien sauber;
+`adopt-check` / `setup-lifecycle-check` / `cockpit-board-check` grün; pytest
+`test_candles.py` 3 grün. **Deploy nötig:** Backend (Render, main.py +
+data_pipeline.py) und Frontend (Vercel). Live hinter Auth noch nicht gesichtet.
+
 ## Cockpit + Outlook zusammengeführt (2026-07-20, Teil 3)
 Vorher zwei getrennte Welten für dasselbe Konzept „Setup, das ich beobachte":
 `signals` (Backend, Cockpit) und `outlooks` (manuell, Journal) — ohne

@@ -96,6 +96,33 @@ export async function fetchScreener(): Promise<ScreenerSnapshot> {
   return toSnapshot(await response.json());
 }
 
+export interface Candle {
+  time: string; // 'YYYY-MM-DD'
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/**
+ * OHLC-Kerzen eines Pairs ab `since` (Signal-Start, ISO 'YYYY-MM-DD') für den
+ * Performance-Chart im Währungs-Ranking. `granularity` 'D' = Tag, 'W' = Woche.
+ * Quelle OANDA (Backend reused die warme Tageskerzen-Cache des Scanners).
+ */
+export async function fetchCandles(
+  pair: string,
+  granularity: "D" | "W",
+  since: string,
+): Promise<Candle[]> {
+  const res = await fetch(
+    `${API_URL}/api/candles?pair=${encodeURIComponent(pair)}` +
+      `&granularity=${granularity}&since=${encodeURIComponent(since)}`,
+  );
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  const json = await res.json();
+  return Array.isArray(json?.candles) ? (json.candles as Candle[]) : [];
+}
+
 /**
  * Schliesst den Lebenszyklus im Backend: 'done' verbraucht die Linie (Pair ist
  * danach nicht mehr TRIGGERED, der nächste Hit auf die nächste Linie alarmiert

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
@@ -586,6 +586,26 @@ def get_calendar():
     if not MACRO_CACHE["calendar"]:
         return macro.CAL_FALLBACK
     return MACRO_CACHE["calendar"]
+
+
+@app.get("/api/candles")
+def get_candles(pair: str, granularity: str = "D", since: str = ""):
+    """Kursverlauf eines Pairs für den Performance-Chart im Währungs-Ranking.
+
+    Reuse der warmen Tageskerzen-Cache des Scanners (count=5000, kein extra
+    OANDA-Call); 'W' wird daraus resampled. `since` (ISO 'YYYY-MM-DD') =
+    Signal-Start. Datenquelle OANDA."""
+    inst = pair.replace("_", "").upper()
+    try:
+        daily = fetch_daily_oanda(inst, count=5000)
+    except Exception as e:
+        print(f"candles: OANDA-Fehler {pair}: {e}")
+        return {"pair": pair, "granularity": str(granularity).upper(), "candles": []}
+    return {
+        "pair": pair,
+        "granularity": str(granularity).upper(),
+        "candles": simple_candles(daily, granularity, since),
+    }
 
 
 @app.get("/health")

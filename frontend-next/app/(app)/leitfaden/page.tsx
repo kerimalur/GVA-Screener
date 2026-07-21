@@ -3,9 +3,10 @@ import Panel from "@/components/layout/Panel";
 export const dynamic = "force-static";
 
 /**
- * Analyse-Leitfaden: erklärt, was die Zahlen jeder Datenquelle bedeuten,
- * wie man sie liest und was daraus fürs Trading folgt. Rein statischer
- * Referenz-Text — keine Live-Daten.
+ * Analyse-Leitfaden: erklärt den GVA-Workflow (was getradet wird, wie man von
+ * der Linie zum Trade kommt) und was die Zahlen der Konfluenz-Quellen bedeuten.
+ * Rein statischer Referenz-Text — keine Live-Daten. Stand: GVA-Cockpit als
+ * Startseite, Fundamentales ist Konfluenz statt Signal (vgl. STATUS.md).
  */
 
 function Read({ children }: { children: React.ReactNode }) {
@@ -39,63 +40,141 @@ export default function Page() {
   return (
     <div className="space-y-5 max-w-[1000px] mx-auto">
 
-      {/* Übersicht: was fließt in Signale, was ist nur Anzeige */}
+      {/* Kern: Was getradet wird — GVA */}
       <Panel
-        title="Wie das Tool entscheidet"
-        subtitle="Welche Daten Signale erzeugen — und welche nur Kontext sind"
+        title="Was du tradest — GVA"
+        subtitle="Die GVA-Linie ist das Signal. Alles Fundamentale ist Konfluenz, kein Gate."
       >
         <div className="space-y-4 text-[13px] leading-relaxed">
           <p className="text-muted">
-            Zwei getrennte Modelle rechnen aus denselben Rohdaten eine Richtung. Beide brauchen{" "}
-            <span className="text-text font-medium">≥ 2 gleichgerichtete Faktoren und eine Mehrheit</span>,
-            sonst „NEUTRAL“ (kein Signal).
+            Der Scanner erkennt das <span className="text-text font-medium">GVA-Kerzenmuster</span> und
+            bildet daraus <span className="text-text font-medium">Linien</span>: eine{" "}
+            <span className="text-down">Short-Linie</span> (Widerstand, oben) und eine{" "}
+            <span className="text-up">Long-Linie</span> (Unterstützung, unten). Berührt der Marktpreis
+            eine Linie, ist das ein <span className="text-warn font-medium">HIT</span> — der einzige
+            eigentliche Trade-Auslöser. Bei einem Live-Hit kommt ein Telegram-Alert.
           </p>
-
           <div className="grid md:grid-cols-2 gap-3">
-            <div className="rounded border border-border bg-surface2 p-3">
-              <div className="text-text font-bold text-[13px] mb-1">Pair-Screener / Weekly Outlook</div>
-              <div className="text-[11px] text-faint mb-2">5 Faktoren je Pair → LONG/SHORT/NEUTRAL</div>
-              <ul className="text-[12px] text-muted space-y-0.5 font-mono">
-                <li>1. Zinsdifferenz (Niveau + Drehung)</li>
-                <li>2. COT-Flow (Δ % Open Interest)</li>
-                <li>3. Saisonalität (aktueller Monat)</li>
-                <li>4. 10Y-Yield-Spread (3M-Trend)</li>
-                <li>5. Retail-Sentiment (konträr)</li>
+            <div className="rounded border border-up/30 bg-up/5 p-3">
+              <div className="text-up font-bold text-[13px] mb-1">Signal = GVA</div>
+              <ul className="text-[12px] text-muted space-y-0.5">
+                <li>GVA-Muster → Linie (Short/Long)</li>
+                <li>Preis berührt Linie → HIT</li>
+                <li>Nur GVA-Setups werden getradet</li>
               </ul>
             </div>
             <div className="rounded border border-border bg-surface2 p-3">
-              <div className="text-text font-bold text-[13px] mb-1">Währungs-Bias / Cockpit</div>
-              <div className="text-[11px] text-faint mb-2">4 Faktoren je Währung → LONG/SHORT/NEUTRAL</div>
-              <ul className="text-[12px] text-muted space-y-0.5 font-mono">
-                <li>1. COT-Flow 4W (Δ % OI)</li>
-                <li>2. Leitzins-Trend (6M)</li>
-                <li>3. CB-Stance (manueller Score)</li>
-                <li>4. Stärke 1M (Momentum)</li>
+              <div className="text-text font-bold text-[13px] mb-1">Konfluenz (kein Gate)</div>
+              <ul className="text-[12px] text-muted space-y-0.5">
+                <li>Währungs-Ranking (Stärke-Quintil Q5/Q1)</li>
+                <li>COT · Zinsen · Saison · Retail (Referenz unten)</li>
+                <li>Gibt Rückenwind/Gegenwind — verbietet nichts</li>
               </ul>
             </div>
           </div>
+          <p className="text-[12px] text-faint">
+            Früher rechneten zwei Faktor-Modelle selbst eine Richtung (Weekly Outlook, Setup-Finder).
+            Diese Ansichten sind heute ausgeblendet — die Richtung kommt von der GVA-Linie, die Zahlen
+            unten sind nur noch Konfluenz.
+          </p>
+        </div>
+      </Panel>
 
-          <div className="rounded border border-border bg-surface p-3">
-            <div className="text-[9px] uppercase tracking-widest text-faint mb-2">Nur Anzeige — fließt in KEIN Signal</div>
-            <ul className="text-[12px] text-muted space-y-1">
-              <li>
-                <span className="text-text font-medium">Intermarket</span> (Korrelationsmatrix, DXY, Overlays) —
-                reiner Kontext, kein Faktor.
-              </li>
-              <li>
-                <span className="text-text font-medium">Kalender / News</span> — erzeugt Warn-Flags („⚡ IN PLAY“,
-                News-Badges), verändert aber die berechnete Richtung nicht.
-              </li>
-              <li>
-                <span className="text-text font-medium">Makro-Detailpanels</span> (CPI, Arbeitslosigkeit, PMI/CLI) —
-                nur die Leitzins- und 10Y-Serien gehen in Faktoren ein, der Rest ist Hintergrund.
-              </li>
-              <li>
-                <span className="text-text font-medium">Cockpit-Zusätze</span> (Retail-Aggregat, Saison-Pairs,
-                News) — Anzeige; die Bias-Richtung bleibt das 4-Faktoren-Modell.
-              </li>
-            </ul>
-          </div>
+      {/* Workflow: von der Linie zum Trade */}
+      <Panel
+        title="Dein Workflow — von der Linie zum Trade"
+        subtitle="Radar → Hit → Übernehmen → Cockpit → Outlook → Journal"
+      >
+        <div className="space-y-4 text-[13px] leading-relaxed">
+          <ol className="space-y-2 text-muted">
+            <li>
+              <span className="text-text font-medium">1. Startseite / Radar.</span> Der visuelle Radar
+              zeigt je Pair, wo der Preis zwischen Long- und Short-Linie steht. Gehittete Pairs
+              pulsieren.
+            </li>
+            <li>
+              <span className="text-text font-medium">2. Übernehmen.</span> Klick auf ein gehittetes
+              Pair → im Detail-Fenster <span className="font-mono text-warn">PENDING → COCKPIT</span>.
+              Das Pair erscheint dann im Cockpit (als „Getroffen“) und im Outlook mit Status „Aktiv“.
+              Ohne diesen Klick passiert nichts — es wird nichts automatisch übernommen.
+            </li>
+            <li>
+              <span className="text-text font-medium">3. Cockpit (Startseite fürs Handeln).</span> Drei
+              Lanes, siehe Vokabular unten: <span className="text-text">Nähert sich → Getroffen → In
+              Arbeit</span>. Klick auf eine Karte öffnet die fundamentale Lage (Ranking + Kalender).
+            </li>
+            <li>
+              <span className="text-text font-medium">4. Entscheiden.</span>{" "}
+              <span className="text-up">Genommen</span> schreibt einen Trade ins Journal (zählt in die
+              Winrate), <span className="text-text">Beobachten</span> und{" "}
+              <span className="text-down">Verwerfen</span> ordnen ein, ohne zu handeln.
+            </li>
+            <li>
+              <span className="text-text font-medium">5. Outlook.</span> Detailebene über dem Setup:
+              These, Checkliste, Ziele (Entry/SL/TP). Status wandert Beobachtung → Wartend → Aktiv →
+              Ausgeführt/Verworfen.
+            </li>
+          </ol>
+        </div>
+      </Panel>
+
+      {/* Vokabular: der eine Lebenszyklus */}
+      <Panel
+        title="Begriffe — der eine Status-Lebenszyklus"
+        subtitle="Cockpit und Outlook sprechen dieselbe Sprache"
+      >
+        <div className="space-y-3 text-[13px]">
+          <ul className="space-y-1.5">
+            <Threshold v="Nähert sich">
+              Preis läuft auf eine Linie zu (≤ 100 Pips), aus dem Live-Scanner. Ephemer — verschwindet
+              von selbst, wird nicht gespeichert.
+            </Threshold>
+            <Threshold v="Getroffen">
+              Linie berührt (frischer HIT), noch nicht entschieden. So erscheint auch ein per „Pending“
+              übernommenes Pair im Cockpit.
+            </Threshold>
+            <Threshold v="Beobachtung">Gesehen, wird beobachtet — noch keine feste Absicht.</Threshold>
+            <Threshold v="Wartend">Trigger/Einstieg definiert, Preis ist noch nicht da.</Threshold>
+            <Threshold v="Aktiv">Trade läuft. Ein übernommenes Pair steht im Outlook auf „Aktiv“.</Threshold>
+            <Threshold v="Ausgeführt / Verworfen">
+              Abgeschlossen (im Journal) bzw. abgebrochen — fällt aus der Offen-Ansicht.
+            </Threshold>
+          </ul>
+          <Read>
+            „Wartend“ meint überall dasselbe: eine bewusste, bestehende Absicht. Die Cockpit-Lane für
+            das ephemere Heranlaufen heißt deshalb bewusst <span className="text-text">„Nähert sich“</span>
+            {" "}und nicht mehr „Wartend“.
+          </Read>
+        </div>
+      </Panel>
+
+      {/* Konfluenz-Ranking */}
+      <Panel
+        title="Konfluenz — Währungs-Ranking (Q5/Q1)"
+        subtitle="Stärke-Quintil je Währung: gibt Rückenwind oder Gegenwind"
+      >
+        <div className="space-y-3 text-[13px]">
+          <ul className="space-y-1.5">
+            <Threshold v="Stärke-Quintil">
+              Position des Zins-+-Saison-Scores einer Währung in ihrer eigenen 156-Wochen-Verteilung.{" "}
+              <span className="text-up">Q5</span> = stärkstes Fünftel, <span className="text-down">Q1</span>{" "}
+              = schwächstes. Q2–Q4 = Mittelfeld.
+            </Threshold>
+            <Threshold v="Rückenwind / Gegenwind">
+              Steht die Base auf <span className="text-up">Q5</span> und die Quote auf{" "}
+              <span className="text-down">Q1</span>, ist ein Long der Base fundamental gestützt
+              („Rückenwind“). Läuft die GVA-Linie dagegen, zeigt das Cockpit „Gegenwind“.
+            </Threshold>
+          </ul>
+          <Read>
+            Das Ranking ist <span className="text-text">Konfluenz, kein Gate</span>. Ein GVA-Setup gegen
+            das Ranking bleibt handelbar — es trägt nur eine Warnung. Die Zahlen darunter (COT, Zinsen,
+            Saison, Retail) sind die Bausteine dieses Rankings und als Referenz unten erklärt.
+          </Read>
+          <Act>
+            Bevorzuge Setups mit Rückenwind. Bei Gegenwind kleiner/vorsichtiger handeln oder einen
+            besonders sauberen technischen Grund verlangen.
+          </Act>
         </div>
       </Panel>
 

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchScreener, markPair, type MarketData } from "@/lib/gva/api";
 import { loadAppSettings } from "@/lib/settings/client";
+import { adoptHitPair } from "@/lib/setup/adopt";
+import { toast } from "@/components/ui/Toaster";
 import RadarView from "./RadarView";
 import HeatmapView from "./HeatmapView";
 import DetailsModal from "./DetailsModal";
@@ -49,6 +51,28 @@ export default function ScannerShell({ mode }: ScannerShellProps) {
     [load],
   );
 
+  // „Pending" → manuelle Übernahme: Cockpit (Getroffen) + Outlook („Aktiv").
+  // Nur auf Klick — keine automatische Massenübernahme aller Hits.
+  const handleAdopt = useCallback(
+    async (item: MarketData) => {
+      const level =
+        item.near === "SHORT" ? item.short : item.near === "LONG" ? item.long : null;
+      try {
+        const res = await adoptHitPair(item.pair, item.near, level);
+        toast.success(
+          res === "aktiviert"
+            ? `${item.pair} übernommen · Outlook auf „Aktiv"`
+            : `${item.pair} übernommen · Outlook („Aktiv") angelegt`,
+        );
+      } catch {
+        toast.error("Übernahme fehlgeschlagen");
+      }
+      setSelected(null);
+      await load();
+    },
+    [load],
+  );
+
   if (loading) {
     return (
       <div className="h-60 flex items-center justify-center text-muted text-sm font-mono">
@@ -77,7 +101,12 @@ export default function ScannerShell({ mode }: ScannerShellProps) {
         <HeatmapView data={data} onSelect={setSelected} />
       )}
       {selected && (
-        <DetailsModal item={selected} onClose={() => setSelected(null)} onMark={handleMark} />
+        <DetailsModal
+          item={selected}
+          onClose={() => setSelected(null)}
+          onMark={handleMark}
+          onAdopt={handleAdopt}
+        />
       )}
     </>
   );

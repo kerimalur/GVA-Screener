@@ -1,5 +1,6 @@
 import Panel from "@/components/layout/Panel";
 import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
+import RankingPerformance from "@/components/ml/RankingPerformance";
 
 export const dynamic = "force-dynamic";
 
@@ -202,6 +203,13 @@ export default async function Page() {
     ? new Date(d.updatedAt).toLocaleString("de-CH", { dateStyle: "medium", timeStyle: "short" })
     : null;
 
+  // Kandidaten-Pairs für den Performance-Chart: beste Konstellation zuerst,
+  // dann die Gruppen-Ideen; pro Pair nur einmal.
+  const perfPairs: PairIdea[] = [
+    ...d.pairIdeas.best,
+    ...d.pairIdeas.groups.flatMap((g) => g.ideas),
+  ].filter((p, i, arr) => arr.findIndex((x) => x.pair === p.pair) === i);
+
   return (
     <div className="space-y-5 max-w-[1200px] mx-auto">
       <Panel
@@ -214,6 +222,15 @@ export default async function Page() {
           ) : (
             <p className="text-sm text-muted">Diese Woche keine Stärke-Quintil-Extreme (Q5/Q1) — kein fundamentaler Rückenwind, reine GVA-Regeln.</p>
           )}
+        </div>
+      </Panel>
+
+      <Panel
+        title="Performance seit Signal"
+        subtitle="Vereinfachter Kursverlauf der Kandidaten-Pairs ab dem Wochenstart der aktuellen Konstellation. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
+      >
+        <div className="p-5">
+          <RankingPerformance pairs={perfPairs} since={d.weekStart} />
         </div>
       </Panel>
 

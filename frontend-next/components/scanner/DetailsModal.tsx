@@ -65,9 +65,11 @@ interface DetailsModalProps {
   item: MarketData;
   onClose: () => void;
   onMark: (pair: string, action: "pending" | "done") => void;
+  /** „Pending" = Hit-Pair manuell übernehmen (Cockpit + Outlook auf „Aktiv"). */
+  onAdopt: (item: MarketData) => void;
 }
 
-export default function DetailsModal({ item, onClose, onMark }: DetailsModalProps) {
+export default function DetailsModal({ item, onClose, onMark, onAdopt }: DetailsModalProps) {
   const type = radarType(item);
   const style = typeStyle(type);
   const target = targetLine(item, type);
@@ -166,18 +168,18 @@ export default function DetailsModal({ item, onClose, onMark }: DetailsModalProp
           )}
         </div>
 
-        {/* Aktionen nur bei getroffenem (HIT/triggered) Paar — Sticky-HIT-Lifecycle */}
+        {/* Aktionen nur bei getroffenem (HIT/triggered) Paar — Sticky-HIT-Lifecycle.
+            „Pending" übernimmt das Pair manuell: es bleibt im Cockpit als Getroffen
+            stehen und taucht im Outlook mit Status „Aktiv" auf. „Setup fertig"
+            verbraucht die Linie. */}
         {item.triggered && (
           <div className="flex gap-3 mt-6">
             <button
-              onClick={() => onMark(item.pair, "pending")}
-              className={`flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all border ${
-                item.pending
-                  ? "bg-warn/15 border-warn text-warn"
-                  : "bg-surface2 border-border text-text hover:border-warn"
-              }`}
+              onClick={() => onAdopt(item)}
+              title={'Ins Cockpit übernehmen & Outlook auf „Aktiv" setzen'}
+              className="flex-1 py-3 rounded text-xs font-bold tracking-widest transition-all border bg-surface2 border-border text-text hover:border-warn hover:text-warn"
             >
-              {item.pending ? "PENDING ✓" : "PENDING"}
+              PENDING → COCKPIT
             </button>
             <button
               onClick={() => onMark(item.pair, "done")}
