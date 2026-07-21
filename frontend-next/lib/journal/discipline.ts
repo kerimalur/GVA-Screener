@@ -9,6 +9,7 @@
  */
 
 import { loadPref, savePref } from "./prefs";
+import { TRADE_BUDGET_PER_MONTH } from "./budget";
 import type { Trade } from "./types";
 
 // ── A+-Checkliste ────────────────────────────────────────────────────────────
@@ -74,12 +75,17 @@ export function adherenceScore(answers: AdherenceAnswer[]): number {
 
 // ── Expectancy ───────────────────────────────────────────────────────────────
 
+/**
+ * Die Trade-Anzahl fehlt hier bewusst: sie ist das feste Monatsbudget
+ * (`TRADE_BUDGET_PER_MONTH`) und keine Einstellung mehr. Zwei Zahlen für
+ * dieselbe Sache konnten auseinanderlaufen — die Prognose rechnete dann mit
+ * mehr Trades, als das Budget überhaupt erlaubt.
+ */
 export interface ExpectancyParams {
   /** Risiko pro Trade in % des Kontos */
   riskPct: number;
   /** geplantes Reward:Risk (z.B. 4 = 1:4) */
   rr: number;
-  tradesPerMonth: number;
   /** Fallback-Winrate in %, wenn zu wenig geloggte Trades */
   fallbackWinrate: number;
 }
@@ -87,7 +93,6 @@ export interface ExpectancyParams {
 export const DEFAULT_EXPECTANCY_PARAMS: ExpectancyParams = {
   riskPct: 1,
   rr: 4,
-  tradesPerMonth: 4,
   fallbackWinrate: 40,
 };
 
@@ -108,12 +113,16 @@ export async function saveExpectancyParams(p: ExpectancyParams): Promise<void> {
 /**
  * Erwartetes Monats-Ergebnis in % des Kontos:
  * ((WR · RR · Risiko%) − ((1−WR) · Risiko%)) · Trades/Monat
- * Kontrollwerte (1 %, RR 4, 4 Trades/Mt): WR 25 % → +1.0 · WR 50 % → +6.0
+ *
+ * Die Trade-Anzahl ist das feste Budget (`TRADE_BUDGET_PER_MONTH`) und keine
+ * eigene Einstellung mehr — sonst könnte die Prognose mit mehr Trades rechnen,
+ * als du dir erlaubst.
+ * Kontrollwerte (1 %, RR 4, 8 Trades/Mt): WR 25 % → +2.0 · WR 50 % → +12.0
  */
 export function expectancyPerMonth(winratePct: number, p: ExpectancyParams): number {
   const wr = winratePct / 100;
   const perTrade = wr * p.rr * p.riskPct - (1 - wr) * p.riskPct;
-  return perTrade * p.tradesPerMonth;
+  return perTrade * TRADE_BUDGET_PER_MONTH;
 }
 
 /** Winrate in % aus Trades (Wins / alle), null wenn keine Trades. */

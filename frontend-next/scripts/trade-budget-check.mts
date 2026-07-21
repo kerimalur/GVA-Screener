@@ -12,6 +12,7 @@ import {
   usedThisMonth,
   weekBlockOf,
 } from "../lib/journal/budget";
+import { expectancyPerMonth } from "../lib/journal/discipline";
 import type { Trade } from "../lib/journal/types";
 
 let fails = 0;
@@ -105,6 +106,13 @@ check("letztes Kaestchen ist overrun", s3.boxes[8], "overrun");
 // Leerer Monat
 const s4 = budgetState([], d("2026-07-01"));
 check("Monatsanfang: 2 offen, 6 gesperrt", [s4.offen, s4.unlocked, s4.used], [2, 2, 0]);
+
+// --- Expectancy rechnet mit dem festen Budget -------------------------------
+// (WR·RR·Risiko%) − ((1−WR)·Risiko%), mal 8 Trades
+const p = { riskPct: 1, rr: 4, fallbackWinrate: 40 };
+check("WR 25 % -> +2,0 % / Monat", Math.round(expectancyPerMonth(25, p) * 10) / 10, 2);
+check("WR 50 % -> +12,0 % / Monat", Math.round(expectancyPerMonth(50, p) * 10) / 10, 12);
+check("WR 0 % -> −8,0 % / Monat", Math.round(expectancyPerMonth(0, p) * 10) / 10, -8);
 
 console.log(fails === 0 ? "\nAlle Kontrollwerte grün." : `\n${fails} Kontrollwert(e) FAIL.`);
 process.exitCode = fails === 0 ? 0 : 1;

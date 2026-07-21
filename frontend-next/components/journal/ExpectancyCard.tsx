@@ -10,6 +10,7 @@ import {
   loadExpectancyParams,
   type ExpectancyParams,
 } from "@/lib/journal/discipline";
+import { TRADE_BUDGET_PER_MONTH } from "@/lib/journal/budget";
 
 /**
  * Wiederverwendbares Expectancy-Widget: erwartetes Monats-Ergebnis in % des
@@ -73,7 +74,7 @@ export default function ExpectancyCard({ trades }: { trades: Trade[] }) {
           )}
         </div>
         <div>
-          Risiko {params.riskPct} % · RR 1:{params.rr} · {params.tradesPerMonth} Trades/Mt
+          Risiko {params.riskPct} % · RR 1:{params.rr} · {TRADE_BUDGET_PER_MONTH} Trades/Mt (Budget)
         </div>
       </div>
     </div>

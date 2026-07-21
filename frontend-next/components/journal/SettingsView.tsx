@@ -30,6 +30,7 @@ import {
   saveExpectancyParams,
   type ExpectancyParams,
 } from "@/lib/journal/discipline";
+import { TRADE_BUDGET_PER_MONTH } from "@/lib/journal/budget";
 import {
   hydrateAppSettings,
   loadAppSettings,
@@ -438,7 +439,7 @@ export default function SettingsView() {
         title="Expectancy-Parameter"
         subtitle="Erwartetes Monats-Ergebnis: ((WR·RR·Risiko%) − (1−WR)·Risiko%) · Trades/Monat"
       >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Risiko % pro Trade">
             <Input
               type="number" step="0.1" min={0.1} max={10}
@@ -451,13 +452,6 @@ export default function SettingsView() {
               type="number" step="0.5" min={0.5} max={20}
               value={expectancy.rr}
               onChange={(e) => updateExpectancy({ rr: parseFloat(e.target.value) || 4 })}
-            />
-          </Field>
-          <Field label="Trades / Monat">
-            <Input
-              type="number" step="1" min={1} max={100}
-              value={expectancy.tradesPerMonth}
-              onChange={(e) => updateExpectancy({ tradesPerMonth: parseInt(e.target.value) || 4 })}
             />
           </Field>
           <Field label="Fallback-Winrate %">
@@ -475,6 +469,7 @@ export default function SettingsView() {
             return `${v >= 0 ? "+" : ""}${v.toFixed(1)} % / Monat`;
           })()}
           {" "}· Fallback greift, solange weniger als 20 Trades geloggt sind.
+          {" "}· Gerechnet wird mit dem festen Budget von {TRADE_BUDGET_PER_MONTH} Trades/Monat.
         </p>
       </Panel>
 
