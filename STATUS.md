@@ -5,6 +5,58 @@
 
 Stand: 2026-07-21
 
+## Trade-Budget (8 Kästchen) + Signalstart-Fix (2026-07-21, Teil 3)
+Spec: `docs/superpowers/specs/2026-07-21-trade-budget-design.md`,
+Plan: `docs/superpowers/plans/2026-07-21-trade-budget-und-signalstart.md`
+
+**Trade-Budget: fest 8 pro Monat, sichtbar gemacht.** `lib/journal/budget.ts`
+(reine Berechnung, Muster wie `lib/cockpit/board.ts`, 24 Kontrollwerte in
+`scripts/trade-budget-check.mts`). Feste 7-Tage-Blöcke ab dem 1.: 1.–7. → 2 frei,
+8.–14. → 4, 15.–21. → 6, ab 22. → 8. **Bewusst keine Kalenderwochen** (ein Monat
+berührt 5–6, feste Blöcke ergeben immer vier). Kumulativ: ungenutzte Kästchen
+verfallen nicht — der Übertrag braucht keine eigene Regel, verbraucht wird von
+links, freigeschaltet nach Block. Ein Kästchen = ein Live-Trade,
+**kontenübergreifend** (Funded + EK zusammen, Backtest nie).
+
+**Widget** `components/journal/TradeBudgetCard.tsx` im Journal-Dashboard, bewusst
+**über** dem Konto-Umschalter (bekommt ALLE Trades, ändert sich beim Umschalten
+nicht). Vier Blöcke à zwei Kästchen, Überzug (9.+ Trade) hängt rot ausserhalb.
+
+**Cockpit** trägt den Chip „N von 8 übrig" / „Budget aufgebraucht" in der
+Kopfzeile und färbt bei leerem Budget den „Genommen"-Knopf warn mit Hinweis —
+aber **nie disabled**: der Trade ist beim Broker evtl. schon offen, ein
+verweigertes Journal macht Winrate und Adherence wertlos.
+
+**`tradesPerMonth` entfällt als Einstellung.** Das Feld ist aus `SettingsView`
+raus, `ExpectancyParams.tradesPerMonth` gestrichen; `expectancyPerMonth` rechnet
+mit `TRADE_BUDGET_PER_MONTH`. ⚠️ **Sichtbare Folge:** die Monatsprognose springt
+bei WR 50 %, 1 %, RR 1:4 von +6,0 % auf **+12,0 %** — nicht weil sich etwas
+verbessert hat, sondern weil die alte Zahl (4 Trades) zu niedrig war. Ein
+gespeicherter `tradesPerMonth`-Schlüssel in `user_preferences` bleibt als toter
+Wert liegen, wird aber nirgends gelesen (kein Migrationsschritt).
+
+**Signalstart im Währungs-Ranking korrigiert.** Das „Performance seit Signal"-
+Panel zeigte „seit 27.07." (Zukunft) und lud keine Kursdaten. **Ursache:**
+`run_weekly.py:50` schreibt `week_start` bewusst als **kommenden Montag** (das
+Ranking ist eine Prognose) — die Ranking-Seite reichte diese Zielwoche als
+`since` weiter, als wäre sie ein Startpunkt in der Vergangenheit. `run_weekly`
+ist korrekt und **unberührt**; der Fehler lag im Frontend.
+- Neu `lib/ml/signalStart.ts` (rein, 15 Kontrollwerte in
+  `scripts/signal-start-check.mts`): `signalStarts` bestimmt je Pair den Beginn
+  des aktuellen ununterbrochenen Laufs derselben Richtung (Richtungswechsel oder
+  Lücke bricht ihn), `sinceForPair` unterdrückt einen Start, der in der Zukunft
+  liegt (brandneues Signal ohne Verlauf).
+- `lib/ml/ranking.ts` lädt 26 Wochen Champion-Historie, leitet je Woche dieselben
+  Pair-Ideen ab und liefert `signalStartByPair` (Cache-Key auf `v2`).
+- `RankingPerformance` nimmt `startByPair` statt `since`; ein neues Signal zeigt
+  „neu — noch kein Verlauf" statt ewig zu laden. Kopfzeile nennt die Wochenzahl.
+
+**Verifiziert:** tsc + `next build` sauber · 143 pytest grün · sechs
+Kontrollwert-Skripte grün (neu: trade-budget 24, signal-start 15) · ESLint 18
+Meldungen in 12 Dateien = unveränderter Vorbestand. **Visuell noch nicht
+gesichtet** (Auth nötig) — beim nächsten Login prüfen: Budget-Widget im
+Dashboard, Chip im Cockpit, „seit"-Datum im Ranking-Performance-Panel.
+
 ## Design: zurück auf warmes Anthrazit + Orange-Akzent (2026-07-21, Teil 2)
 Vorgabe war ein HTML-Mockup (Startseite + Journal-Dashboard). Umgesetzt über die
 Tokens, nicht Seite für Seite — `app/globals.css` (@theme) ist die Single Source,
