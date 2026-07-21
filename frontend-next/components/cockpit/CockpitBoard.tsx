@@ -15,6 +15,9 @@ import {
   saveOutlook,
   type OutlookRecord,
 } from "@/lib/journal/outlooks";
+import { loadTrades } from "@/lib/journal/trades";
+import { budgetState } from "@/lib/journal/budget";
+import type { Trade } from "@/lib/journal/types";
 import { setSetupStatus } from "@/lib/setup/setStatus";
 import { setupLabel, type SetupStatus } from "@/lib/setup/lifecycle";
 import {
@@ -110,6 +113,7 @@ function OutlookHinweise({ card }: { card: CockpitCard }) {
 function Card({
   card,
   busy,
+  budgetLeer,
   onOpen,
   onTake,
   onWatch,
@@ -117,6 +121,8 @@ function Card({
 }: {
   card: CockpitCard;
   busy: boolean;
+  /** Monatsbudget aufgebraucht — warnt, blockiert aber nicht. */
+  budgetLeer: boolean;
   onOpen: (c: CockpitCard) => void;
   onTake: (c: CockpitCard) => void;
   onWatch: (c: CockpitCard) => void;
@@ -190,13 +196,22 @@ function Card({
 
       {bewegbar && (
         <div className="flex items-center gap-0.5 border-t border-border/60 px-1 py-1">
+          {/* Budget aufgebraucht → warnen, aber nie sperren: der Trade ist beim
+              Broker evtl. schon offen, und ein verweigertes Journal macht
+              Winrate und Adherence wertlos. */}
           <button
             onClick={() => onTake(card)}
             disabled={busy}
-            title="Genommen → Journal"
-            className="flex-1 py-1 rounded text-[10px] font-semibold text-accent hover:bg-active disabled:opacity-40"
+            title={
+              budgetLeer
+                ? "Budget des Monats ist aufgebraucht — Trade wird trotzdem geloggt"
+                : "Genommen → Journal"
+            }
+            className={`flex-1 py-1 rounded text-[10px] font-semibold hover:bg-active disabled:opacity-40 ${
+              budgetLeer ? "text-warn" : "text-accent"
+            }`}
           >
-            <i className="ph-bold ph-notebook" /> Genommen
+            <i className={`ph-bold ${budgetLeer ? "ph-warning" : "ph-notebook"}`} /> Genommen
           </button>
           {card.status !== "beobachtung" && (
             <button
@@ -227,6 +242,7 @@ function Lane({
   hint,
   cards,
   busy,
+  budgetLeer,
   onOpen,
   onTake,
   onWatch,
@@ -236,6 +252,7 @@ function Lane({
   hint: string;
   cards: CockpitCard[];
   busy: boolean;
+  budgetLeer: boolean;
   onOpen: (c: CockpitCard) => void;
   onTake: (c: CockpitCard) => void;
   onWatch: (c: CockpitCard) => void;
@@ -258,6 +275,7 @@ function Lane({
               key={c.key}
               card={c}
               busy={busy}
+              budgetLeer={budgetLeer}
               onOpen={onOpen}
               onTake={onTake}
               onWatch={onWatch}
@@ -276,6 +294,7 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
   const [signals, setSignals] = useState<SignalRecord[]>([]);
   const [outlooks, setOutlooks] = useState<Record<string, OutlookRecord>>({});
   const [manuelle, setManuelle] = useState<OutlookRecord[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [meta, setMeta] = useState({
     loaded: false,
     offline: false,
@@ -295,7 +314,7 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
     try {
       // 'new' + 'watchlist' = die beiden offenen Signalzustände. Die feinere
       // Einordnung (Beobachtung / Wartend / Aktiv) kommt aus dem Outlook.
-      const [fresh, watch, gvaOutlooks, manual] = await Promise.all([
+      const [fresh, watch, gvaOutlooks, manual, alleTrades] = await Promise.all([
         loadSignals("new"),
         loadSignals("watchlist"),
         // Anreicherung ist optional: schlägt sie fehl, bleiben die Karten roh.
@@ -303,11 +322,14 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
         // Manuelle Setups sind die zweite Kartenquelle — fällt sie aus, zeigt
         // das Board weiterhin die GVA-Seite statt gar nichts.
         loadOpenManualOutlooks().catch(() => [] as OutlookRecord[]),
+        // Nur für den Budget-Chip. Fällt es aus, entfällt der Chip still.
+        loadTrades().catch(() => [] as Trade[]),
       ]);
       if (!aliveRef.current) return;
       setSignals([...fresh, ...watch]);
       setOutlooks(outlooksBySignal(gvaOutlooks));
       setManuelle(manual);
+      setTrades(alleTrades);
     } catch {
       /* Signals optional — Board bleibt aus Scanner nutzbar */
     }
@@ -367,6 +389,7 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
 
   const freshness = snapshotFreshness(meta.updated);
   const zonesTxt = zonesLabel(state, meta.zones, meta.pairsTotal);
+  const budget = budgetState(trades);
 
   const notesFor = (c: CockpitCard): string => {
     const line = c.lineDir ? `${c.lineDir.toUpperCase()}-Linie` : "Linie";
@@ -509,6 +532,23 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
             OANDA-Preise fehlen — Distanzen mit «~» stammen vom letzten Tagesschluss.
           </span>
         )}
+        {/* Budget-Stand am Ort der Entscheidung. Leeres Budget wird betont,
+            aber nie erzwungen — siehe Warnung an der Karte. Kein Chip, solange
+            noch keine Trades geladen sind (Kaltstart / Fehler). */}
+        {trades.length > 0 && (
+          <span
+            title={`Trade-Budget des Monats: ${budget.used} von ${budget.total} verbraucht`}
+            className={
+              budget.offen === 0
+                ? "px-1.5 py-0.5 rounded bg-down/15 text-down text-[10px] font-bold font-mono"
+                : "px-1.5 py-0.5 rounded bg-surface2 text-faint text-[10px] font-mono"
+            }
+          >
+            {budget.offen === 0
+              ? `Budget aufgebraucht (${budget.used}/${budget.total})`
+              : `${budget.offen} von ${budget.total} übrig`}
+          </span>
+        )}
         <div className="ml-auto">
           <Button size="sm" icon="ph-plus" onClick={() => setWizard(true)}>
             Setup
@@ -541,6 +581,7 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
               hint={l.hint}
               cards={lanes[l.id]}
               busy={busy}
+              budgetLeer={budget.offen === 0}
               onOpen={onOpen}
               onTake={onTake}
               onWatch={(c) => mutateStatus(c, "beobachtung", "Auf die Watchlist gesetzt")}
