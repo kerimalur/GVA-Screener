@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { FX_INSTRUMENTS } from "@/lib/constants/instruments";
+import { signalStarts, type WeekIdeas } from "./signalStart";
 
 export interface RankingRow {
   ccy: string;
@@ -45,6 +46,12 @@ export interface RankingData {
   champion: RankingRow[];
   baseline: RankingRow[];
   pairIdeas: PairIdeas;
+  /**
+   * Seit wann die Konstellation je Pair unverändert steht ('YYYY-MM-DD').
+   * NICHT `weekStart` verwenden — das ist die Zielwoche der Prognose und liegt
+   * in der Zukunft (run_weekly schreibt den kommenden Montag).
+   */
+  signalStartByPair: Record<string, string>;
   liveHitrate: Record<string, { hits: number; total: number }>;
   stats: EngineStats;
 }
@@ -101,7 +108,8 @@ export function derivePairIdeas(rows: RankingRow[]): PairIdeas {
 
 // Rankings ändern sich wöchentlich (Sa-Job) — 5 min Server-Cache spart die
 // ~7 Supabase-Roundtrips pro Seitenaufruf (Ranking-Seite + Dashboard-WeekPlan).
-export const loadRankingData = unstable_cache(loadRankingDataUncached, ["ml-ranking-v1"], {
+// v2: Rückgabe um signalStartByPair erweitert — alter Cache-Eintrag hätte es nicht.
+export const loadRankingData = unstable_cache(loadRankingDataUncached, ["ml-ranking-v2"], {
   revalidate: 300,
 });
 
@@ -142,6 +150,44 @@ async function loadRankingDataUncached(): Promise<RankingData> {
     baseline.sort((a, b) => b.score - a.score);
   }
 
+  // Historie für den Signalstart: 26 Wochen Champion-Rankings reichen weit
+  // genug zurück; länger laufende Konstellationen sind ohnehin selten. Aus
+  // jeder Woche werden dieselben Pair-Ideen abgeleitet wie für die aktuelle
+  // Woche, damit „seit wann steht die Konstellation" konsistent gerechnet wird.
+  const signalStartByPair: Record<string, string> = {};
+  if (weekStart) {
+    const von = new Date(`${weekStart}T00:00:00Z`);
+    von.setUTCDate(von.getUTCDate() - 26 * 7);
+    const { data: hist } = await sb
+      .from("ml_weekly_rankings")
+      .select("week_start,ccy,score,strength_quintile")
+      .eq("model", "champion")
+      .gte("week_start", von.toISOString().slice(0, 10))
+      .order("week_start", { ascending: true });
+
+    const proWoche = new Map<string, RankingRow[]>();
+    for (const r of hist ?? []) {
+      const w = r.week_start as string;
+      if (!proWoche.has(w)) proWoche.set(w, []);
+      proWoche.get(w)!.push({
+        ccy: r.ccy as string,
+        score: Number(r.score ?? 0),
+        strength_quintile: Number(r.strength_quintile ?? 3),
+        // Für die Pair-Ableitung irrelevant, der Typ verlangt das Feld.
+        top_features: [],
+      });
+    }
+
+    const weeks: WeekIdeas[] = [...proWoche.entries()].map(([w, rowsForWeek]) => {
+      const ideen = derivePairIdeas(rowsForWeek);
+      return {
+        weekStart: w,
+        ideas: [...ideen.best, ...ideen.groups.flatMap((g) => g.ideas)],
+      };
+    });
+    Object.assign(signalStartByPair, signalStarts(weeks));
+  }
+
   const { data: matured } = await sb
     .from("ml_weekly_rankings")
     .select("model,hit")
@@ -177,6 +223,7 @@ async function loadRankingDataUncached(): Promise<RankingData> {
     champion,
     baseline,
     pairIdeas: derivePairIdeas(champion),
+    signalStartByPair,
     liveHitrate,
     stats: {
       experimentsTotal: total ?? 0,
