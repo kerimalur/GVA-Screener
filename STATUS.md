@@ -5,6 +5,42 @@
 
 Stand: 2026-07-21
 
+## Design: zurück auf warmes Anthrazit + Orange-Akzent (2026-07-21, Teil 2)
+Vorgabe war ein HTML-Mockup (Startseite + Journal-Dashboard). Umgesetzt über die
+Tokens, nicht Seite für Seite — `app/globals.css` (@theme) ist die Single Source,
+also trägt der Tausch auf alle ~20 Seiten durch.
+
+**Palette gedreht.** Vorher helle Grau-Welt (bg #737373, Karten DUNKLER #414141,
+Akzent off-white). Jetzt: bg **#221f19**, Karten **HELLER** (#2c2820), Kopfzeile
+am dunkelsten (#151310), Ränder weiss 12 %. Akzent **#e08a3c**, up #4fd88a,
+down #f0665c, Text #ece7da. `--color-warn` ist bewusst gelber (#d9b23c) — sonst
+wären Warnung und Akzent beides Orange und nicht unterscheidbar.
+⚠️ Das kehrt die frühere Vorgabe vom 13.07. um („warmes Anthrazit zu dunkel,
+nicht wieder dunkler machen"). Der Einwand ist aufgelöst, weil der Kontrast
+jetzt von der **aufgehellten Karte auf dunkler Fläche** kommt statt umgekehrt.
+
+**Navigation im Mockup-Stil.** Kopfzeile trägt die fünf Modus-Icons zentriert
+(aktiv = voller Akzent, dunkles Icon), darunter die Tabs des aktiven Modus
+(aktiv = Akzent bei 14 %). Startseite ist jetzt Begrüssung + **nummerierte
+Liste 01–05** statt Kachel-Raster; die Live-Statuszeile entfällt, weil die
+Zähler bereits in den Zeilen stehen. Tageszeit-Gruss und Datum kommen
+serverseitig (`launcherKopf()`, Zone Europe/Zurich) — `new Date()` im Render
+ist unrein und die Lint-Regel `react-hooks/purity` fängt es zu Recht ab.
+
+**Farb-Disziplin durchgesetzt.** Alle Ad-hoc-Hex ausserhalb der Tokens
+aufgeräumt: `chartTheme.ts` (einzige erlaubte Spiegelung, Recharts braucht
+SVG-Strings), Setup-Farben in `lib/journal/types.ts` (**Blau und Violett raus**),
+Heatmap- und COT-Zellen, Trade-Kalender, Radar-Puls, Real-Yield-Serie. Ein
+blauer Tooltip-Cursor in `BarSeriesChart` ist ebenfalls weg — Blau kommt in der
+Palette nicht vor. Wo die Deckkraft die Information trägt, stehen die
+RGB-Kanäle der Tokens jetzt kommentiert im Code.
+Nebenbei: `error.tsx` / `not-found.tsx` zeigten auf `/dashboard` (heute „News"
+im Labor) — Ziel ist jetzt der Launcher.
+
+**Verifiziert:** tsc + `next build` sauber · 143 pytest grün · alle vier
+Kontrollwert-Skripte grün · ESLint 18 Meldungen in 12 Dateien = unveränderter
+Vorbestand. **Visuell noch nicht gesichtet** (Auth nötig).
+
 ## Modus-Navigation + Cockpit als einzige Setup-Oberfläche (2026-07-21)
 Die Sidebar zeigte sechs Gruppen mit ~20 Einträgen gleichzeitig, von überall
 erreichbar. Das ist keine Navigation, sondern eine Auswahl — und sie musste bei

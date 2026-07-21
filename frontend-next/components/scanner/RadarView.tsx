@@ -107,7 +107,7 @@ export default function RadarView({ data, onSelect }: RadarViewProps) {
               <div className="w-24 font-bold text-[13px] flex items-center gap-2 group-hover:text-accent transition-colors">
                 <div
                   className={`w-2.5 h-2.5 rounded-full ${style.marker} ${
-                    style.pulse ? "animate-pulse shadow-[0_0_8px_rgba(210,153,34,0.6)]" : ""
+                    style.pulse ? "animate-pulse shadow-[0_0_8px_rgba(224,138,60,0.6)]" : ""
                   }`}
                 />
                 {item.pair}

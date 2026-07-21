@@ -348,7 +348,7 @@ export default function RealYieldView({
             <TimeSeriesChart
               data={pair.chart}
               series={[
-                { key: "diff", label: `Differenz ${ccyA}−${ccyB}`, color: "#ffffff" },
+                { key: "diff", label: `Differenz ${ccyA}−${ccyB}`, color: "var(--color-accent)" },
                 { key: "ryA", label: `Real Yield ${ccyA}`, color: "var(--color-up)", dashed: true },
                 { key: "ryB", label: `Real Yield ${ccyB}`, color: "var(--color-down)", dashed: true },
               ]}

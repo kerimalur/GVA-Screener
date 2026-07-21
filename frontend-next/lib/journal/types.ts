@@ -148,35 +148,37 @@ export const SETUP_DEFINITIONS: Record<string, SetupDefinition> = {
     key: "setup_daily_bos",
     label: "Daily BOS",
     short: "BOS",
-    color: "#22C55E",
+    // Farben aus der Terminal-Palette (globals.css) — kein Blau, kein Violett.
+    color: "#4fd88a", // --color-up
     description: "Daily Break of Structure",
   },
   setup_value_area: {
     key: "setup_value_area",
     label: "Value Area",
     short: "VA",
-    color: "#4A9EFF",
+    color: "#a89f8b", // --color-muted
     description: "Value Area Entry",
   },
   setup_market_structure: {
     key: "setup_market_structure",
     label: "Market Structure",
     short: "MS",
-    color: "#E67E22",
+    color: "#ece7da", // --color-text
     description: "Market Structure Shift",
   },
   setup_weekly_gva: {
     key: "setup_weekly_gva",
     label: "Weekly GVA",
     short: "W-GVA",
-    color: "#9B59B6",
+    color: "#d9b23c", // --color-warn
     description: "Weekly GVA Entry",
   },
   setup_3day_gva: {
     key: "setup_3day_gva",
     label: "3-Day GVA",
     short: "3D-GVA",
-    color: "#F1C40F",
+    // Kerims Haupt-Setup trägt den Akzent.
+    color: "#e08a3c", // --color-accent
     description: "3-Day GVA Entry",
   },
 };

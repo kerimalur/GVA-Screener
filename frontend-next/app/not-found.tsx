@@ -27,16 +27,16 @@ export default function NotFound() {
           Diese Seite existiert nicht oder wurde verschoben.
         </p>
         <Link
-          href="/dashboard"
+          href="/"
           style={{
             display: "inline-flex", alignItems: "center", gap: "8px",
             padding: "10px 20px", borderRadius: "8px",
-            background: "var(--color-accent)", color: "#fff",
+            background: "var(--color-accent)", color: "var(--color-sidebar)",
             fontSize: "13.5px", fontWeight: 600, textDecoration: "none",
             transition: "opacity 150ms",
           }}
         >
-          Zum Dashboard
+          Zur Übersicht
         </Link>
       </div>
     </div>

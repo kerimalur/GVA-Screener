@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MODES, type AppMode } from "./nav";
+import { createBrowserSupabase } from "@/lib/supabase/client";
 import { fetchScreener } from "@/lib/gva/api";
 import { loadSignals } from "@/lib/journal/signals";
 import { loadGvaOutlooks, loadOpenManualOutlooks, outlooksBySignal } from "@/lib/journal/outlooks";
@@ -13,24 +14,19 @@ import { assembleLanes } from "@/lib/cockpit/board";
  * Startseite: „was mache ich heute?"
  *
  * Die Sidebar zeigte ~20 Einträge gleichzeitig und stellte damit bei jedem
- * Seitenaufruf dieselbe Frage neu. Hier wird sie einmal beantwortet — danach
- * sieht man nur noch die Seiten des gewählten Modus.
+ * Seitenaufruf dieselbe Frage neu. Hier wird sie einmal beantwortet — als
+ * nummerierte Liste, nicht als Kachel-Raster: fünf Zeilen liest man von oben
+ * nach unten, fünf Kacheln muss man absuchen.
  *
  * **Nichts darf den Launcher blockieren.** Jede Zahl kommt aus einem eigenen,
- * einzeln abgesicherten Fetch; scheitert einer, fehlt genau sein Badge und der
- * Rest ist sofort bedienbar. Das Render-Backend schläft nach 15 min ein — beim
- * Kaltstart wartet die Statuszeile, die Kacheln nicht.
+ * einzeln abgesicherten Fetch; scheitert einer, fehlt genau sein Zähler und der
+ * Rest ist sofort bedienbar. Das Render-Backend schläft nach 15 min ein — die
+ * Liste wartet nie darauf.
  */
 
 const GVA_API = (
   process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com"
 ).replace(/\/+$/, "");
-
-interface Zaehler {
-  getroffen: number;
-  naehert: number;
-  beobachtet: number;
-}
 
 interface Badges {
   offeneHits: number | null;
@@ -38,66 +34,64 @@ interface Badges {
   offeneReplays: number | null;
 }
 
-function Kachel({
+/** Zähler rechts in der Zeile. `tone` trägt die Dringlichkeit, nicht die Zahl. */
+interface Zaehler {
+  text: string;
+  tone: string;
+}
+
+function ModusZeile({
   mode,
-  badge,
+  nummer,
+  zaehler,
+  letzte,
 }: {
   mode: AppMode;
-  badge: { text: string; betont: boolean } | null;
+  nummer: number;
+  zaehler: Zaehler | null;
+  letzte: boolean;
 }) {
   return (
     <Link
       href={mode.base}
-      className="group flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 hover:border-faint transition-colors"
+      className={`group flex items-center gap-5 py-5 px-1 border-t border-border transition-colors hover:bg-active/40 ${
+        letzte ? "border-b" : ""
+      }`}
     >
-      <div className="flex items-center gap-2.5">
-        <span className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-surface2 text-accent">
-          <i className={`ph-bold ${mode.icon} text-[17px]`} />
-        </span>
-        <span className="text-[15px] font-bold tracking-tight">{mode.label}</span>
-        <i className="ph-bold ph-arrow-right ml-auto text-[13px] text-faint group-hover:text-text transition-colors" />
-      </div>
-      <p className="text-[11.5px] text-muted leading-snug">{mode.summary}</p>
-      {badge && (
-        <span
-          className={`self-start px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
-            badge.betont ? "bg-accent/15 text-accent" : "bg-surface2 text-muted"
-          }`}
-        >
-          {badge.text}
+      <span className="font-mono text-[13px] text-faint w-6 shrink-0">
+        {String(nummer).padStart(2, "0")}
+      </span>
+      <i className={`ph-bold ${mode.icon} text-[20px] w-7 shrink-0`} />
+      <span className="flex-1 min-w-0">
+        <span className="block text-[17px] font-bold tracking-tight">{mode.label}</span>
+        <span className="block text-[12.5px] text-muted truncate">{mode.summary}</span>
+      </span>
+      {zaehler && (
+        <span className={`font-mono text-[13px] font-bold shrink-0 ${zaehler.tone}`}>
+          {zaehler.text}
         </span>
       )}
+      <i className="ph-bold ph-arrow-right text-[15px] text-faint group-hover:text-text transition-colors shrink-0" />
     </Link>
   );
 }
 
-function StatusZahl({
-  label,
-  wert,
-  tone,
-}: {
-  label: string;
-  wert: number | null;
-  tone: string;
-}) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span className={`font-mono text-[16px] font-bold ${tone}`}>{wert ?? "–"}</span>
-      <span className="text-[11px] text-muted">{label}</span>
-    </div>
-  );
-}
-
 export default function ModeLauncher({
+  datumLabel,
+  begruessung,
   letzteNacht,
   nachtIstNeu,
 }: {
+  /** z.B. „Dienstag · 21. Juli" — serverseitig gebildet (Zeitzone Europe/Zurich). */
+  datumLabel: string;
+  /** „Guten Morgen" / „Guten Tag" / „Guten Abend" — ebenfalls vom Server. */
+  begruessung: string;
   /** Datum der zuletzt ausgewerteten ML-Nacht ('YYYY-MM-DD'), null = keine. */
   letzteNacht: string | null;
-  /** höchstens einen Tag alt — serverseitig bestimmt (Render bleibt pur). */
+  /** höchstens zwei Tage alt — serverseitig bestimmt (Render bleibt pur). */
   nachtIstNeu: boolean;
 }) {
-  const [zaehler, setZaehler] = useState<Zaehler | null>(null);
+  const [vorname, setVorname] = useState("");
   const [badges, setBadges] = useState<Badges>({
     offeneHits: null,
     ohneAdherence: null,
@@ -105,39 +99,33 @@ export default function ModeLauncher({
   });
   const aliveRef = useRef(true);
 
-  /**
-   * Dieselben Loader wie im Cockpit, dieselbe Lane-Assembly — die Statuszeile
-   * darf nicht ihre eigene Vorstellung davon haben, was „ein aktives Setup" ist.
-   * Der Scanner ist optional: ohne ihn fehlt nur „nähert sich".
-   */
-  const ladeStatus = useCallback(async () => {
-    const [scanner, neu, watch, gva, manuell] = await Promise.all([
+  useEffect(() => {
+    aliveRef.current = true;
+
+    const supabase = createBrowserSupabase();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!aliveRef.current || !user) return;
+      const name =
+        user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0];
+      if (name) setVorname(String(name).split(" ")[0]);
+    });
+
+    // Offene Hits: dieselben Loader und dieselbe Lane-Assembly wie im Cockpit —
+    // der Launcher darf keine eigene Vorstellung davon haben, was ein offenes
+    // Setup ist. Der Scanner ist optional.
+    Promise.all([
       fetchScreener().then((s) => s.data).catch(() => []),
       loadSignals("new").catch(() => []),
       loadSignals("watchlist").catch(() => []),
       loadGvaOutlooks().catch(() => []),
       loadOpenManualOutlooks().catch(() => []),
-    ]);
-    if (!aliveRef.current) return;
-    const lanes = assembleLanes(
-      scanner,
-      [...neu, ...watch],
-      {},
-      outlooksBySignal(gva),
-      manuell,
-    );
-    setZaehler({
-      getroffen: lanes.getroffen.length,
-      naehert: lanes.naehert.length,
-      beobachtet: lanes.watchlist.length + lanes.inArbeit.length,
-    });
-    setBadges((b) => ({ ...b, offeneHits: lanes.getroffen.length }));
-  }, []);
-
-  useEffect(() => {
-    aliveRef.current = true;
-
-    void ladeStatus().catch(() => {});
+    ])
+      .then(([scanner, neu, watch, gva, manuell]) => {
+        if (!aliveRef.current) return;
+        const lanes = assembleLanes(scanner, [...neu, ...watch], {}, outlooksBySignal(gva), manuell);
+        setBadges((b) => ({ ...b, offeneHits: lanes.getroffen.length }));
+      })
+      .catch(() => {});
 
     countTradesWithoutAdherence()
       .then((n) => aliveRef.current && setBadges((b) => ({ ...b, ohneAdherence: n })))
@@ -149,68 +137,67 @@ export default function ModeLauncher({
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: { status?: string }[]) => {
         if (!aliveRef.current || !Array.isArray(rows)) return;
-        const offen = rows.filter((s) => s.status !== "done").length;
-        setBadges((b) => ({ ...b, offeneReplays: offen }));
+        setBadges((b) => ({ ...b, offeneReplays: rows.filter((s) => s.status !== "done").length }));
       })
       .catch(() => {});
 
     return () => {
       aliveRef.current = false;
     };
-  }, [ladeStatus]);
+  }, []);
 
-  const nachtBadge = (() => {
-    if (!letzteNacht) return null;
-    const datum = `${letzteNacht.slice(8, 10)}.${letzteNacht.slice(5, 7)}.`;
-    return nachtIstNeu
-      ? { text: `Nacht ${datum} ausgewertet`, betont: true }
-      : { text: `letzte Nacht ${datum}`, betont: false };
-  })();
+  const nachtZaehler: Zaehler | null = letzteNacht
+    ? {
+        text: nachtIstNeu
+          ? "neue Nacht"
+          : `${letzteNacht.slice(8, 10)}.${letzteNacht.slice(5, 7)}.`,
+        tone: nachtIstNeu ? "text-accent" : "text-muted",
+      }
+    : null;
 
-  const badgeFor = (mode: AppMode): { text: string; betont: boolean } | null => {
+  const zaehlerFor = (mode: AppMode): Zaehler | null => {
     switch (mode.badge) {
       case "offeneHits":
-        return badges.offeneHits ? { text: `${badges.offeneHits} offene Hits`, betont: true } : null;
+        return badges.offeneHits
+          ? { text: `${badges.offeneHits} Hits`, tone: "text-up" }
+          : null;
       case "ohneAdherence":
         return badges.ohneAdherence
-          ? { text: `${badges.ohneAdherence} ohne Adherence`, betont: false }
+          ? { text: `${badges.ohneAdherence} offen`, tone: "text-warn" }
           : null;
       case "offeneReplays":
         return badges.offeneReplays
-          ? { text: `${badges.offeneReplays} offene Sessions`, betont: false }
+          ? { text: `${badges.offeneReplays} offen`, tone: "text-muted" }
           : null;
       case "letzteNacht":
-        return nachtBadge;
+        return nachtZaehler;
       default:
         return null;
     }
   };
 
   return (
-    <div className="max-w-[900px] mx-auto space-y-6">
-      {/* Live-Statuszeile: was gerade los ist, bevor man irgendwo hinklickt. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-surface px-4 py-3">
-        <StatusZahl label="getroffen" wert={zaehler?.getroffen ?? null} tone="text-warn" />
-        <StatusZahl label="nähert sich" wert={zaehler?.naehert ?? null} tone="text-text" />
-        <StatusZahl
-          label="in Beobachtung"
-          wert={zaehler?.beobachtet ?? null}
-          tone="text-muted"
-        />
-        {zaehler === null && (
-          <span className="text-[10px] font-mono text-faint">lädt …</span>
-        )}
-        <Link
-          href="/cockpit"
-          className="ml-auto text-[11.5px] text-accent hover:underline inline-flex items-center gap-1"
-        >
-          Zum Cockpit <i className="ph-bold ph-arrow-right text-[11px]" />
-        </Link>
+    <div className="flex flex-col items-center px-6 py-10 text-center anim-fade-in">
+      <div className="font-mono text-[11px] font-bold uppercase tracking-[2px] text-accent mb-2.5">
+        {datumLabel}
       </div>
+      <h1 className="text-[42px] sm:text-[52px] font-bold tracking-[-1.5px] leading-none mb-1.5">
+        {begruessung}
+        {vorname ? `, ${vorname}.` : "."}
+      </h1>
+      <p className="text-[14.5px] text-muted mb-12">
+        Fünf Modi, ein Fokus pro Klick. Wähle, was heute zählt.
+      </p>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {MODES.map((m) => (
-          <Kachel key={m.key} mode={m} badge={badgeFor(m)} />
+      <div className="w-full max-w-[640px] text-left">
+        {MODES.map((m, i) => (
+          <ModusZeile
+            key={m.key}
+            mode={m}
+            nummer={i + 1}
+            zaehler={zaehlerFor(m)}
+            letzte={i === MODES.length - 1}
+          />
         ))}
       </div>
     </div>

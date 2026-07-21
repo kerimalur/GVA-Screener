@@ -56,6 +56,7 @@ export default function BarSeriesChart({
           tickFormatter={(v: number) => (yDigits != null ? v.toFixed(yDigits) : fmtCompact(v))}
           width={55}
         />
+        {/* cursor: neutraler Hover — Blau kommt in der Palette nicht vor */}
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={(value) => [
@@ -64,7 +65,7 @@ export default function BarSeriesChart({
               : String(value),
             valueLabel,
           ]}
-          cursor={{ fill: "rgba(88,166,255,0.06)" }}
+          cursor={{ fill: "rgba(255,255,255,0.06)" }}
         />
         <ReferenceLine y={0} stroke={chart.faint} />
         <Bar dataKey="value" radius={[2, 2, 0, 0]}>

@@ -1,48 +1,56 @@
 @import "tailwindcss";
 
 @theme {
-  /* === FX Terminal Design Tokens — helle Grau-Welt (Kerims Vorgabe):
-     Hintergrund #737373, Boxen/Sidebar DUNKLER (#3A3A3A) mit schwach-weißem
-     Rand — Kontrast entsteht durch dunkle Karten auf heller Fläche.
-     Kein Blau; Grün/Rot einzige semantische Farben, aktive Tabs schwarz. === */
-  --color-bg:       #737373;
-  --color-sidebar:  #3a3a3a;
-  --color-surface:  #414141;
-  --color-surface2: #3a3a3a;
-  --color-border:   rgba(255,255,255,0.30);
-  --color-border2:  rgba(255,255,255,0.50);
-  /* aktive Tabs/Pills: schwarz mit weißer Schrift */
-  --color-active:   #161616;
+  /* === FX Terminal Design Tokens — warmes Anthrazit (Kerims Vorgabe):
+     Hintergrund #221f19, Karten HELLER (#2c2820), Kopfzeile am dunkelsten
+     (#151310). Kontrast entsteht durch aufgehellte Karten auf dunkler Fläche —
+     umgekehrt zur früheren Grau-Welt.
+     Akzent ist ein warmes Orange; kein Blau. Grün/Rot bleiben die einzigen
+     semantischen Farben, Zahlen laufen in Mono.
+     Diese Datei ist die Single Source — Farben NICHT in Komponenten
+     hartkodieren. Einzige gespiegelte Stelle: components/charts/chartTheme.ts
+     (Recharts braucht konkrete SVG-Farbstrings). === */
+  --color-bg:       #221f19;
+  --color-sidebar:  #151310;
+  --color-surface:  #2c2820;
+  /* vertieft: verschachtelte Boxen, Pills, Lane-Flächen */
+  --color-surface2: #1a1714;
+  --color-border:   rgba(255,255,255,0.12);
+  --color-border2:  rgba(255,255,255,0.20);
+  /* Hover/aktive Flächen in der Navigation: warme Aufhellung */
+  --color-active:   #332e25;
 
-  --color-text:     #ffffff;
-  --color-muted:    #d6d5d0;
-  --color-faint:    #b0afa8;
+  --color-text:     #ece7da;
+  --color-muted:    #a89f8b;
+  --color-faint:    #87806f;
 
-  --color-accent:        #f2f1ea;
-  --color-accent-dim:    rgba(242,241,234,0.12);
-  --color-up:            #46d275;
-  --color-up-dim:        rgba(70,210,117,0.12);
-  --color-down:          #f05b52;
-  --color-down-dim:      rgba(240,91,82,0.12);
-  --color-warn:          #f5a623;
-  --color-warn-dim:      rgba(245,166,35,0.12);
-  --color-neutral:       #b0afa8;
-  --color-neutral-dim:   rgba(176,175,168,0.20);
+  --color-accent:        #e08a3c;
+  --color-accent-dim:    rgba(224,138,60,0.14);
+  --color-up:            #4fd88a;
+  --color-up-dim:        rgba(79,216,138,0.12);
+  --color-down:          #f0665c;
+  --color-down-dim:      rgba(240,102,92,0.12);
+  /* bewusst gelber als der Akzent — sonst sind Warnung und Akzent nicht
+     unterscheidbar (beides Orange). */
+  --color-warn:          #d9b23c;
+  --color-warn-dim:      rgba(217,178,60,0.12);
+  --color-neutral:       #87806f;
+  --color-neutral-dim:   rgba(135,128,111,0.20);
 
   /* Regime-Tags: farbiger Text + Rand (Outline-Chips) */
-  --color-regime-goldilocks:       #46d275;
-  --color-regime-goldilocks-dim:   rgba(70,210,117,0.12);
-  --color-regime-stagflation:      #f05b52;
-  --color-regime-stagflation-dim:  rgba(240,91,82,0.12);
-  --color-regime-reflation:        #cfcec4;
-  --color-regime-reflation-dim:    rgba(207,206,196,0.12);
-  --color-regime-overheating:      #f5a623;
-  --color-regime-overheating-dim:  rgba(245,166,35,0.12);
+  --color-regime-goldilocks:       #4fd88a;
+  --color-regime-goldilocks-dim:   rgba(79,216,138,0.12);
+  --color-regime-stagflation:      #f0665c;
+  --color-regime-stagflation-dim:  rgba(240,102,92,0.12);
+  --color-regime-reflation:        #c9bfa8;
+  --color-regime-reflation-dim:    rgba(201,191,168,0.12);
+  --color-regime-overheating:      #d9b23c;
+  --color-regime-overheating-dim:  rgba(217,178,60,0.12);
   --color-regime-disinflation:     #7ccf9e;
   --color-regime-disinflation-dim: rgba(124,207,158,0.12);
 
-  --radius-card: 12px;
-  --radius-tag: 4px;
+  --radius-card: 14px;
+  --radius-tag: 5px;
 
   --font-sans: var(--font-space-grotesk), 'Space Grotesk', -apple-system, sans-serif;
   --font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;

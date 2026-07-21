@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 
 export default function Error({
@@ -28,7 +29,7 @@ export default function Error({
         <div style={{
           width: "52px", height: "52px", borderRadius: "14px",
           background: "var(--color-down-dim)",
-          border: "1px solid rgba(239,100,97,0.2)",
+          border: "1px solid var(--color-down-dim)",
           display: "flex", alignItems: "center", justifyContent: "center",
           margin: "0 auto 24px auto",
         }}>
@@ -45,15 +46,15 @@ export default function Error({
             onClick={reset}
             style={{
               padding: "10px 20px", borderRadius: "8px",
-              background: "var(--color-accent)", color: "#fff",
+              background: "var(--color-accent)", color: "var(--color-sidebar)",
               fontSize: "13.5px", fontWeight: 600,
               border: "none", cursor: "pointer",
             }}
           >
             Erneut versuchen
           </button>
-          <a
-            href="/dashboard"
+          <Link
+            href="/"
             style={{
               padding: "10px 20px", borderRadius: "8px",
               background: "var(--color-surface2)",
@@ -63,8 +64,8 @@ export default function Error({
               textDecoration: "none",
             }}
           >
-            Dashboard
-          </a>
+            Zur Übersicht
+          </Link>
         </div>
         {error.digest && (
           <p style={{ marginTop: "24px", fontSize: "11px", color: "var(--color-faint)", fontFamily: "var(--font-mono)" }}>

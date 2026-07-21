@@ -27,10 +27,12 @@ export default function Segmented<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(opt.value)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded text-[12px] font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded text-[12px] transition-colors border border-transparent ${
+              // Aktiv = voller Akzent mit dunkler Schrift. Eine gedimmte
+              // Fläche war auf dem dunklen Grund kaum vom Rest zu trennen.
               active
-                ? "bg-active text-text border border-border"
-                : "text-muted hover:text-text border border-transparent"
+                ? "bg-accent text-sidebar font-semibold"
+                : "text-muted hover:text-text font-medium"
             }`}
           >
             {opt.icon && <i className={`ph-bold ${opt.icon}`} />}

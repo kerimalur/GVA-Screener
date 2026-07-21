@@ -158,10 +158,11 @@ export default function CalendarView() {
                   let bg = "var(--color-surface2)";
                   let border = "none";
                   let boxShadow = "none";
-                  if (isWin) { bg = "rgba(61,220,151,0.1)"; border = "1px solid rgba(61,220,151,0.25)"; }
-                  if (isLoss) { bg = "rgba(239,100,97,0.1)"; border = "1px solid rgba(239,100,97,0.25)"; }
-                  if (day.isToday && !isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(108,140,255,0.12)"; }
-                  if (isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(108,140,255,0.18)"; }
+                  // RGB-Kanäle der Tokens --color-up / --color-down / --color-accent
+                  if (isWin) { bg = "rgba(79,216,138,0.1)"; border = "1px solid rgba(79,216,138,0.25)"; }
+                  if (isLoss) { bg = "rgba(240,102,92,0.1)"; border = "1px solid rgba(240,102,92,0.25)"; }
+                  if (day.isToday && !isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(224,138,60,0.12)"; }
+                  if (isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(224,138,60,0.18)"; }
 
                   return (
                     <button

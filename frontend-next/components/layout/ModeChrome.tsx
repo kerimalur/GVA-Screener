@@ -4,23 +4,17 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import {
-  activeTabHref,
-  modeForPath,
-  LAUNCHER_HREF,
-  LAUNCHER_LABEL,
-  PAGE_TITLES,
-} from "./nav";
+import { MODES, activeTabHref, modeForPath, LAUNCHER_HREF } from "./nav";
 import SignalsBadge from "./SignalsBadge";
 import PairSearchBar from "./PairSearchBar";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 /**
- * Kopfzeile + Tab-Leiste eines Modus. Ersetzt Sidebar und TopBar.
+ * Kopfzeile: Modus-Wechsel als Icon-Reihe, darunter die Tabs des aktiven Modus.
  *
- * Die Sidebar zeigte alle ~20 Einträge gleichzeitig und kostete auf jeder
- * Seite 248px Breite. Hier steht nur noch, was zum aktiven Modus gehört; der
- * Weg zurück zum Launcher ist Logo und „Übersicht" gleichzeitig.
+ * Ersetzt Sidebar und TopBar. Die Sidebar zeigte ~20 Einträge gleichzeitig und
+ * kostete auf jeder Seite 248px Breite; hier stehen fünf Icons und die Seiten
+ * genau eines Modus. Die volle Breite gehört dem Inhalt.
  */
 export default function ModeChrome() {
   const pathname = usePathname();
@@ -66,57 +60,58 @@ export default function ModeChrome() {
     router.push("/login");
   };
 
-  const amLauncher = pathname === LAUNCHER_HREF;
-  // Titel: der Modus benennt den Kontext, der Tab die Seite. Auf Seiten ohne
-  // eigenen Tab (z.B. /journal/einstellungen) bleibt der Modus-Name stehen.
-  const seitentitel = PAGE_TITLES[pathname] ?? mode?.label ?? LAUNCHER_LABEL;
-
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-[10px]">
-      <div className="flex items-center justify-between gap-4 px-6 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Logo = Weg zurück zur Übersicht. Auf dem Launcher selbst ist es
-              kein Link, sondern nur die Marke. */}
-          <Link
-            href={LAUNCHER_HREF}
-            title="Zurück zur Übersicht"
-            className="flex items-center gap-2.5 shrink-0 rounded-lg px-1 py-1 -mx-1 hover:bg-active/50 transition-colors"
-          >
-            <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-linear-135 from-accent to-accent/60">
-              <div className="w-2.5 h-2.5 rounded-[3px] rotate-45 bg-bg" />
-            </div>
-            <span className="text-[14.5px] font-extrabold tracking-tight">FX Terminal</span>
-          </Link>
+    <header className="sticky top-0 z-20 bg-sidebar border-b border-border">
+      <div className="flex items-center gap-4 px-6 py-3.5">
+        {/* Logo = Weg zurück zur Übersicht. */}
+        <Link
+          href={LAUNCHER_HREF}
+          title="Zurück zur Übersicht"
+          aria-label="Zurück zur Übersicht"
+          className="shrink-0 w-6 h-6 rounded-md rotate-45 bg-accent hover:opacity-80 transition-opacity"
+        />
 
-          {!amLauncher && (
-            <>
-              <span className="text-faint text-[13px]">/</span>
-              <div className="flex items-center gap-1.5 min-w-0">
-                {mode && <i className={`ph-bold ${mode.icon} text-[14px] text-accent`} />}
-                <span className="text-[13.5px] font-bold truncate">
-                  {mode?.label ?? seitentitel}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Modus-Wechsel: fünf Icons, immer an derselben Stelle. */}
+        <nav className="flex-1 flex items-center justify-center gap-2.5">
+          {MODES.map((m) => {
+            const aktiv = mode?.key === m.key;
+            return (
+              <Link
+                key={m.key}
+                href={m.base}
+                title={m.label}
+                aria-label={m.label}
+                aria-current={aktiv ? "page" : undefined}
+                className={`relative w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors ${
+                  aktiv
+                    ? "bg-accent text-sidebar"
+                    : "text-text/45 hover:text-text hover:bg-active"
+                }`}
+              >
+                <i className={`ph-bold ${m.icon} text-[17px]`} />
+                {/* Unentschiedene GVA-Hits hängen am Cockpit-Modus. */}
+                {m.key === "trades" && (
+                  <span className="absolute -top-1 -right-1">
+                    <SignalsBadge />
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
 
         <div className="flex items-center gap-3 shrink-0">
           <Suspense fallback={null}>
             <PairSearchBar />
           </Suspense>
-          <div suppressHydrationWarning className="hidden md:block font-mono text-[12px] text-faint">
-            {new Date().toLocaleDateString("de-DE", {
-              weekday: "short",
-              day: "2-digit",
-              month: "2-digit",
-            })}
-          </div>
           {userAvatar ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full shrink-0" />
+            <img src={userAvatar} alt={userName} className="w-[30px] h-[30px] rounded-full" />
           ) : (
-            <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11.5px] font-bold border border-border2 bg-surface2">
+            <div
+              title={userName}
+              className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-bold bg-active text-text"
+            >
               {userName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -124,7 +119,7 @@ export default function ModeChrome() {
             onClick={handleSignOut}
             disabled={signingOut}
             title="Abmelden"
-            className="p-1.5 rounded-lg text-muted hover:bg-down-dim hover:text-down transition-colors disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg text-faint hover:bg-down-dim hover:text-down transition-colors disabled:cursor-not-allowed"
           >
             <i className="ph-bold ph-sign-out text-[14px]" />
           </button>
@@ -133,17 +128,17 @@ export default function ModeChrome() {
 
       {/* Tab-Leiste: ausschliesslich die Seiten des aktiven Modus. */}
       {mode && (
-        <nav className="flex items-center gap-1 px-6 overflow-x-auto">
+        <div className="flex items-center justify-center gap-1.5 px-6 pb-3 overflow-x-auto">
           {mode.tabs.map((tab) => {
-            const active = tab.href === activeHref;
-            const locked = tab.requiresAdmin && !isAdmin;
+            const aktiv = tab.href === activeHref;
+            const gesperrt = tab.requiresAdmin && !isAdmin;
 
-            if (locked) {
+            if (gesperrt) {
               return (
                 <span
                   key={tab.href}
                   title="Nur für Admins verfügbar"
-                  className="flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-[12.5px] font-medium text-faint opacity-50 cursor-not-allowed border-b-2 border-transparent"
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 rounded-[7px] text-[12.5px] font-medium text-faint opacity-50 cursor-not-allowed"
                 >
                   {tab.label}
                   <i className="ph-bold ph-lock-simple text-[10px]" />
@@ -156,19 +151,17 @@ export default function ModeChrome() {
                 key={tab.href}
                 href={tab.href}
                 data-tour={tab.href}
-                className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-[12.5px] border-b-2 transition-colors ${
-                  active
-                    ? "font-semibold text-text border-accent"
-                    : "font-medium text-text/70 border-transparent hover:text-text"
+                className={`whitespace-nowrap px-3.5 py-1.5 rounded-[7px] text-[12.5px] transition-colors ${
+                  aktiv
+                    ? "font-bold bg-accent-dim text-accent"
+                    : "font-medium text-muted hover:text-text"
                 }`}
               >
                 {tab.label}
-                {/* Unentschiedene GVA-Hits hängen am Cockpit. */}
-                {tab.href === "/cockpit" && <SignalsBadge />}
               </Link>
             );
           })}
-        </nav>
+        </div>
       )}
     </header>
   );

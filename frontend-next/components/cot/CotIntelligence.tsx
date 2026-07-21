@@ -226,7 +226,8 @@ function Heatmap({ rows, groups }: { rows: HeatmapRow[]; groups: string[] }) {
     if (direction === "long" && v < 0) return { opacity: 0.15 };
     if (direction === "short" && v > 0) return { opacity: 0.15 };
     const t = Math.min(1, Math.abs(v) / maxAbs);
-    const color = v > 0 ? "63,185,80" : "248,81,73";
+    // RGB-Kanäle von --color-up / --color-down — die Deckkraft trägt hier die Stärke.
+    const color = v > 0 ? "79,216,138" : "240,102,92";
     return { backgroundColor: `rgba(${color},${(t * 0.5).toFixed(2)})` };
   };
 

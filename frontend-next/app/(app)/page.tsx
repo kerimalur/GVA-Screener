@@ -1,5 +1,5 @@
 import ModeLauncher from "@/components/layout/ModeLauncher";
-import { loadLetzteEngineNacht } from "@/lib/nav/launcherServer";
+import { loadLetzteEngineNacht, launcherKopf } from "@/lib/nav/launcherServer";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Übersicht — FX Terminal" };
@@ -11,5 +11,14 @@ export const metadata = { title: "Übersicht — FX Terminal" };
  */
 export default async function LauncherPage() {
   const { night, istNeu } = await loadLetzteEngineNacht();
-  return <ModeLauncher letzteNacht={night} nachtIstNeu={istNeu} />;
+  const { datumLabel, begruessung } = launcherKopf();
+
+  return (
+    <ModeLauncher
+      datumLabel={datumLabel}
+      begruessung={begruessung}
+      letzteNacht={night}
+      nachtIstNeu={istNeu}
+    />
+  );
 }

@@ -19,14 +19,19 @@ interface HeatmapGridProps {
   onCellClick?: (row: number, col: number) => void;
 }
 
+// RGB-Komponenten von --color-up / --color-down (globals.css). Die Deckkraft
+// trägt hier die Information, deshalb braucht es die Kanäle einzeln.
+const UP_RGB = "79, 216, 138";
+const DOWN_RGB = "240, 102, 92";
+
 /** Wert → Farbe: negativ rot, positiv grün, um 0 neutral (Terminal-Palette). */
 function cellColor(v: number, min: number, max: number): string {
   if (v >= 0) {
     const t = max > 0 ? Math.min(v / max, 1) : 0;
-    return `rgba(63, 185, 80, ${0.08 + t * 0.72})`;
+    return `rgba(${UP_RGB}, ${0.08 + t * 0.72})`;
   }
   const t = min < 0 ? Math.min(v / min, 1) : 0;
-  return `rgba(248, 81, 73, ${0.08 + t * 0.72})`;
+  return `rgba(${DOWN_RGB}, ${0.08 + t * 0.72})`;
 }
 
 export default function HeatmapGrid({

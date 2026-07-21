@@ -2,31 +2,30 @@
 // Recharts braucht konkrete Farbstrings (SVG-Attribute), daher hier gespiegelt;
 // Änderungen IMMER in beiden Dateien nachziehen.
 export const chart = {
-  grid: "rgba(255,255,255,0.08)",
-  axis: "rgba(255,255,255,0.15)",
-  text: "#d6d5d0",   // --color-muted
-  faint: "#b0afa8",  // --color-faint
-  up: "#46d275",     // --color-up
-  down: "#f05b52",   // --color-down
-  accent: "#ffffff", // Hauptserie weiß — kein Blau in der Palette
-  warn: "#f5a623",   // --color-warn
-  neutral: "#b0afa8",
-  surface: "#414141", // --color-surface
-  border: "rgba(255,255,255,0.30)",
-  // Serien-Palette: Weiß + Grau-Abstufungen + semantische Farben, verschränkt
-  // angeordnet (ähnliche Töne nie benachbart). dataviz-Validator (dark,
-  // Surface #3a3a3a): CVD-Separation 26.7 PASS, Kontrast >=3:1 PASS;
-  // Serien sind zusätzlich per Legende/Label benannt.
-  palette: ["#ffffff", "#46d275", "#d6d5d0", "#f05b52", "#a8a7a0", "#f5a623", "#8a897f"],
+  grid: "rgba(255,255,255,0.07)",
+  axis: "rgba(255,255,255,0.14)",
+  text: "#a89f8b",   // --color-muted
+  faint: "#87806f",  // --color-faint
+  up: "#4fd88a",     // --color-up
+  down: "#f0665c",   // --color-down
+  accent: "#e08a3c", // --color-accent (Hauptserie); kein Blau in der Palette
+  warn: "#d9b23c",   // --color-warn
+  neutral: "#87806f", // --color-neutral
+  surface: "#2c2820", // --color-surface
+  border: "rgba(255,255,255,0.12)", // --color-border
+  // Serien-Palette: Akzent + semantische Farben + warme Sand-Abstufungen,
+  // verschränkt angeordnet (ähnliche Töne nie benachbart). Serien sind
+  // zusätzlich per Legende/Label benannt, Farbe ist nie der einzige Träger.
+  palette: ["#e08a3c", "#4fd88a", "#ece7da", "#f0665c", "#a89f8b", "#d9b23c", "#6f6858"],
 } as const;
 
 export const tooltipStyle = {
-  backgroundColor: "#3a3a3a", // --color-surface2
-  border: "1px solid rgba(255,255,255,0.50)", // --color-border2
+  backgroundColor: "#1a1714", // --color-surface2
+  border: "1px solid rgba(255,255,255,0.20)", // --color-border2
   borderRadius: 8,
   fontSize: 12,
   fontFamily: "var(--font-mono)",
-  color: "#ffffff", // --color-text
+  color: "#ece7da", // --color-text
 } as const;
 
 export function fmtNumber(v: number, digits = 2): string {
