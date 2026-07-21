@@ -227,10 +227,10 @@ export default async function Page() {
 
       <Panel
         title="Performance seit Signal"
-        subtitle="Vereinfachter Kursverlauf der Kandidaten-Pairs ab dem Wochenstart der aktuellen Konstellation. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
+        subtitle="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
       >
         <div className="p-5">
-          <RankingPerformance pairs={perfPairs} since={d.weekStart} />
+          <RankingPerformance pairs={perfPairs} startByPair={d.signalStartByPair} />
         </div>
       </Panel>
 

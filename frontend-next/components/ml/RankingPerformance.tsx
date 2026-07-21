@@ -5,19 +5,27 @@ import Segmented from "@/components/ui/Segmented";
 import CandleChart from "@/components/charts/CandleChart";
 import { fetchCandles, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "@/lib/ml/ranking";
+import { sinceForPair, wochenSeit } from "@/lib/ml/signalStart";
 
 /**
  * „Performance seit Signal" — vereinfachter Kursverlauf der Top-Pairs, ab dem
- * Zeitpunkt, seit dem die Konstellation aktiv ist (`since` = Wochenstart des
- * aktuellen Rankings). Pair-Pills wählen das Paar, Segmente schalten
- * Daily/Weekly und Kerze/Linie um. Quelle OANDA (`/api/candles`).
+ * Zeitpunkt, seit dem die Konstellation für DIESES Pair unverändert steht.
+ *
+ * Bewusst nicht `weekStart` des Rankings: das ist die Zielwoche der Prognose
+ * (kommender Montag) und liegt in der Zukunft — es gäbe dafür weder Kursdaten
+ * noch eine sinnvolle Aussage. Der Startpunkt kommt je Pair aus dem tatsächlichen
+ * Lauf; ein brandneues Signal hat keinen Verlauf und wird als solches gezeigt.
+ *
+ * Pair-Pills wählen das Paar, Segmente schalten Daily/Weekly und Kerze/Linie
+ * um. Quelle OANDA (`/api/candles`).
  */
 export default function RankingPerformance({
   pairs,
-  since,
+  startByPair,
 }: {
   pairs: PairIdea[];
-  since: string | null;
+  /** Pair-Anzeigename → 'YYYY-MM-DD'; fehlt = Signal ist neu. */
+  startByPair: Record<string, string>;
 }) {
   const [sel, setSel] = useState(0);
   const [gran, setGran] = useState<"D" | "W">("D");
@@ -28,14 +36,25 @@ export default function RankingPerformance({
 
   const active = pairs[sel];
   const symbol = active ? active.pair.replace("/", "") : "";
-  const start = since ?? "";
+  // Startpunkt des aktiven Pairs; null (→ "") wenn das Signal neu ist oder der
+  // errechnete Lauf in der Zukunft liegt.
+  const start = active ? (sinceForPair(startByPair[active.pair]) ?? "") : "";
 
   useEffect(() => {
-    if (!symbol || !start) return;
     let alive = true;
-    // queueMicrotask hält die setState-Aufrufe aus dem synchronen Effect-Body
-    // (gleiche Deferral wie im ScannerShell).
+    // queueMicrotask hält alle setState-Aufrufe aus dem synchronen Effect-Body
+    // (gleiche Deferral wie im ScannerShell) — inkl. des Falls „kein Start".
     const run = async () => {
+      // Neues Signal ohne Startpunkt: nicht laden, sondern den Ladezustand
+      // beenden und alte Kerzen des vorher gewählten Pairs verwerfen.
+      if (!symbol || !start) {
+        if (alive) {
+          setCandles([]);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -64,9 +83,6 @@ export default function RankingPerformance({
       </p>
     );
   }
-  if (!start) {
-    return <p className="text-sm text-muted">Kein Signal-Startdatum (Wochenstart) vorhanden.</p>;
-  }
 
   const first = candles[0]?.close;
   const last = candles[candles.length - 1]?.close;
@@ -74,12 +90,6 @@ export default function RankingPerformance({
   // „Günstig" = Bewegung in Signalrichtung (Long → hoch, Short → runter).
   const favorable =
     pct != null && active ? (active.direction === "long" ? pct > 0 : pct < 0) : null;
-
-  const startLabel = new Date(start).toLocaleDateString("de-CH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 
   return (
     <div className="space-y-4">
@@ -111,7 +121,17 @@ export default function RankingPerformance({
           {active.direction.toUpperCase()}
         </span>
         <span className="text-xs text-muted font-mono">{active.reason}</span>
-        <span className="text-xs text-faint">seit {startLabel}</span>
+        {start ? (
+          <span className="text-xs text-faint">
+            seit {start.slice(8, 10)}.{start.slice(5, 7)}.
+            {(() => {
+              const w = wochenSeit(start);
+              return w > 0 ? ` · ${w} ${w === 1 ? "Woche" : "Wochen"}` : " · diese Woche";
+            })()}
+          </span>
+        ) : (
+          <span className="text-xs text-faint">neu — noch kein Verlauf</span>
+        )}
         {pct != null && (
           <span
             className={`ml-auto font-mono text-sm font-bold ${
@@ -149,7 +169,12 @@ export default function RankingPerformance({
       </div>
 
       {/* Chart */}
-      {loading ? (
+      {!start ? (
+        <div className="h-[260px] flex items-center justify-center text-faint text-sm text-center px-4">
+          Diese Konstellation ist neu (Prognose für die kommende Woche) — es gibt
+          noch keinen Kursverlauf seit dem Signal.
+        </div>
+      ) : loading ? (
         <div className="h-[260px] flex items-center justify-center text-muted text-sm font-mono">
           Lade Kursdaten …
         </div>
