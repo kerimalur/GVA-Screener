@@ -1,8 +1,12 @@
 import "server-only";
 import { fetchCandles, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "./ranking";
-import { candleKey } from "./candleKey";
 import { sinceForPair } from "./signalStart";
+
+/** Schlüssel für die vorgeladene Kerzen-Map: `${SYMBOL}|${D|W}`. */
+export function candleKey(symbol: string, gran: "D" | "W"): string {
+  return `${symbol}|${gran}`;
+}
 
 /**
  * Lädt die Kerzen aller Kandidaten-Pairs für BEIDE Granularitäten (Daily/Weekly)

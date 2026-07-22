@@ -5,7 +5,7 @@ import Panel from "@/components/layout/Panel";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
-import EmptyState from "@/components/ui/EmptyState";
+
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { toast } from "@/components/ui/Toaster";
@@ -371,16 +371,43 @@ export default function BacktestView() {
         </Panel>
       ) : sessions.length === 0 ? (
         <Panel>
-          <EmptyState
-            icon="ph-flask"
-            title="Noch keine Backtest-Sessions"
-            description="Teste Strategien systematisch: Session anlegen, Trades im Fokus-Raum erfassen, danach Setups und Leaks auswerten."
-            action={
-              <Button icon="ph-plus" onClick={() => setShowWizard(true)}>
-                Erste Session starten
-              </Button>
-            }
-          />
+          <div className="p-5">
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-surface2 rounded-md p-3.5 text-center">
+                <div className="font-mono text-xl font-extrabold text-faint">—</div>
+                <div className="text-[11px] text-muted mt-1">Ø R-Multiple</div>
+              </div>
+              <div className="bg-surface2 rounded-md p-3.5 text-center">
+                <div className="font-mono text-xl font-extrabold text-faint">—</div>
+                <div className="text-[11px] text-muted mt-1">Trefferquote</div>
+              </div>
+              <div className="bg-surface2 rounded-md p-3.5 text-center">
+                <div className="font-mono text-xl font-extrabold text-faint">0</div>
+                <div className="text-[11px] text-muted mt-1">Sessions total</div>
+              </div>
+            </div>
+            <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2.5">So funktioniert&apos;s</div>
+            <div className="space-y-2.5 mb-5">
+              {[
+                ["1", "Session anlegen", "Paar, Strategie, Startdatum — mit oder ohne Fundamentals."],
+                ["2", "Trades im Fokus-Raum erfassen", "Tastatur-first, ein Trade nach dem anderen."],
+                ["3", "Auswerten", "Setups und Leaks der Session prüfen."],
+              ].map(([n, title, desc]) => (
+                <div key={n} className="flex gap-3 items-start">
+                  <div className="w-6 h-6 rounded-full bg-accent/15 text-accent font-mono font-bold text-[12px] flex items-center justify-center shrink-0">
+                    {n}
+                  </div>
+                  <div>
+                    <div className="text-[13px] font-semibold">{title}</div>
+                    <div className="text-[11.5px] text-muted">{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button icon="ph-plus" onClick={() => setShowWizard(true)}>
+              Erste Session starten
+            </Button>
+          </div>
         </Panel>
       ) : (
         <div className="space-y-2">

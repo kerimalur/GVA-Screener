@@ -1,24 +1,63 @@
-import { Suspense } from "react";
 import Panel from "@/components/layout/Panel";
-import { loadRankingData, type PairIdea, type PairIdeas } from "@/lib/ml/ranking";
+import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
 import RankingPerformance from "@/components/ml/RankingPerformance";
-import RankingTable from "@/components/ml/RankingTable";
-import { loadPerfCandles } from "@/lib/ml/perfCandles";
 
 export const dynamic = "force-dynamic";
 
-/** Lädt die Kerzen der Kandidaten-Pairs (Render) vor und rendert das Panel.
- *  Eigene async-Grenze hinter <Suspense>, damit ein Render-Kaltstart nur dieses
- *  Panel verzögert und nicht die ganze Ranking-Seite blockiert. */
-async function PerformancePanelBody({
-  pairs,
-  startByPair,
-}: {
-  pairs: PairIdea[];
-  startByPair: Record<string, string>;
-}) {
-  const preloaded = await loadPerfCandles(pairs, startByPair);
-  return <RankingPerformance pairs={pairs} startByPair={startByPair} preloaded={preloaded} />;
+function LadderBar({ score }: { score: number }) {
+  const pct = Math.min(Math.abs(score), 1) * 50;
+  const pos = score >= 0;
+  return (
+    <div className="relative h-5 flex-1 rounded bg-border/25">
+      <div
+        className={`absolute top-0 bottom-0 rounded ${pos ? "left-1/2 bg-up" : "right-1/2 bg-down"}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+function QuintileBadge({ q }: { q: number }) {
+  const cls =
+    q === 5 ? "bg-up/15 text-up" : q === 1 ? "bg-down/15 text-down" : "bg-border/40 text-muted";
+  // STÄRKE-Quintil (nicht Konfidenz): Position des Zins+Saison-Scores in der
+  // eigenen 156W-Verteilung. Q5 = stärkstes Fünftel. „handelbar" bewusst
+  // entfernt — die OOS-Evidenz reicht dafür nicht (Paper-Track nahe Münzwurf,
+  // n zu klein). Q5/Q1 = Kandidat, keine validierte Handelsfreigabe.
+  return (
+    <span
+      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${cls}`}
+      title="Stärke-Quintil des Zins+Saison-Scores (Q5 = stärkstes Fünftel vs. eigene 156-Wochen-Verteilung). Kandidat, nicht validiert handelbar."
+    >
+      Q{q}
+      {q === 5 ? " · Kandidat" : ""}
+    </span>
+  );
+}
+
+function RankingTable({ rows }: { rows: RankingRow[] }) {
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.ccy}>
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 font-mono font-extrabold text-[13px]">{r.ccy}</span>
+            <LadderBar score={r.score} />
+            <span className={`w-16 text-right font-mono text-xs ${r.score >= 0 ? "text-up" : "text-down"}`}>
+              {r.score >= 0 ? "+" : ""}
+              {r.score.toFixed(3)}
+            </span>
+            <QuintileBadge q={r.strength_quintile} />
+          </div>
+          <div className="pl-11 mt-0.5 text-[10px] text-muted font-mono">
+            {r.top_features
+              .map((f) => `${f.feature} ${f.value >= 0 ? "+" : ""}${f.value.toFixed(2)}`)
+              .join(" · ")}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function PairRow({ i }: { i: PairIdea }) {
@@ -37,28 +76,68 @@ function PairRow({ i }: { i: PairIdea }) {
   );
 }
 
+function ConfluenceChip({ text }: { text: string }) {
+  const isQ5 = text.includes("Q5");
+  return (
+    <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${isQ5 ? "bg-up/15 text-up" : "bg-down/15 text-down"}`}>
+      {text}
+    </span>
+  );
+}
+
+function BestPairCard({ i }: { i: PairIdea }) {
+  const parts = i.reason.split(" × ");
+  return (
+    <div className={`rounded-md p-3.5 border bg-surface2/60 ${i.direction === "long" ? "border-up/25" : "border-down/25"}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="font-mono font-extrabold text-[14px]">{i.pair}</span>
+        <span
+          className={`ml-auto font-mono font-bold text-[9px] px-1.5 py-0.5 rounded ${i.direction === "long" ? "bg-up/15 text-up" : "bg-down/15 text-down"}`}
+        >
+          {i.direction.toUpperCase()}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        {parts.map((p) => (
+          <ConfluenceChip key={p} text={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PairList({ ideas }: { ideas: PairIdeas }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-xs text-muted mb-2 font-bold">
+        <div className="text-xs text-muted mb-2.5 font-bold">
           Beste Konstellation — beide Seiten extrem (Stärke-Quintil Q5 × Q1)
         </div>
-        {ideas.best.length ? ideas.best.map((i) => <PairRow key={i.pair} i={i} />) : (
+        {ideas.best.length ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ideas.best.map((i) => (
+              <BestPairCard key={i.pair} i={i} />
+            ))}
+          </div>
+        ) : (
           <p className="text-xs text-muted">Diese Woche keine Q5×Q1-Paarung (beide Seiten im Stärke-Quintil-Extrem).</p>
         )}
       </div>
-      <div className="grid md:grid-cols-3 gap-6">
-        {ideas.groups.map((g) => (
-          <div key={g.ccy}>
-            <div className="text-xs mb-2 font-bold">
-              {g.label}
-              <span className="text-muted font-normal"> — gegen neutrale Währungen</span>
-            </div>
-            {g.ideas.map((i) => <PairRow key={i.pair} i={i} />)}
+      {ideas.groups.length > 0 && (
+        <div>
+          <div className="text-xs text-muted mb-2 font-bold">Q5/Q1 gegen neutrale Währungen</div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {ideas.groups.map((g) => (
+              <div key={g.ccy}>
+                <div className="text-[11px] mb-1.5 font-bold text-muted">{g.label}</div>
+                {g.ideas.map((i) => (
+                  <PairRow key={i.pair} i={i} />
+                ))}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -172,15 +251,7 @@ export default async function Page() {
         subtitle="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
       >
         <div className="p-5">
-          <Suspense
-            fallback={
-              <div className="h-[260px] flex items-center justify-center text-muted text-sm font-mono">
-                Lade Kursdaten …
-              </div>
-            }
-          >
-            <PerformancePanelBody pairs={perfPairs} startByPair={d.signalStartByPair} />
-          </Suspense>
+          <RankingPerformance pairs={perfPairs} startByPair={d.signalStartByPair} />
         </div>
       </Panel>
 

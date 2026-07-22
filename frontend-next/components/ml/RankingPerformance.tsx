@@ -5,7 +5,7 @@ import Segmented from "@/components/ui/Segmented";
 import CandleChart from "@/components/charts/CandleChart";
 import { fetchCandles, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "@/lib/ml/ranking";
-import { candleKey } from "@/lib/ml/candleKey";
+import { candleKey } from "@/lib/ml/perfCandles";
 import { sinceForPair, wochenSeit } from "@/lib/ml/signalStart";
 
 /**
@@ -52,23 +52,14 @@ export default function RankingPerformance({
 
   // Fallback: fehlt der Eintrag (Render war beim Vorladen im Kaltstart), einmal
   // nachladen und cachen. Bei vollständig vorgeladenen Daten läuft das nie.
-  // queueMicrotask hält alle setState-Aufrufe aus dem synchronen Effect-Body
-  // (Lint-Regel react-hooks/set-state-in-effect) — gleiche Deferral wie zuvor.
   useEffect(() => {
     if (!need) return;
     let alive = true;
-    const run = async () => {
-      setLoadingKey(key);
-      try {
-        const cs = await fetchCandles(symbol, gran, start);
-        if (alive) setCache((c) => ({ ...c, [key]: cs }));
-      } catch {
-        if (alive) setCache((c) => ({ ...c, [key]: [] }));
-      } finally {
-        if (alive) setLoadingKey((k) => (k === key ? null : k));
-      }
-    };
-    queueMicrotask(run);
+    setLoadingKey(key);
+    fetchCandles(symbol, gran, start)
+      .then((cs) => alive && setCache((c) => ({ ...c, [key]: cs })))
+      .catch(() => alive && setCache((c) => ({ ...c, [key]: [] })))
+      .finally(() => alive && setLoadingKey((k) => (k === key ? null : k)));
     return () => {
       alive = false;
     };

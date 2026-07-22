@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
-import FreshBadge from "@/components/ui/FreshBadge";
 import OutlookWizardModal from "@/components/journal/OutlookWizardModal";
 import { fetchScreener, PAIRS_TOTAL, type MarketData } from "@/lib/gva/api";
 import { loadSignals, type SignalRecord } from "@/lib/journal/signals";
@@ -25,8 +24,6 @@ import {
   boardStateOf,
   snapshotFreshness,
   zonesLabel,
-  SNAPSHOT_FRESH_MIN,
-  SNAPSHOT_STALE_MIN,
   NAEHERT_PIP_LIMIT,
   type BoardState,
   type CockpitCard,
@@ -57,19 +54,46 @@ const LANES: { id: keyof CockpitLanes; label: string; hint: string }[] = [
   },
 ];
 
-/** Kopfzeilen-Farben: ≤2 min normal, >2 min grau, >5 min warn. */
-const HEADER_TONES = {
-  fresh: "bg-surface2 text-muted",
-  old: "bg-surface2 text-faint",
-  dead: "bg-warn/15 text-warn",
-};
-
 function fmtClock(updatedSec: number | null): string {
   if (updatedSec == null) return "–";
   return new Date(updatedSec * 1000).toLocaleTimeString("de-CH", {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Stärkste/schwächste Währung aus dem Wochen-Ranking (Q5/Q1) für die Statuskachel. */
+function rankingBias(quintiles: Record<string, number>): { top: string | null; bottom: string | null } {
+  let top: string | null = null;
+  let bottom: string | null = null;
+  for (const [ccy, q] of Object.entries(quintiles)) {
+    if (q === 5) top = ccy;
+    if (q === 1) bottom = ccy;
+  }
+  return { top, bottom };
+}
+
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string | number | React.JSX.Element;
+  tone?: "warn";
+}) {
+  return (
+    <div
+      className={`rounded-lg p-2.5 text-center ${
+        tone === "warn" ? "bg-warn/10 border border-warn/30" : "bg-surface2/60"
+      }`}
+    >
+      <div className={`text-[10px] uppercase tracking-wide mb-1 ${tone === "warn" ? "text-warn" : "text-faint"}`}>
+        {label}
+      </div>
+      <div className={`font-mono font-bold text-[13px] ${tone === "warn" ? "text-warn" : "text-text"}`}>{value}</div>
+    </div>
+  );
 }
 
 function Confluence({ card }: { card: CockpitCard }) {
@@ -390,6 +414,7 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
   const freshness = snapshotFreshness(meta.updated);
   const zonesTxt = zonesLabel(state, meta.zones, meta.pairsTotal);
   const budget = budgetState(trades);
+  const bias = rankingBias(quintiles);
 
   const notesFor = (c: CockpitCard): string => {
     const line = c.lineDir ? `${c.lineDir.toUpperCase()}-Linie` : "Linie";
@@ -493,67 +518,64 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <FreshBadge
-          f={freshness}
-          ageDays={null}
-          tones={HEADER_TONES}
-          labels={{
-            fresh: `Stand ${fmtClock(meta.updated)} · ${scanner.length} Pairs`,
-            old: `Stand ${fmtClock(meta.updated)} · ${scanner.length} Pairs`,
-            dead:
-              meta.updated == null
-                ? "kein Snapshot"
-                : `Stand ${fmtClock(meta.updated)} · veraltet (>${SNAPSHOT_STALE_MIN} min)`,
-          }}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <StatTile
+          label="Stand"
+          value={freshness === "dead" ? "veraltet" : `${fmtClock(meta.updated)} · ${scanner.length}p`}
+          tone={freshness === "dead" ? "warn" : undefined}
         />
-        {freshness === "old" && (
-          <span className="text-[10px] font-mono text-faint">
-            älter als {SNAPSHOT_FRESH_MIN} min
-          </span>
-        )}
-        {/* Zonen-Stand: "startet noch" / "läuft, aber unvollständig" /
-            "läuft vollständig" muss jederzeit ablesbar sein. Bei `partial`
-            bewusst als Warnung und nicht wegklickbar. */}
-        {zonesTxt && (
-          <span
-            className={
-              state === "partial"
-                ? "inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-warn/15 text-warn text-[10px] font-bold font-mono"
-                : "px-1.5 py-0.5 rounded bg-surface2 text-faint text-[10px] font-mono"
-            }
-          >
-            {state === "partial" && <i className="ph-bold ph-warning" />}
-            {zonesTxt}
-          </span>
-        )}
-        {!meta.live && state !== "offline" && (
-          <span className="text-[11px] text-warn">
-            OANDA-Preise fehlen — Distanzen mit «~» stammen vom letzten Tagesschluss.
-          </span>
-        )}
-        {/* Budget-Stand am Ort der Entscheidung. Leeres Budget wird betont,
-            aber nie erzwungen — siehe Warnung an der Karte. Kein Chip, solange
-            noch keine Trades geladen sind (Kaltstart / Fehler). */}
-        {trades.length > 0 && (
-          <span
-            title={`Trade-Budget des Monats: ${budget.used} von ${budget.total} verbraucht`}
-            className={
-              budget.offen === 0
-                ? "px-1.5 py-0.5 rounded bg-down/15 text-down text-[10px] font-bold font-mono"
-                : "px-1.5 py-0.5 rounded bg-surface2 text-faint text-[10px] font-mono"
-            }
-          >
-            {budget.offen === 0
-              ? `Budget aufgebraucht (${budget.used}/${budget.total})`
-              : `${budget.offen} von ${budget.total} übrig`}
-          </span>
-        )}
-        <div className="ml-auto">
-          <Button size="sm" icon="ph-plus" onClick={() => setWizard(true)}>
-            Setup
-          </Button>
+        <StatTile
+          label="Ranking-Bias"
+          value={
+            bias.top || bias.bottom ? (
+              <>
+                {bias.top && <span className="text-up">{bias.top} ▲</span>}
+                {bias.top && bias.bottom && " / "}
+                {bias.bottom && <span className="text-down">{bias.bottom} ▼</span>}
+              </>
+            ) : (
+              "–"
+            )
+          }
+        />
+        <div className="rounded-lg p-2.5 bg-surface2/60">
+          <div className="text-[10px] uppercase tracking-wide mb-1.5 text-faint">Trade-Budget</div>
+          {trades.length > 0 ? (
+            <>
+              <div className="flex gap-1">
+                {Array.from({ length: budget.total }).map((_, i) => (
+                  <span
+                    key={i}
+                    className="flex-1 h-1.5 rounded-sm"
+                    style={{ background: i < budget.used ? "var(--color-accent)" : "rgba(255,255,255,0.1)" }}
+                  />
+                ))}
+              </div>
+              <div className="font-mono text-[10.5px] text-muted mt-1.5">
+                {budget.used} / {budget.total} genutzt
+              </div>
+            </>
+          ) : (
+            <div className="font-mono font-bold text-[13px] text-text">–</div>
+          )}
         </div>
+        <StatTile
+          label="Zonen"
+          value={zonesTxt || "–"}
+          tone={state === "partial" ? "warn" : undefined}
+        />
+      </div>
+
+      {!meta.live && state !== "offline" && (
+        <span className="text-[11px] text-warn block">
+          OANDA-Preise fehlen — Distanzen mit «~» stammen vom letzten Tagesschluss.
+        </span>
+      )}
+
+      <div className="flex justify-end">
+        <Button size="sm" icon="ph-plus" onClick={() => setWizard(true)}>
+          Setup
+        </Button>
       </div>
 
       {state === "offline" && (

@@ -147,48 +147,54 @@ export default function CalendarView() {
                   <div key={d} style={{textAlign:"center",fontSize:"11px",fontWeight:700,letterSpacing:"0.8px",color:"var(--color-faint)"}}>{d}</div>
                 ))}
               </div>
-              {/* Day cells */}
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"4px"}}>
+              {/* Day cells — Karten-Stil: Kopfstreifen zeigt Gewinn/Verlust, Zellen näher am Quadrat */}
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:"6px"}}>
                 {calendarDays.map((day)=>{
                   const hasTrades = day.trades.length > 0;
                   const isWin = hasTrades && day.totalR >= 0;
-                  const isLoss = hasTrades && day.totalR < 0;
                   const isSelected = selectedDate===day.dateStr;
-
-                  let bg = "var(--color-surface2)";
-                  let border = "none";
-                  let boxShadow = "none";
-                  // RGB-Kanäle der Tokens --color-up / --color-down / --color-accent
-                  if (isWin) { bg = "rgba(79,216,138,0.1)"; border = "1px solid rgba(79,216,138,0.25)"; }
-                  if (isLoss) { bg = "rgba(240,102,92,0.1)"; border = "1px solid rgba(240,102,92,0.25)"; }
-                  if (day.isToday && !isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(224,138,60,0.12)"; }
-                  if (isSelected) { border = "2px solid var(--color-accent)"; boxShadow = "0 0 0 3px rgba(224,138,60,0.18)"; }
+                  const emphasize = isSelected || day.isToday;
 
                   return (
                     <button
                       key={day.dateStr}
                       onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
                       style={{
-                        height:"78px",
-                        borderRadius:"8px",
-                        background: bg,
-                        border,
-                        boxShadow,
-                        padding:"6px",
+                        aspectRatio:"0.82",
+                        borderRadius:"14px",
+                        background:"var(--color-surface2)",
+                        border: emphasize ? "2px solid var(--color-accent)" : "1px solid transparent",
+                        boxShadow: isSelected ? "0 0 0 3px rgba(224,138,60,0.18)" : day.isToday ? "0 0 0 3px rgba(224,138,60,0.12)" : "none",
+                        overflow:"hidden",
                         display:"flex",
                         flexDirection:"column",
-                        justifyContent:"space-between",
                         cursor:"pointer",
                         opacity: day.isCurrentMonth ? 1 : 0.35,
                         transition:"background 120ms",
+                        padding:0,
                       }}
                     >
-                      <span style={{fontSize:"10px",fontWeight:isSelected||day.isToday?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
-                      {hasTrades && (
-                        <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:700,color:isWin?"var(--color-up)":"var(--color-down)",textAlign:"left"}}>
-                          {day.totalR>=0?"+":""}{day.totalR.toFixed(1)}R
-                        </span>
-                      )}
+                      {/* Kopfstreifen: grün/rot bei Trades, sonst unsichtbar */}
+                      <span style={{height:"3px",flexShrink:0,background: hasTrades ? (isWin?"var(--color-up)":"var(--color-down)") : "transparent"}} />
+                      <span style={{flex:1,padding:"7px 8px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+                        <span style={{fontSize:"11px",fontWeight:emphasize?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
+                        {hasTrades && (
+                          <span style={{textAlign:"center"}}>
+                            <span style={{display:"block",fontFamily:"'JetBrains Mono',monospace",fontSize:"15px",fontWeight:800,color:isWin?"var(--color-up)":"var(--color-down)"}}>
+                              {day.totalR>=0?"+":""}{day.totalR.toFixed(1)}R
+                            </span>
+                            {/* Ein Punkt pro Trade des Tages (max. 4, Rest als +N) */}
+                            <span style={{display:"flex",justifyContent:"center",gap:"3px",marginTop:"4px"}}>
+                              {Array.from({length: Math.min(day.trades.length, 4)}).map((_, i) => (
+                                <span key={i} style={{width:"4px",height:"4px",borderRadius:"50%",background:isWin?"var(--color-up)":"var(--color-down)"}} />
+                              ))}
+                              {day.trades.length > 4 && (
+                                <span style={{fontSize:"8px",fontWeight:700,color:"var(--color-faint)",marginLeft:"2px"}}>+{day.trades.length-4}</span>
+                              )}
+                            </span>
+                          </span>
+                        )}
+                      </span>
                     </button>
                   );
                 })}
