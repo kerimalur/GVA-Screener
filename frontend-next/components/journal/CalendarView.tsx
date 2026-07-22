@@ -166,7 +166,7 @@ export default function CalendarView({ upcomingEvents = [] }: { upcomingEvents?:
   if (loading) return <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px"}}><SkeletonRows rows={7} /></div>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:"14px"}} className="anim-fade-in">
+    <div style={{display:"flex",flexDirection:"column",gap:"14px"}} className="anim-fade-in max-w-[1200px] mx-auto">
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"14px"}}>
@@ -188,7 +188,7 @@ export default function CalendarView({ upcomingEvents = [] }: { upcomingEvents?:
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-[18px] items-start">
 
         {/* Calendar Card */}
-        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px",maxWidth:"680px"}}>
+        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px"}}>
 
           {/* Navigation */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"20px",marginBottom:"16px",position:"relative"}}>
