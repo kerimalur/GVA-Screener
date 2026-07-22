@@ -140,6 +140,32 @@ def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     return resample_3d_bars(df)
 
 
+def recent_gvas(shorts: list | None, longs: list | None, limit: int = 3) -> list:
+    """Letzte `limit` geformte (noch aktive) GVA-Linien eines Paares, nach
+    Bildungsdatum absteigend — reine Anzeige-Hilfe für den Detail-Popup
+    (manuelle Setup-Verifikation).
+
+    KEINE Erkennungslogik: waehlt nur aus den bereits vom Analyzer erkannten,
+    noch nicht getroffenen Linien (ZONES `shorts`/`longs`). Datum ist
+    'DD.MM.YYYY' aus analyzer.py; nicht parsbare Daten wandern ans Ende."""
+    items = (
+        [{"type": "SHORT", "level": x["level"], "date": x["date"]} for x in (shorts or [])]
+        + [{"type": "LONG", "level": x["level"], "date": x["date"]} for x in (longs or [])]
+    )
+
+    def _key(it: dict):
+        try:
+            return pd.to_datetime(it["date"], format="%d.%m.%Y")
+        except Exception:
+            return pd.Timestamp.min
+
+    items.sort(key=_key, reverse=True)
+    return [
+        {"type": it["type"], "level": round(float(it["level"]), 5), "date": it["date"]}
+        for it in items[:limit]
+    ]
+
+
 def simple_candles(daily: pd.DataFrame, granularity: str = "D", since: str = "") -> list:
     """Vereinfachte OHLC-Liste für den Performance-Chart im Währungs-Ranking.
 

@@ -1,82 +1,24 @@
+import { Suspense } from "react";
 import Panel from "@/components/layout/Panel";
-import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
+import { loadRankingData, type PairIdea, type PairIdeas } from "@/lib/ml/ranking";
 import RankingPerformance from "@/components/ml/RankingPerformance";
+import RankingTable from "@/components/ml/RankingTable";
+import { loadPerfCandles } from "@/lib/ml/perfCandles";
 
 export const dynamic = "force-dynamic";
 
-function ScoreBar({ score }: { score: number }) {
-  const pct = Math.min(Math.abs(score), 1) * 50;
-  const pos = score >= 0;
-  return (
-    <div className="relative h-2 w-32 rounded bg-border/40">
-      <div
-        className={`absolute top-0 h-2 rounded ${pos ? "bg-up left-1/2" : "bg-down right-1/2"}`}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  );
-}
-
-function QuintileBadge({ q }: { q: number }) {
-  const cls =
-    q === 5 ? "bg-up/15 text-up" : q === 1 ? "bg-down/15 text-down" : "bg-border/40 text-muted";
-  // STÄRKE-Quintil (nicht Konfidenz): Position des Zins+Saison-Scores in der
-  // eigenen 156W-Verteilung. Q5 = stärkstes Fünftel. „handelbar" bewusst
-  // entfernt — die OOS-Evidenz reicht dafür nicht (Paper-Track nahe Münzwurf,
-  // n zu klein). Q5/Q1 = Kandidat, keine validierte Handelsfreigabe.
-  return (
-    <span
-      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${cls}`}
-      title="Stärke-Quintil des Zins+Saison-Scores (Q5 = stärkstes Fünftel vs. eigene 156-Wochen-Verteilung). Kandidat, nicht validiert handelbar."
-    >
-      Q{q}
-      {q === 5 ? " · Kandidat" : ""}
-    </span>
-  );
-}
-
-function RankingTable({ rows }: { rows: RankingRow[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-muted text-xs">
-            <th className="py-1 pr-2">#</th>
-            <th className="pr-3">Währung</th>
-            <th className="pr-3">Score</th>
-            <th className="pr-3"></th>
-            <th className="pr-3" title="Stärke-Quintil: Position des Scores in der eigenen 156W-Verteilung (nicht Konfidenz)">
-              Stärke-Quintil
-            </th>
-            <th>Top-Faktoren</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.ccy} className="border-t border-border/40">
-              <td className="py-2 pr-2 font-mono text-muted">{i + 1}</td>
-              <td className="pr-3 font-bold">{r.ccy}</td>
-              <td className={`pr-3 font-mono ${r.score >= 0 ? "text-up" : "text-down"}`}>
-                {r.score >= 0 ? "+" : ""}
-                {r.score.toFixed(3)}
-              </td>
-              <td className="pr-3">
-                <ScoreBar score={r.score} />
-              </td>
-              <td className="pr-3">
-                <QuintileBadge q={r.strength_quintile} />
-              </td>
-              <td className="text-xs text-muted font-mono">
-                {r.top_features
-                  .map((f) => `${f.feature} ${f.value >= 0 ? "+" : ""}${f.value.toFixed(2)}`)
-                  .join(" · ")}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+/** Lädt die Kerzen der Kandidaten-Pairs (Render) vor und rendert das Panel.
+ *  Eigene async-Grenze hinter <Suspense>, damit ein Render-Kaltstart nur dieses
+ *  Panel verzögert und nicht die ganze Ranking-Seite blockiert. */
+async function PerformancePanelBody({
+  pairs,
+  startByPair,
+}: {
+  pairs: PairIdea[];
+  startByPair: Record<string, string>;
+}) {
+  const preloaded = await loadPerfCandles(pairs, startByPair);
+  return <RankingPerformance pairs={pairs} startByPair={startByPair} preloaded={preloaded} />;
 }
 
 function PairRow({ i }: { i: PairIdea }) {
@@ -230,7 +172,15 @@ export default async function Page() {
         subtitle="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
       >
         <div className="p-5">
-          <RankingPerformance pairs={perfPairs} startByPair={d.signalStartByPair} />
+          <Suspense
+            fallback={
+              <div className="h-[260px] flex items-center justify-center text-muted text-sm font-mono">
+                Lade Kursdaten …
+              </div>
+            }
+          >
+            <PerformancePanelBody pairs={perfPairs} startByPair={d.signalStartByPair} />
+          </Suspense>
         </div>
       </Panel>
 

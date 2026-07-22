@@ -1,64 +1,101 @@
 "use client";
 
-import { radarType, targetLine, type MarketData, type RadarType } from "@/lib/gva/api";
+import { radarType, type MarketData, type RadarType, type RecentGva } from "@/lib/gva/api";
 
-interface TypeStyle {
+interface BadgeStyle {
   badge: string;
   statusText: string;
-  targetLabel: string;
-  targetLabelColor: string;
-  container: string;
   pulse: boolean;
 }
 
-function typeStyle(type: RadarType): TypeStyle {
+function badgeStyle(type: RadarType): BadgeStyle {
   switch (type) {
     case "hit-short":
-      return {
-        badge: "bg-warn/15 text-warn",
-        statusText: "HIT AUSGELÖST (SHORT)",
-        targetLabel: "Auslöser (Short Line)",
-        targetLabelColor: "text-down",
-        container: "bg-down/10 border-down/30",
-        pulse: true,
-      };
+      return { badge: "bg-warn/15 text-warn", statusText: "HIT AUSGELÖST (SHORT)", pulse: true };
     case "hit-long":
-      return {
-        badge: "bg-warn/15 text-warn",
-        statusText: "HIT AUSGELÖST (LONG)",
-        targetLabel: "Auslöser (Long Line)",
-        targetLabelColor: "text-up",
-        container: "bg-up/10 border-up/30",
-        pulse: true,
-      };
+      return { badge: "bg-warn/15 text-warn", statusText: "HIT AUSGELÖST (LONG)", pulse: true };
     case "short":
-      return {
-        badge: "bg-down/15 text-down",
-        statusText: "Fokus: Short Line",
-        targetLabel: "Short Line",
-        targetLabelColor: "text-down",
-        container: "bg-down/10 border-down/30",
-        pulse: false,
-      };
+      return { badge: "bg-down/15 text-down", statusText: "Fokus: Short Line", pulse: false };
     case "long":
-      return {
-        badge: "bg-up/15 text-up",
-        statusText: "Fokus: Long Line",
-        targetLabel: "Long Line",
-        targetLabelColor: "text-up",
-        container: "bg-up/10 border-up/30",
-        pulse: false,
-      };
+      return { badge: "bg-up/15 text-up", statusText: "Fokus: Long Line", pulse: false };
     default:
-      return {
-        badge: "bg-surface2 text-muted",
-        statusText: "Beobachten (Neutral)",
-        targetLabel: "Nächste Linie",
-        targetLabelColor: "text-muted",
-        container: "bg-surface2 border-border",
-        pulse: false,
-      };
+      return { badge: "bg-surface2 text-muted", statusText: "Beobachten (Neutral)", pulse: false };
   }
+}
+
+/** Pip-Distanz Preis → Linie (positiv = Linie noch nicht erreicht). */
+function pipDistance(pair: string, price: number, level: number, side: "SHORT" | "LONG"): number {
+  const pip = pair.includes("JPY") ? 0.01 : 0.0001;
+  return (side === "SHORT" ? level - price : price - level) / pip;
+}
+
+/** Eine der beiden nächsten Linien (Long bzw. Short), klar beschriftet. */
+function LineRow({
+  side,
+  level,
+  date,
+  price,
+  pair,
+  isNear,
+}: {
+  side: "SHORT" | "LONG";
+  level: number | null;
+  date: string | null;
+  price: number;
+  pair: string;
+  isNear: boolean;
+}) {
+  const long = side === "LONG";
+  const label = long ? "Nächste Long-Linie" : "Nächste Short-Linie";
+  const color = long ? "text-up" : "text-down";
+  const container = long ? "bg-up/10 border-up/30" : "bg-down/10 border-down/30";
+  const dist = level != null ? pipDistance(pair, price, level, side) : null;
+
+  return (
+    <div className={`p-4 rounded border flex flex-col gap-2 ${container}`}>
+      <div className="flex justify-between items-start">
+        <div>
+          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${color}`}>
+            {label}
+            {isNear && level != null && (
+              <span className="ml-1.5 text-[9px] text-muted normal-case tracking-normal">
+                (am nächsten)
+              </span>
+            )}
+          </span>
+          <span className="font-mono text-lg font-bold">
+            {level != null ? level.toFixed(5) : "–"}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] font-semibold text-muted uppercase tracking-widest block mb-1">
+            Distanz
+          </span>
+          <span className="text-base font-bold font-mono">
+            {dist != null ? `${Math.abs(dist).toFixed(1)} Pips` : "– Pips"}
+          </span>
+        </div>
+      </div>
+      <div className="text-[11px] text-muted mt-1">Linie generiert am: {date ?? "–"}</div>
+    </div>
+  );
+}
+
+function HistoryRow({ g }: { g: RecentGva }) {
+  const long = g.type === "LONG";
+  return (
+    <div className="flex justify-between items-center bg-surface2 p-2.5 rounded border border-border">
+      <span
+        className={`text-[10px] font-bold tracking-widest px-1.5 py-0.5 rounded ${
+          long ? "bg-up/15 text-up" : "bg-down/15 text-down"
+        }`}
+      >
+        {long ? "LONG" : "SHORT"}
+      </span>
+      <span className="font-mono text-sm">{g.level.toFixed(5)}</span>
+      <span className="text-[10px] font-mono text-muted">{g.date}</span>
+    </div>
+  );
 }
 
 interface DetailsModalProps {
@@ -70,10 +107,8 @@ interface DetailsModalProps {
 }
 
 export default function DetailsModal({ item, onClose, onMark, onAdopt }: DetailsModalProps) {
-  const type = radarType(item);
-  const style = typeStyle(type);
-  const target = targetLine(item, type);
-  const distanceLabel = item.distance != null ? `${item.distance.toFixed(1)} Pips` : "– Pips";
+  const style = badgeStyle(radarType(item));
+  const history = item.recent_gvas ?? [];
   const now = new Date().toLocaleDateString("de-CH", {
     day: "2-digit",
     month: "2-digit",
@@ -88,7 +123,7 @@ export default function DetailsModal({ item, onClose, onMark, onAdopt }: Details
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border2 rounded-md w-full max-w-sm p-6"
+        className="bg-surface border border-border2 rounded-md w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-6">
@@ -121,29 +156,40 @@ export default function DetailsModal({ item, onClose, onMark, onAdopt }: Details
             <span className="font-mono text-lg font-bold">{item.price.toFixed(5)}</span>
           </div>
 
-          <div className={`p-4 rounded border flex flex-col gap-2 ${style.container}`}>
-            <div className="flex justify-between items-start">
-              <div>
-                <span
-                  className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${style.targetLabelColor}`}
-                >
-                  {style.targetLabel}
-                </span>
-                <span className="font-mono text-lg font-bold">
-                  {target.level != null ? target.level.toFixed(5) : "–"}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-semibold text-muted uppercase tracking-widest block mb-1">
-                  Distanz
-                </span>
-                <span className="text-base font-bold font-mono">{distanceLabel}</span>
-              </div>
+          {/* Nächste Long- UND nächste Short-Linie, jeweils klar beschriftet. */}
+          <LineRow
+            side="LONG"
+            level={item.long}
+            date={item.long_date}
+            price={item.price}
+            pair={item.pair}
+            isNear={item.near === "LONG"}
+          />
+          <LineRow
+            side="SHORT"
+            level={item.short}
+            date={item.short_date}
+            price={item.price}
+            pair={item.pair}
+            isNear={item.near === "SHORT"}
+          />
+
+          {/* Aufklappbare Historie: letzte GVAs zur manuellen Setup-Verifikation. */}
+          <details className="group">
+            <summary className="cursor-pointer select-none text-[11px] font-bold tracking-widest uppercase text-muted hover:text-text py-1 flex items-center gap-1.5">
+              <i className="ph-bold ph-caret-right text-xs transition-transform group-open:rotate-90" />
+              Letzte GVA-Linien ({history.length})
+            </summary>
+            <div className="pt-2 space-y-1.5">
+              {history.length > 0 ? (
+                history.map((g, i) => <HistoryRow key={`${g.type}-${g.level}-${i}`} g={g} />)
+              ) : (
+                <p className="text-[11px] text-muted">
+                  Keine aktiven GVA-Linien hinterlegt (oder Backend-Version ohne Historie).
+                </p>
+              )}
             </div>
-            <div className="text-[11px] text-muted mt-1">
-              Linie generiert am: {target.date ?? "–"}
-            </div>
-          </div>
+          </details>
 
           {item.last_touched && (
             <div className="pt-2">

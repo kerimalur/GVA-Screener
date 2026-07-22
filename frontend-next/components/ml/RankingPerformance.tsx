@@ -5,6 +5,7 @@ import Segmented from "@/components/ui/Segmented";
 import CandleChart from "@/components/charts/CandleChart";
 import { fetchCandles, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "@/lib/ml/ranking";
+import { candleKey } from "@/lib/ml/candleKey";
 import { sinceForPair, wochenSeit } from "@/lib/ml/signalStart";
 
 /**
@@ -16,65 +17,62 @@ import { sinceForPair, wochenSeit } from "@/lib/ml/signalStart";
  * noch eine sinnvolle Aussage. Der Startpunkt kommt je Pair aus dem tatsächlichen
  * Lauf; ein brandneues Signal hat keinen Verlauf und wird als solches gezeigt.
  *
- * Pair-Pills wählen das Paar, Segmente schalten Daily/Weekly und Kerze/Linie
- * um. Quelle OANDA (`/api/candles`).
+ * Die Kerzen aller Kandidaten (Daily + Weekly) kommen serverseitig vorgeladen
+ * (`preloaded`, Quelle OANDA über Renders warme Cache) → Umschalten ohne
+ * Ladezeit. Fehlt ein Eintrag (Render-Kaltstart bei SSR), wird er clientseitig
+ * nachgeladen. Kerze/Linie sind reine Zeichenmodi derselben Daten.
  */
 export default function RankingPerformance({
   pairs,
   startByPair,
+  preloaded,
 }: {
   pairs: PairIdea[];
   /** Pair-Anzeigename → 'YYYY-MM-DD'; fehlt = Signal ist neu. */
   startByPair: Record<string, string>;
+  /** `${SYMBOL}|${D|W}` → Kerzen, serverseitig vorgeladen. */
+  preloaded: Record<string, Candle[]>;
 }) {
   const [sel, setSel] = useState(0);
   const [gran, setGran] = useState<"D" | "W">("D");
   const [mode, setMode] = useState<"candle" | "line">("candle");
-  const [candles, setCandles] = useState<Candle[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Start mit den vorgeladenen Daten; clientseitige Nachladungen füllen Lücken.
+  const [cache, setCache] = useState<Record<string, Candle[]>>(preloaded);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
   const active = pairs[sel];
   const symbol = active ? active.pair.replace("/", "") : "";
-  // Startpunkt des aktiven Pairs; null (→ "") wenn das Signal neu ist oder der
-  // errechnete Lauf in der Zukunft liegt.
+  // Startpunkt des aktiven Pairs; "" wenn das Signal neu ist oder der errechnete
+  // Lauf in der Zukunft liegt.
   const start = active ? (sinceForPair(startByPair[active.pair]) ?? "") : "";
+  const key = candleKey(symbol, gran);
+  const hasStart = Boolean(symbol && start);
+  const candles = hasStart ? (cache[key] ?? []) : [];
+  const need = hasStart && !(key in cache);
 
+  // Fallback: fehlt der Eintrag (Render war beim Vorladen im Kaltstart), einmal
+  // nachladen und cachen. Bei vollständig vorgeladenen Daten läuft das nie.
+  // queueMicrotask hält alle setState-Aufrufe aus dem synchronen Effect-Body
+  // (Lint-Regel react-hooks/set-state-in-effect) — gleiche Deferral wie zuvor.
   useEffect(() => {
+    if (!need) return;
     let alive = true;
-    // queueMicrotask hält alle setState-Aufrufe aus dem synchronen Effect-Body
-    // (gleiche Deferral wie im ScannerShell) — inkl. des Falls „kein Start".
     const run = async () => {
-      // Neues Signal ohne Startpunkt: nicht laden, sondern den Ladezustand
-      // beenden und alte Kerzen des vorher gewählten Pairs verwerfen.
-      if (!symbol || !start) {
-        if (alive) {
-          setCandles([]);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
-      setLoading(true);
-      setError(null);
+      setLoadingKey(key);
       try {
         const cs = await fetchCandles(symbol, gran, start);
-        if (alive) {
-          setCandles(cs);
-          setLoading(false);
-        }
+        if (alive) setCache((c) => ({ ...c, [key]: cs }));
       } catch {
-        if (alive) {
-          setError("Kursdaten nicht ladbar — Backend (Render) evtl. im Kaltstart.");
-          setLoading(false);
-        }
+        if (alive) setCache((c) => ({ ...c, [key]: [] }));
+      } finally {
+        if (alive) setLoadingKey((k) => (k === key ? null : k));
       }
     };
     queueMicrotask(run);
     return () => {
       alive = false;
     };
-  }, [symbol, gran, start]);
+  }, [need, key, symbol, gran, start]);
 
   if (pairs.length === 0) {
     return (
@@ -84,30 +82,57 @@ export default function RankingPerformance({
     );
   }
 
-  const first = candles[0]?.close;
-  const last = candles[candles.length - 1]?.close;
-  const pct = first != null && last != null && first !== 0 ? ((last - first) / first) * 100 : null;
+  const loading = loadingKey === key;
+
+  // %-Bewegung eines Pairs seit Signalstart (aktuelle Granularität) — für die
+  // Chart-Anzeige des aktiven Pairs UND die Grün/Rot-Färbung aller Pills.
+  const pctFor = (p: PairIdea): number | null => {
+    const st = sinceForPair(startByPair[p.pair]) ?? "";
+    if (!st) return null;
+    const cs = cache[candleKey(p.pair.replace("/", ""), gran)];
+    if (!cs || cs.length < 2) return null;
+    const f = cs[0].close;
+    const l = cs[cs.length - 1].close;
+    return f ? ((l - f) / f) * 100 : null;
+  };
   // „Günstig" = Bewegung in Signalrichtung (Long → hoch, Short → runter).
-  const favorable =
-    pct != null && active ? (active.direction === "long" ? pct > 0 : pct < 0) : null;
+  const favorableOf = (p: PairIdea, pct: number | null): boolean | null =>
+    pct == null ? null : p.direction === "long" ? pct > 0 : pct < 0;
+
+  const pct = active ? pctFor(active) : null;
+  const favorable = active ? favorableOf(active, pct) : null;
 
   return (
     <div className="space-y-4">
-      {/* Pair-Auswahl (wirkt wie Tabs) */}
+      {/* Pair-Auswahl (wirkt wie Tabs) — Grün/Rot = Bewegung vs. Signal (Übersicht) */}
       <div className="flex flex-wrap gap-1.5">
-        {pairs.map((p, i) => (
-          <button
-            key={p.pair}
-            onClick={() => setSel(i)}
-            className={`px-2.5 py-1 rounded text-xs font-bold font-mono border transition-colors ${
-              i === sel
-                ? "bg-accent/15 text-accent border-accent"
-                : "bg-surface text-muted border-border hover:text-text hover:border-border2"
-            }`}
-          >
-            {p.pair}
-          </button>
-        ))}
+        {pairs.map((p, i) => {
+          const fav = favorableOf(p, pctFor(p));
+          const selected = i === sel;
+          const tone = selected
+            ? "bg-accent/15 text-accent border-accent"
+            : fav === true
+              ? "bg-up/10 text-up border-up/40 hover:border-up"
+              : fav === false
+                ? "bg-down/10 text-down border-down/40 hover:border-down"
+                : "bg-surface text-muted border-border hover:text-text hover:border-border2";
+          return (
+            <button
+              key={p.pair}
+              onClick={() => setSel(i)}
+              title={
+                fav == null
+                  ? "noch kein Verlauf"
+                  : fav
+                    ? "in Signalrichtung (im Plus)"
+                    : "gegen das Signal"
+              }
+              className={`px-2.5 py-1 rounded text-xs font-bold font-mono border transition-colors ${tone}`}
+            >
+              {p.pair}
+            </button>
+          );
+        })}
       </div>
 
       {/* Kopf: Richtung, Grund, Performance seit Signal */}
@@ -134,9 +159,7 @@ export default function RankingPerformance({
         )}
         {pct != null && (
           <span
-            className={`ml-auto font-mono text-sm font-bold ${
-              favorable ? "text-up" : "text-down"
-            }`}
+            className={`ml-auto font-mono text-sm font-bold ${favorable ? "text-up" : "text-down"}`}
             title="Kursänderung seit Signalstart (grün = in Signalrichtung)"
           >
             {pct >= 0 ? "+" : ""}
@@ -169,7 +192,7 @@ export default function RankingPerformance({
       </div>
 
       {/* Chart */}
-      {!start ? (
+      {!hasStart ? (
         <div className="h-[260px] flex items-center justify-center text-faint text-sm text-center px-4">
           Diese Konstellation ist neu (Prognose für die kommende Woche) — es gibt
           noch keinen Kursverlauf seit dem Signal.
@@ -178,8 +201,10 @@ export default function RankingPerformance({
         <div className="h-[260px] flex items-center justify-center text-muted text-sm font-mono">
           Lade Kursdaten …
         </div>
-      ) : error ? (
-        <div className="h-[260px] flex items-center justify-center text-down text-sm">{error}</div>
+      ) : candles.length === 0 ? (
+        <div className="h-[260px] flex items-center justify-center text-down text-sm text-center px-4">
+          Kursdaten nicht ladbar — Backend (Render) evtl. im Kaltstart.
+        </div>
       ) : (
         <CandleChart candles={candles} mode={mode} />
       )}

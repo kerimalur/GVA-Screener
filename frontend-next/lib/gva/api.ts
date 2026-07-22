@@ -8,6 +8,13 @@ export interface LastTouched {
   touched_date: string;
 }
 
+/** Eine geformte, noch aktive GVA-Linie (Detail-Popup: letzte Setups). */
+export interface RecentGva {
+  type: "SHORT" | "LONG";
+  level: number;
+  date: string; // 'DD.MM.YYYY'
+}
+
 export interface MarketData {
   pair: string;
   price: number;
@@ -25,6 +32,9 @@ export interface MarketData {
   stale: boolean;
   /** true = HIT wurde nachträglich aus der Kerzen-Historie erkannt (Downtime). */
   detected_late: boolean;
+  /** Letzte 3 geformte, noch aktive GVA-Linien (neueste zuerst). Altes Backend
+   *  liefert das Feld nicht → undefined; die Historie zeigt dann einen Hinweis. */
+  recent_gvas?: RecentGva[];
 }
 
 /** Antwort von GET /api/screener — inkl. Zustandskontext (Arbeitspaket C). */

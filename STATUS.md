@@ -5,6 +5,20 @@
 
 Stand: 2026-07-21
 
+## ✅ Offene manuelle Schritte erledigt (2026-07-21, Kerim)
+Kerim hat die drei blockierenden Handschritte ausgeführt:
+1. **Migration `outlook_signal_link.sql`** im Supabase-SQL-Editor ausgeführt →
+   `outlooks.source` / `outlooks.signal_id` existieren; „PENDING → COCKPIT"-Übernahme
+   (`adoptHitPair`) und die Cockpit↔Outlook-Verknüpfung sind jetzt scharf.
+2. **GitHub-Repo-Secrets** gesetzt (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+   FRED_API_KEY) → nächtliche ML-Suche + Weekly Ranking laufen an.
+3. **FRED_API_KEY in der Render-Env** eingetragen → Makro-Loop + Panel-Warmup
+   ziehen wieder frische Zinsen (Real-Yield/Makro-Terminal nicht mehr eingefroren).
+
+→ Die entsprechenden „⚠️ OFFEN"-Vermerke weiter unten in dieser Datei sind damit
+erledigt. **Visueller Live-Check** der UI-Umbauten (Design, Modus-Nav, Cockpit,
+Launcher) ebenfalls erledigt — keine offenen manuellen Schritte mehr.
+
 ## Trade-Budget (8 Kästchen) + Signalstart-Fix (2026-07-21, Teil 3)
 Spec: `docs/superpowers/specs/2026-07-21-trade-budget-design.md`,
 Plan: `docs/superpowers/plans/2026-07-21-trade-budget-und-signalstart.md`

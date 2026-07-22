@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles, recent_gvas
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
@@ -248,6 +248,9 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
         "pending": bool(TRIGGERED.get(pair, {}).get("pending")),
         "distance": distance_pips,
         "last_touched": zone.get("last_touched"),
+        # Letzte 3 geformte (noch aktive) GVA-Linien fuer die manuelle
+        # Setup-Verifikation im Detail-Popup. Rein additiv, keine Erkennungslogik.
+        "recent_gvas": recent_gvas(zone.get("shorts", []), zone.get("longs", [])),
         # True = Preis stammt NICHT von OANDA, sondern vom letzten Tagesschluss.
         # Das Frontend markiert solche Karten mit "~" vor der Pip-Distanz.
         "stale": not fire_alerts,
