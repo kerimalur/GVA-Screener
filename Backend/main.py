@@ -140,6 +140,17 @@ def select_lines(pair: str):
     long = next((x for x in z.get("longs", []) if round(x["level"], 5) not in cl), None)
     return short, long
 
+def cockpit_deep_link(pair: str) -> str:
+    """Markdown-Zeile mit Deep-Link ins Cockpit auf das Pair, vom Handy
+    per Tap erreichbar. Leer, wenn FRONTEND_URL fehlt — der Alert geht dann
+    ohne Link raus, statt ganz auszufallen (Anforderung: Link weglassen statt
+    Alert verwerfen)."""
+    base = os.getenv('FRONTEND_URL', '').rstrip('/')
+    if not base:
+        return ""
+    return f"\n\n[📲 Im Cockpit öffnen]({base}/cockpit?pair={pair})"
+
+
 def send_telegram_alert(text: str):
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     chat_id = os.getenv('TELEGRAM_CHAT_ID')
@@ -215,7 +226,7 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                 cache_key = f"{pair}_{side}"
                 if ALERT_CACHE.get(cache_key) != level:
                     msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
-                    send_telegram_alert(msg)
+                    send_telegram_alert(msg + cockpit_deep_link(pair))
                     # Additiv: HIT auch als Signal in Supabase ablegen (Journal-Inbox).
                     # Fire-and-forget im eigenen Thread, no-op ohne Konfiguration.
                     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
@@ -349,7 +360,7 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
         ALERT_CACHE[cache_key] = level
 
     save_state()
-    send_telegram_alert(late_hits.alert_text(pair, hit))
+    send_telegram_alert(late_hits.alert_text(pair, hit) + cockpit_deep_link(pair))
     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
     supabase_signals.record_hit_async(
         pair, side, level, snapshot,

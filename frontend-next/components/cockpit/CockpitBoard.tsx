@@ -163,7 +163,7 @@ function Card({
   const oeffenbar = card.outlookId != null;
 
   return (
-    <div className="rounded-md border border-border/60 bg-surface hover:border-faint transition-colors">
+    <div data-pair={card.pair} className="rounded-md border border-border/60 bg-surface hover:border-faint transition-colors">
       <button
         onClick={() => onOpen(card)}
         disabled={!oeffenbar}
@@ -335,6 +335,25 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
   const [busy, setBusy] = useState(false);
   const [wizard, setWizard] = useState(false);
   const aliveRef = useRef(true);
+
+  // Deep-Link aus dem Telegram-Alert (/cockpit?pair=EURUSD): einmal, sobald das
+  // Board geladen ist, zur Karte scrollen und kurz hervorheben. Kein Treffer →
+  // stilles No-op (Karte evtl. nicht offen).
+  const deepLinkDoneRef = useRef(false);
+  useEffect(() => {
+    if (!meta.loaded || deepLinkDoneRef.current) return;
+    deepLinkDoneRef.current = true;
+    const pair = new URLSearchParams(window.location.search).get("pair");
+    if (!pair) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-pair="${pair.toUpperCase().replace(/[^A-Z0-9]/g, "")}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.outline = "2px solid var(--color-accent)";
+      el.style.outlineOffset = "2px";
+      setTimeout(() => { el.style.outline = ""; el.style.outlineOffset = ""; }, 2600);
+    });
+  }, [meta.loaded]);
 
   const loadSignalsSafe = useCallback(async () => {
     try {

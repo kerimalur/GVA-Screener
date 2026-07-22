@@ -62,7 +62,7 @@ const RAW_MODES: AppMode[] = [
     label: "Journalieren",
     icon: "ph-notebook",
     base: "/journal/dashboard",
-    summary: "Dashboard · Trades · Equity · Outlook · Kalender · Strategien",
+    summary: "Dashboard · Trades · Equity · Outlook · Kalender · Rückblick · Strategien",
     badge: "ohneAdherence",
     tabs: [
       { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
@@ -72,7 +72,8 @@ const RAW_MODES: AppMode[] = [
       // Outlook (ph-binoculars) = Detailebene darüber.
       { href: "/journal/outlook", label: "Outlook", icon: "ph-binoculars" },
       { href: "/journal/kalender", label: "Trade-Kalender", icon: "ph-calendar-heart" },
-      // Strategien sitzt direkt hinter dem Kalender: definierte Setups gehören
+      { href: "/journal/rueckblick", label: "Wochenrückblick", icon: "ph-calendar-check" },
+      // Strategien sitzt hinter Kalender/Rückblick: definierte Setups gehören
       // zum Journalieren, nicht mehr in einen eigenen System-Modus.
       { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
     ],
@@ -184,6 +185,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/journal/equity": "Equity-Kurve",
   "/journal/outlook": "Outlook — Details & eigene Thesen",
   "/journal/kalender": "Trade-Kalender",
+  "/journal/rueckblick": "Wochenrückblick",
   "/journal/strategie": "Strategie-Builder",
   "/journal/backtest": "Backtest-Lab",
   "/ml": "Machine Learning — Daten-Check",

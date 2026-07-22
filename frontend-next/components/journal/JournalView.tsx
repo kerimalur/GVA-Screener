@@ -13,6 +13,7 @@ import TradeDetailModal from "./TradeDetailModal";
 import AdherenceModal from "./AdherenceModal";
 import ExpectancyCard from "./ExpectancyCard";
 import { AccountSetupModal, AccountManageModal } from "./AccountModals";
+import CsvImportModal from "./CsvImportModal";
 import type { AccountConfigs, AccountType, Trade, TradeFilters } from "@/lib/journal/types";
 import { PAIR_LIST, SETUP_DEFINITIONS } from "@/lib/journal/types";
 import * as tradeService from "@/lib/journal/trades";
@@ -48,6 +49,7 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
   const [viewingTrade, setViewingTrade] = useState<Trade | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [showManage, setShowManage] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [filters, setFilters] = useState<TradeFilters>({});
   const [filterResult, setFilterResult] = useState<string>("all");
@@ -242,6 +244,7 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
             onChange={setViewMode}
           />
           <Button variant="ghost" size="sm" icon="ph-gear" onClick={() => setShowManage(true)}>Konten</Button>
+          <Button variant="ghost" size="sm" icon="ph-upload-simple" onClick={() => setShowImport(true)} disabled={!config}>Import</Button>
           <Button size="sm" icon="ph-plus" onClick={() => setShowForm(true)} disabled={!config}>Neuer Trade</Button>
         </div>
       </div>
@@ -453,6 +456,15 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       {showSetup && (
         <AccountSetupModal accountType={accountType} onCreated={reload} onClose={() => setShowSetup(false)} />
       )}
+      {showImport && (
+        <CsvImportModal
+          accountType={accountType}
+          existingTrades={trades}
+          onImported={reload}
+          onClose={() => setShowImport(false)}
+        />
+      )}
+
       {showManage && (
         <AccountManageModal accounts={accountsOfType} accountType={accountType} onChanged={reload} onAddAccount={() => setShowSetup(true)} onClose={() => setShowManage(false)} />
       )}

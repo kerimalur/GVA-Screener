@@ -13,6 +13,7 @@ import {
   timePatterns,
 } from "../lib/journal/timePatterns";
 import { accountSummary, allAccounts } from "../lib/journal/accountsSummary";
+import { mondayOf, availableWeeks, weekReview } from "../lib/journal/weekReview";
 import type { Trade } from "../lib/journal/types";
 import type { AccountConfig, AccountConfigs } from "../lib/journal/types";
 
@@ -119,6 +120,42 @@ check(
   ["EK1", "F1", "F2"],
 );
 check("allAccounts null -> []", allAccounts(null), []);
+
+// --- Wochenrückblick ---------------------------------------------------------
+check("mondayOf Mittwoch -> Montag", mondayOf("2026-07-08"), "2026-07-06");
+check("mondayOf Montag -> selbst", mondayOf("2026-07-06"), "2026-07-06");
+check("mondayOf Sonntag -> Montag der Woche", mondayOf("2026-07-05"), "2026-06-29");
+
+const weekTrades: Trade[] = [
+  t({ date: "2026-07-06", result: "win", rMultiple: 2, adherenceScore: 80 }),
+  t({ date: "2026-07-08", result: "loss", rMultiple: -1, adherenceScore: 40 }),
+  t({ date: "2026-07-12", result: "breakeven", rMultiple: 0 }), // Sonntag, in der Woche
+  t({ date: "2026-07-13", result: "win", rMultiple: 3 }), // nächste Woche -> raus
+  t({ date: "2026-07-06", result: "win", rMultiple: 1, sessionType: "backtest" }), // Backtest -> raus
+];
+const wr26 = weekReview(weekTrades, "2026-07-06");
+check("Woche: Ergebnis in R", Number(wr26.totalR.toFixed(2)), 1);
+check("Woche: 3 Live-Trades (Budget-Verbrauch)", wr26.budgetUsed, 3);
+check("Woche: Winrate 1/2 = 50", wr26.winRate, 50);
+check("Woche: Adherence Ø (80,40)", wr26.adherenceAvg, 60);
+check("Woche: 2 bewertete Trades", wr26.adherenceCount, 2);
+check("Woche: Ende = Sonntag", wr26.weekEnd, "2026-07-12");
+
+const noRating = weekReview([t({ date: "2026-07-06", result: "win", rMultiple: 1 })], "2026-07-06");
+check("keine Adherence -> null", noRating.adherenceAvg, null);
+const beOnlyWeek = weekReview([t({ date: "2026-07-06", result: "breakeven", rMultiple: 0 })], "2026-07-06");
+check("nur Breakeven -> Winrate null", beOnlyWeek.winRate, null);
+
+check(
+  "availableWeeks: jüngste zuerst, Backtest ignoriert",
+  availableWeeks([
+    t({ date: "2026-07-06" }),
+    t({ date: "2026-07-13" }),
+    t({ date: "2026-07-08" }),
+    t({ date: "2026-07-20", sessionType: "backtest" }),
+  ]),
+  ["2026-07-13", "2026-07-06"],
+);
 
 console.log(fails === 0 ? "\nAlle Kontrollwerte grün." : `\n${fails} Kontrollwert(e) FAIL.`);
 process.exitCode = fails === 0 ? 0 : 1;

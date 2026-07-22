@@ -10,6 +10,9 @@ import type { Trade } from "@/lib/journal/types";
 import { SETUP_DEFINITIONS } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
+import { loadOutlooks, OUTLOOK_STATUS_CONFIG, type OutlookRecord } from "@/lib/journal/outlooks";
+import { budgetState, type BudgetState } from "@/lib/journal/budget";
+import type { CalendarEventRow } from "@/lib/supabase/types";
 import {
   timePatterns,
   MIN_PATTERN_TRADES,
@@ -44,10 +47,14 @@ function winRateColor(wr: number | null): string {
   return wr >= 50 ? "var(--color-up)" : "var(--color-muted)";
 }
 
-export default function CalendarView() {
+export default function CalendarView({ upcomingEvents = [] }: { upcomingEvents?: CalendarEventRow[] }) {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [openSetups, setOpenSetups] = useState<OutlookRecord[]>([]);
   const [currency, setCurrency] = useState<string>("USD");
   const [loading, setLoading] = useState(true);
+  // Standardansicht rechts = Wochenausblick; „Muster" schaltet auf die
+  // Zeit-Muster-Analyse. Tages-Detail überlagert beide bei Tagesauswahl.
+  const [panelMode, setPanelMode] = useState<"outlook" | "patterns">("outlook");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
@@ -58,11 +65,19 @@ export default function CalendarView() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadTrades(), loadAccountConfigs()])
-      .then(([t, c]) => { setTrades(t); setCurrency(c?.funded?.currency || c?.ek?.currency || "USD"); })
+    Promise.all([loadTrades(), loadAccountConfigs(), loadOutlooks()])
+      .then(([t, c, o]) => {
+        setTrades(t);
+        setCurrency(c?.funded?.currency || c?.ek?.currency || "USD");
+        // Offene Setups (nicht abgeschlossen) — dieselbe Regel wie im Cockpit.
+        setOpenSetups(o.filter((x) => x.status === "observation" || x.status === "waiting" || x.status === "active"));
+      })
       .catch(() => toast.error("Fehler beim Laden"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Budget ist kontenübergreifend → alle Trades (budgetState filtert Live selbst).
+  const budget = useMemo(() => budgetState(trades), [trades]);
 
   const filteredTrades = useMemo(
     () => trades.filter((t) => (accountFilter === "all" || t.type === accountFilter) && t.sessionType === "live"),
@@ -326,7 +341,18 @@ export default function CalendarView() {
               )}
             </div>
           ) : (
-            <TimePatternPanel patterns={patterns} periodLabel={periodLabel} />
+            <div className="anim-fade-in" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <Segmented
+                options={[{ value: "outlook" as const, label: "Ausblick" }, { value: "patterns" as const, label: "Muster" }]}
+                value={panelMode}
+                onChange={setPanelMode}
+              />
+              {panelMode === "outlook" ? (
+                <WeekOutlookPanel events={upcomingEvents} openSetups={openSetups} budget={budget} />
+              ) : (
+                <TimePatternPanel patterns={patterns} periodLabel={periodLabel} />
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -401,6 +427,122 @@ function TimePatternPanel({ patterns, periodLabel }: { patterns: TimePatternResu
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Wochenausblick — Standardansicht der rechten Hälfte (kein Tag gewählt)      */
+/* -------------------------------------------------------------------------- */
+
+/** Montag der Kalenderwoche eines ISO-Zeitstempels als "dd.mm." */
+function outlookWeekKey(iso: string): string {
+  const d = new Date(iso);
+  const dow = (d.getDay() + 6) % 7;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow);
+  return `${String(monday.getDate()).padStart(2, "0")}.${String(monday.getMonth() + 1).padStart(2, "0")}.`;
+}
+
+function groupEventsByWeek(events: CalendarEventRow[]): { week: string; items: CalendarEventRow[] }[] {
+  const order: string[] = [];
+  const map: Record<string, CalendarEventRow[]> = {};
+  for (const e of events) {
+    const k = outlookWeekKey(e.event_time);
+    if (!map[k]) { map[k] = []; order.push(k); }
+    map[k].push(e);
+  }
+  return order.map((week) => ({ week, items: map[week] }));
+}
+
+function WeekOutlookPanel({
+  events,
+  openSetups,
+  budget,
+}: {
+  events: CalendarEventRow[];
+  openSetups: OutlookRecord[];
+  budget: BudgetState;
+}) {
+  const shownEvents = events.slice(0, 12);
+  const groups = groupEventsByWeek(shownEvents);
+  const shownSetups = openSetups.slice(0, 6);
+
+  return (
+    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "22px" }} className="anim-fade-in">
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontSize: "14px", fontWeight: 700 }}>Wochenausblick</div>
+        <div style={{ fontSize: "11.5px", color: "var(--color-faint)", marginTop: "2px" }}>Nächste Wochen — Termine, Setups, Budget</div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Trade-Budget */}
+        <div>
+          <SectionLabel>Trade-Budget</SectionLabel>
+          <div style={{ fontSize: "12.5px", fontFamily: MONO }}>
+            <span style={{ fontWeight: 700, color: budget.offen > 0 ? "var(--color-up)" : "var(--color-faint)" }}>
+              {budget.offen} von {budget.total}
+            </span>
+            <span style={{ color: "var(--color-faint)" }}> frei · {budget.used} genutzt</span>
+            {budget.overrun > 0 && <span style={{ color: "var(--color-down)" }}> · {budget.overrun} über Budget</span>}
+          </div>
+        </div>
+
+        {/* Offene Setups aus dem Cockpit */}
+        <div>
+          <SectionLabel>Offene Setups ({openSetups.length})</SectionLabel>
+          {openSetups.length === 0 ? (
+            <p style={{ fontSize: "11.5px", color: "var(--color-faint)" }}>Keine offenen Setups.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              {shownSetups.map((o) => {
+                const cfg = OUTLOOK_STATUS_CONFIG[o.status];
+                return (
+                  <Link
+                    key={o.id ?? o.symbol}
+                    href={`/cockpit?pair=${o.symbol.replace("/", "")}`}
+                    className="hover:bg-active"
+                    style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontFamily: MONO, padding: "6px 8px", borderRadius: "8px", textDecoration: "none", color: "inherit" }}
+                  >
+                    <span style={{ fontWeight: 700, color: "var(--color-text)" }}>{o.symbol}</span>
+                    <span style={{ color: o.direction === "long" ? "var(--color-up)" : "var(--color-down)" }}>{o.direction === "long" ? "▲" : "▼"}</span>
+                    <span style={{ marginLeft: "auto", fontSize: "10.5px", color: `var(--color-${cfg.tone})` }}>{cfg.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* High-Impact-News der kommenden Wochen */}
+        <div>
+          <SectionLabel>High-Impact — nächste Wochen</SectionLabel>
+          {events.length === 0 ? (
+            <p style={{ fontSize: "11.5px", color: "var(--color-faint)" }}>Keine High-Impact-Termine in den nächsten 4 Wochen.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {groups.map((g) => (
+                <div key={g.week}>
+                  <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--color-faint)", marginBottom: "4px" }}>Woche ab {g.week}</div>
+                  {g.items.map((e) => {
+                    const d = new Date(e.event_time);
+                    const dm = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.`;
+                    return (
+                      <div key={e.id} style={{ display: "flex", alignItems: "baseline", gap: "8px", fontSize: "11.5px", padding: "2px 0" }}>
+                        <span style={{ fontFamily: MONO, color: "var(--color-faint)", flexShrink: 0 }}>{dm}</span>
+                        {e.currency && <span style={{ fontFamily: MONO, fontWeight: 700, color: "var(--color-accent)", flexShrink: 0 }}>{e.currency}</span>}
+                        <span style={{ color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {events.length > shownEvents.length && (
+                <div style={{ fontSize: "10.5px", color: "var(--color-faint)" }}>+{events.length - shownEvents.length} weitere</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
