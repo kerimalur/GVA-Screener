@@ -62,13 +62,15 @@ function fmtClock(updatedSec: number | null): string {
   });
 }
 
-/** Stärkste/schwächste Währung aus dem Wochen-Ranking (Q5/Q1) für die Statuskachel. */
-function rankingBias(quintiles: Record<string, number>): { top: string | null; bottom: string | null } {
-  let top: string | null = null;
-  let bottom: string | null = null;
+/** ALLE starken (Q5, ▲) und schwachen (Q1, ▼) Währungen aus dem Wochen-Ranking
+ *  für die Statuskachel — nicht nur je eine, sonst fällt ein zweites Extrem
+ *  (z.B. zwei Q1-Währungen) unter den Tisch. */
+function rankingBias(quintiles: Record<string, number>): { top: string[]; bottom: string[] } {
+  const top: string[] = [];
+  const bottom: string[] = [];
   for (const [ccy, q] of Object.entries(quintiles)) {
-    if (q === 5) top = ccy;
-    if (q === 1) bottom = ccy;
+    if (q === 5) top.push(ccy);
+    else if (q === 1) bottom.push(ccy);
   }
   return { top, bottom };
 }
@@ -527,12 +529,19 @@ export default function CockpitBoard({ quintiles }: { quintiles: Record<string, 
         <StatTile
           label="Ranking-Bias"
           value={
-            bias.top || bias.bottom ? (
-              <>
-                {bias.top && <span className="text-up">{bias.top} ▲</span>}
-                {bias.top && bias.bottom && " / "}
-                {bias.bottom && <span className="text-down">{bias.bottom} ▼</span>}
-              </>
+            bias.top.length || bias.bottom.length ? (
+              <span className="inline-flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
+                {bias.top.map((c) => (
+                  <span key={c} className="text-up">
+                    {c} ▲
+                  </span>
+                ))}
+                {bias.bottom.map((c) => (
+                  <span key={c} className="text-down">
+                    {c} ▼
+                  </span>
+                ))}
+              </span>
             ) : (
               "–"
             )

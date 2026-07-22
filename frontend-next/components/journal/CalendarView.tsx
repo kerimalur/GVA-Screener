@@ -125,7 +125,7 @@ export default function CalendarView() {
       <div style={{display:"grid",gridTemplateColumns:selectedDate?"1fr 288px":"1fr",gap:"18px",alignItems:"start"}}>
 
         {/* Calendar Card */}
-        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px"}}>
+        <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px",maxWidth:"680px"}}>
 
           {/* Navigation */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"20px",marginBottom:"16px",position:"relative"}}>
@@ -160,8 +160,8 @@ export default function CalendarView() {
                       key={day.dateStr}
                       onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
                       style={{
-                        aspectRatio:"0.82",
-                        borderRadius:"14px",
+                        aspectRatio:"1",
+                        borderRadius:"9px",
                         background:"var(--color-surface2)",
                         border: emphasize ? "2px solid var(--color-accent)" : "1px solid transparent",
                         boxShadow: isSelected ? "0 0 0 3px rgba(224,138,60,0.18)" : day.isToday ? "0 0 0 3px rgba(224,138,60,0.12)" : "none",
@@ -176,11 +176,11 @@ export default function CalendarView() {
                     >
                       {/* Kopfstreifen: grün/rot bei Trades, sonst unsichtbar */}
                       <span style={{height:"3px",flexShrink:0,background: hasTrades ? (isWin?"var(--color-up)":"var(--color-down)") : "transparent"}} />
-                      <span style={{flex:1,padding:"7px 8px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+                      <span style={{flex:1,padding:"5px 6px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
                         <span style={{fontSize:"11px",fontWeight:emphasize?700:600,color:"var(--color-text)",textAlign:"left"}}>{day.date.getDate()}</span>
                         {hasTrades && (
                           <span style={{textAlign:"center"}}>
-                            <span style={{display:"block",fontFamily:"'JetBrains Mono',monospace",fontSize:"15px",fontWeight:800,color:isWin?"var(--color-up)":"var(--color-down)"}}>
+                            <span style={{display:"block",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",fontWeight:800,color:isWin?"var(--color-up)":"var(--color-down)"}}>
                               {day.totalR>=0?"+":""}{day.totalR.toFixed(1)}R
                             </span>
                             {/* Ein Punkt pro Trade des Tages (max. 4, Rest als +N) */}
