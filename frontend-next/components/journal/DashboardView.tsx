@@ -18,6 +18,45 @@ import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
 import { calculateTradeStatistics, calculateDrawdown, calculateStreaks } from "@/lib/journal/stats";
 import { payoffSplit, type PayoffBucket } from "@/lib/journal/discipline";
+import { allAccounts, accountSummary } from "@/lib/journal/accountsSummary";
+
+/** Konten-Übersicht: alle aktiven Konten des Users als kompakte Karten.
+ *  Stapelt auf dem Handy (grid-cols-1). P&L = Kontostand − Startkapital. */
+function AccountsOverview({ configs }: { configs: AccountConfigs | null }) {
+  const accounts = allAccounts(configs);
+  if (accounts.length === 0) return null;
+  return (
+    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px" }}>
+      <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "14px" }}>
+        Konten
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[14px]">
+        {accounts.map((a) => {
+          const { pnl, pnlPct } = accountSummary(a);
+          const tone = pnl > 0 ? "var(--color-up)" : pnl < 0 ? "var(--color-down)" : "var(--color-faint)";
+          return (
+            <div key={a.id ?? `${a.type}-${a.name}`} style={{ background: "var(--color-surface2)", border: "1px solid var(--color-border)", borderRadius: "12px", padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {a.name || (a.type === "ek" ? "Eigenkapital" : "Funded Account")}
+                </span>
+                <Badge tone={a.type === "funded" ? "accent" : "neutral"}>{a.type === "funded" ? "Funded" : "EK"}</Badge>
+              </div>
+              <div style={{ fontSize: "18px", fontWeight: 800, fontFamily: "var(--font-mono)" }}>
+                {a.currentBalance.toLocaleString("de-DE", { maximumFractionDigits: 0 })}
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-faint)", marginLeft: "5px" }}>{a.currency}</span>
+              </div>
+              <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: tone, marginTop: "4px" }}>
+                {pnl >= 0 ? "+" : ""}{pnl.toLocaleString("de-DE", { maximumFractionDigits: 0 })} {a.currency}
+                {pnlPct != null && <span style={{ color: "var(--color-faint)" }}>{" · "}{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** A+ vs. Nicht-A+ — sichtbarer Beweis, ob die A+-Selektion die Winrate hebt.
  *  Zählt nur Trades, die mit Checkliste geloggt wurden (Verdikt vorhanden). */
@@ -114,6 +153,9 @@ export default function DashboardView() {
       {/* Trade-Budget: gilt kontenuebergreifend, deshalb ALLE Trades und
           bewusst oberhalb des Konto-Umschalters. */}
       <TradeBudgetCard trades={trades} />
+
+      {/* Konten-Übersicht: alle Konten des Users, unabhängig vom Umschalter. */}
+      <AccountsOverview configs={configs} />
 
       {/* Tab + Streak */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

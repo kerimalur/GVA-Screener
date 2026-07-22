@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Segmented from "@/components/ui/Segmented";
@@ -52,8 +52,21 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
   const [filters, setFilters] = useState<TradeFilters>({});
   const [filterResult, setFilterResult] = useState<string>("all");
   const [filterPair, setFilterPair] = useState<string>("all");
+  // Deep-Link aus dem Trade-Kalender: /journal?trade=<id>&type=<ek|funded>.
+  // Wird nach dem Laden in reload() geöffnet (Ref statt State: kein Re-Render).
+  const pendingTradeRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const linkTrade = params.get("trade");
+    const linkType = params.get("type");
+    if (linkTrade) pendingTradeRef.current = linkTrade;
+    // Der verlinkte Konto-Typ gewinnt über die gemerkte Wahl, damit der Trade
+    // im geladenen (typgefilterten) Satz liegt.
+    if (linkType === "ek" || linkType === "funded") {
+      setAccountType(linkType);
+      return;
+    }
     const saved = localStorage.getItem(ACCOUNT_TYPE_KEY);
     if (saved === "ek" || saved === "funded") setAccountType(saved);
   }, []);
@@ -82,6 +95,12 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       ]);
       setConfigs(cfgs);
       setTrades(data);
+      // Deep-Link öffnen, sobald der passende Satz geladen ist (einmalig).
+      if (pendingTradeRef.current) {
+        const target = data.find((x) => x.id === pendingTradeRef.current);
+        pendingTradeRef.current = null;
+        if (target) setViewingTrade(target);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Fehler beim Laden der Trades");

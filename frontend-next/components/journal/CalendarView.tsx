@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Segmented from "@/components/ui/Segmented";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toaster";
 import type { Trade } from "@/lib/journal/types";
+import { SETUP_DEFINITIONS } from "@/lib/journal/types";
 import { loadTrades } from "@/lib/journal/trades";
 import { loadAccountConfigs } from "@/lib/journal/accounts";
+import {
+  timePatterns,
+  MIN_PATTERN_TRADES,
+  type BucketStat,
+  type TimePatternResult,
+} from "@/lib/journal/timePatterns";
 
 const WEEKDAYS_ALL  = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"];
 const WEEKDAYS_WORK = ["MO", "DI", "MI", "DO", "FR"];
@@ -23,6 +30,20 @@ function toDateStr(d: Date): string {
 }
 function weekdayIndex(date: Date): number { return (date.getDay() + 6) % 7; }
 
+/** Aktive Setup-Kürzel eines Trades (aus den setup_*-Flags). "—" wenn keins. */
+function setupShorts(t: Trade): string {
+  const shorts = Object.values(SETUP_DEFINITIONS)
+    .filter((d) => (t as unknown as Record<string, boolean>)[d.key])
+    .map((d) => d.short);
+  return shorts.length ? shorts.join(" · ") : "—";
+}
+
+/** Farbe der Winrate: grün ab 50 %, sonst gedämpft; null (keine Entscheidung) grau. */
+function winRateColor(wr: number | null): string {
+  if (wr == null) return "var(--color-faint)";
+  return wr >= 50 ? "var(--color-up)" : "var(--color-muted)";
+}
+
 export default function CalendarView() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [currency, setCurrency] = useState<string>("USD");
@@ -32,6 +53,8 @@ export default function CalendarView() {
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
   const [showWeekends, setShowWeekends] = useState(false);
+  // Rechte Spalte — Ziel fürs Auto-Scroll beim Tippen eines Tages (Mobile).
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -93,6 +116,29 @@ export default function CalendarView() {
     return { trades: dt, totalR: dt.reduce((s,t)=>s+t.rMultiple,0), totalEur: dt.reduce((s,t)=>s+(t.profitAmount??0),0), winRate: dt.length>0?(wins/dt.length)*100:0 };
   }, [selectedDate, filteredTrades]);
 
+  // Trades des im Kalender angezeigten Zeitraums (Monat bzw. Jahr) — Basis der
+  // Zeit-Muster-Analyse rechts, wenn kein Tag ausgewählt ist.
+  const periodTrades = useMemo(() => {
+    const year = currentDate.getFullYear();
+    if (viewMode === "year") return filteredTrades.filter((t) => new Date(t.date).getFullYear() === year);
+    const month = currentDate.getMonth();
+    return filteredTrades.filter((t) => { const d = new Date(t.date); return d.getFullYear()===year && d.getMonth()===month; });
+  }, [filteredTrades, currentDate, viewMode]);
+  const patterns = useMemo(() => timePatterns(periodTrades), [periodTrades]);
+  const periodLabel = viewMode === "year"
+    ? String(currentDate.getFullYear())
+    : `${MONTHS_LONG[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+
+  // Tag wählen / abwählen. Beim Öffnen auf schmalen Viewports zum Panel scrollen,
+  // damit das Tages-Detail nach dem Tippen sofort sichtbar ist.
+  const selectDay = (dateStr: string) => {
+    const opening = selectedDate !== dateStr;
+    setSelectedDate(opening ? dateStr : null);
+    if (opening && typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  };
+
   const navigate = (dir: 1 | -1) => {
     setCurrentDate((prev) => { const d=new Date(prev); if (viewMode==="year") d.setFullYear(d.getFullYear()+dir); else d.setMonth(d.getMonth()+dir); return d; });
     setSelectedDate(null);
@@ -121,8 +167,10 @@ export default function CalendarView() {
         </div>
       </div>
 
-      {/* Calendar + Detail side by side */}
-      <div style={{display:"grid",gridTemplateColumns:selectedDate?"1fr 288px":"1fr",gap:"18px",alignItems:"start"}}>
+      {/* Kalender links, kontextabhängiges Panel rechts. Auf schmalen Viewports
+          untereinander (Kalender oben, Panel darunter) — via Tailwind-Breakpoint,
+          weil Inline-Styles keine Media-Queries können. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-[18px] items-start">
 
         {/* Calendar Card */}
         <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"16px",padding:"18px 20px",maxWidth:"680px"}}>
@@ -158,7 +206,7 @@ export default function CalendarView() {
                   return (
                     <button
                       key={day.dateStr}
-                      onClick={()=>setSelectedDate(isSelected ? null : day.dateStr)}
+                      onClick={()=>selectDay(day.dateStr)}
                       style={{
                         aspectRatio:"1",
                         borderRadius:"9px",
@@ -230,43 +278,129 @@ export default function CalendarView() {
           )}
         </div>
 
-        {/* Detail Panel */}
-        {selectedDate && selectedDayData && (
-          <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"18px",padding:"24px"}} className="anim-slide-up">
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px"}}>
-              <div style={{fontSize:"14px",fontWeight:700}}>
-                {new Date(selectedDate+"T12:00:00").toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})}
+        {/* Kontextabhängiges Panel: Tages-Detail (Tag gewählt) oder
+            Zeit-Muster-Analyse (kein Tag gewählt). Immer präsent — die rechte
+            Hälfte bleibt nie leer. */}
+        <div ref={panelRef}>
+          {selectedDate && selectedDayData ? (
+            <div style={{background:"var(--color-surface)",border:"1px solid var(--color-border)",borderRadius:"18px",padding:"24px"}} className="anim-slide-up">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px"}}>
+                <div style={{fontSize:"14px",fontWeight:700}}>
+                  {new Date(selectedDate+"T12:00:00").toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})}
+                </div>
+                <button onClick={()=>setSelectedDate(null)} title="Zurück zur Zeit-Muster-Analyse" style={{color:"var(--color-faint)",background:"transparent",border:"none",cursor:"pointer",fontSize:"18px",lineHeight:1,padding:"4px 8px"}}>×</button>
               </div>
-              <button onClick={()=>setSelectedDate(null)} style={{color:"var(--color-faint)",background:"transparent",border:"none",cursor:"pointer",fontSize:"16px"}}>×</button>
-            </div>
 
-            <div style={{display:"flex",gap:"16px",marginBottom:"16px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",flexWrap:"wrap"}}>
-              <span style={{color:"var(--color-muted)"}}>{selectedDayData.trades.length} Trades</span>
-              <span style={{color:selectedDayData.totalR>=0?"var(--color-up)":"var(--color-down)"}}>{selectedDayData.totalR>=0?"+":""}{selectedDayData.totalR.toFixed(2)} R</span>
-              <span style={{color:selectedDayData.totalEur>=0?"var(--color-up)":"var(--color-down)"}}>{fmtEur(selectedDayData.totalEur)}</span>
-              <span style={{color:"var(--color-muted)"}}>{selectedDayData.winRate.toFixed(0)}% WR</span>
-            </div>
-
-            {selectedDayData.trades.length===0 ? (
-              <p style={{fontSize:"12px",color:"var(--color-faint)",padding:"8px 0"}}>Keine Trades an diesem Tag.</p>
-            ):(
-              <div style={{display:"flex",flexDirection:"column",gap:"8px",maxHeight:"400px",overflowY:"auto"}}>
-                {selectedDayData.trades.map((t)=>(
-                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:"10px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",paddingBottom:"8px",borderBottom:"1px solid var(--color-border)"}}>
-                    <Badge tone={t.type==="funded"?"accent":"neutral"}>{t.type==="funded"?"Funded":"EK"}</Badge>
-                    <span style={{fontWeight:600}}>{t.pair}</span>
-                    <span style={{color:t.direction==="long"?"var(--color-up)":"var(--color-down)"}}>{t.direction.toUpperCase()}</span>
-                    <span style={{fontWeight:600,color:t.rMultiple>0?"var(--color-up)":t.rMultiple<0?"var(--color-down)":"var(--color-faint)",marginLeft:"auto"}}>
-                      {t.rMultiple>0?"+":""}{t.rMultiple.toFixed(2)} R
-                    </span>
-                  </div>
-                ))}
+              <div style={{display:"flex",gap:"16px",marginBottom:"16px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",flexWrap:"wrap"}}>
+                <span style={{color:"var(--color-muted)"}}>{selectedDayData.trades.length} Trades</span>
+                <span style={{color:selectedDayData.totalR>=0?"var(--color-up)":"var(--color-down)"}}>{selectedDayData.totalR>=0?"+":""}{selectedDayData.totalR.toFixed(2)} R</span>
+                <span style={{color:selectedDayData.totalEur>=0?"var(--color-up)":"var(--color-down)"}}>{fmtEur(selectedDayData.totalEur)}</span>
+                <span style={{color:"var(--color-muted)"}}>{selectedDayData.winRate.toFixed(0)}% WR</span>
               </div>
-            )}
-            <Link href="/journal" style={{display:"block",marginTop:"14px",fontSize:"12px",color:"var(--color-accent)",textDecoration:"none"}}>Zum Journal →</Link>
-          </div>
-        )}
+
+              {selectedDayData.trades.length===0 ? (
+                <p style={{fontSize:"12px",color:"var(--color-faint)",padding:"8px 0"}}>Keine Trades an diesem Tag.</p>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:"6px",maxHeight:"400px",overflowY:"auto"}}>
+                  {selectedDayData.trades.map((t)=>(
+                    <Link
+                      key={t.id}
+                      href={`/journal?trade=${t.id}&type=${t.type}`}
+                      className="hover:bg-active"
+                      style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"8px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",padding:"9px 8px",borderRadius:"9px",borderBottom:"1px solid var(--color-border)",textDecoration:"none",color:"inherit"}}
+                    >
+                      <Badge tone={t.type==="funded"?"accent":"neutral"}>{t.type==="funded"?"Funded":"EK"}</Badge>
+                      <span style={{fontWeight:600,color:"var(--color-text)"}}>{t.pair}</span>
+                      <span style={{color:t.direction==="long"?"var(--color-up)":"var(--color-down)"}}>{t.direction.toUpperCase()}</span>
+                      <span style={{fontWeight:700,marginLeft:"auto",color:t.rMultiple>0?"var(--color-up)":t.rMultiple<0?"var(--color-down)":"var(--color-faint)"}}>
+                        {t.rMultiple>0?"+":""}{t.rMultiple.toFixed(2)} R
+                      </span>
+                      <span style={{flexBasis:"100%",display:"flex",gap:"12px",alignItems:"center",fontSize:"11px",color:"var(--color-faint)"}}>
+                        <span title="Setup">{setupShorts(t)}</span>
+                        <span title="Plan-Befolgung">Adhärenz {t.adherenceScore!=null?`${Math.round(t.adherenceScore)}%`:"—"}</span>
+                        <span style={{marginLeft:"auto",color:"var(--color-accent)"}}>Öffnen →</span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <TimePatternPanel patterns={patterns} periodLabel={periodLabel} />
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Zeit-Muster-Analyse — Standardansicht der rechten Hälfte (kein Tag gewählt) */
+/* -------------------------------------------------------------------------- */
+
+const MONO = "'JetBrains Mono',monospace";
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", color: "var(--color-faint)", marginBottom: "8px" }}>
+      {children}
+    </div>
+  );
+}
+
+function BucketRow({ b }: { b: BucketStat }) {
+  const has = b.trades > 0;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "42px 1fr auto", gap: "10px", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--color-border)" }}>
+      <span style={{ fontSize: "12.5px", fontWeight: 700, color: has ? "var(--color-text)" : "var(--color-faint)" }}>{b.label}</span>
+      <span style={{ fontSize: "11px", fontFamily: MONO, color: "var(--color-faint)" }}>
+        {has ? (
+          <>
+            {b.trades} {b.trades === 1 ? "Trade" : "Trades"}
+            {b.winRate != null && (
+              <>{" · "}<span style={{ color: winRateColor(b.winRate) }}>{b.winRate.toFixed(0)}% WR</span></>
+            )}
+          </>
+        ) : "—"}
+      </span>
+      <span style={{ fontSize: "12.5px", fontWeight: 700, fontFamily: MONO, color: has ? (b.totalR >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--color-faint)" }}>
+        {has ? `${b.totalR >= 0 ? "+" : ""}${b.totalR.toFixed(1)}R` : "—"}
+      </span>
+    </div>
+  );
+}
+
+function TimePatternPanel({ patterns, periodLabel }: { patterns: TimePatternResult; periodLabel: string }) {
+  return (
+    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "22px" }} className="anim-fade-in">
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontSize: "14px", fontWeight: 700 }}>Zeit-Muster</div>
+        <div style={{ fontSize: "11.5px", color: "var(--color-faint)", marginTop: "2px" }}>{periodLabel} · {patterns.total} {patterns.total === 1 ? "Trade" : "Trades"}</div>
+      </div>
+
+      {!patterns.enough ? (
+        <p style={{ fontSize: "12px", color: "var(--color-faint)", lineHeight: 1.6, padding: "6px 0" }}>
+          Zu wenige Trades im Zeitraum für belastbare Muster (unter {MIN_PATTERN_TRADES}).
+          Prozentzahlen wären hier Rauschen — wähle einen grösseren Zeitraum oder einen Tag für die Detailliste.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div>
+            <SectionLabel>Nach Wochentag</SectionLabel>
+            {patterns.weekday.map((b) => <BucketRow key={b.key} b={b} />)}
+          </div>
+
+          <div>
+            <SectionLabel>Nach Session</SectionLabel>
+            {patterns.session.map((b) => <BucketRow key={b.key} b={b} />)}
+            {patterns.withoutSession > 0 && (
+              <p style={{ fontSize: "10.5px", color: "var(--color-faint)", marginTop: "8px", lineHeight: 1.5 }}>
+                {patterns.withoutSession} {patterns.withoutSession === 1 ? "Trade" : "Trades"} ohne Session-Angabe — nicht in der Session-Auswertung.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
