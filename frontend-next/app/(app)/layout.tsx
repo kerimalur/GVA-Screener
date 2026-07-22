@@ -12,7 +12,7 @@ export default function AppLayout({
     <div className="flex min-h-screen flex-col">
       <Prefetcher />
       <ModeChrome />
-      <main className="flex-1 p-6 overflow-x-hidden">{children}</main>
+      <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">{children}</main>
     </div>
   );
 }

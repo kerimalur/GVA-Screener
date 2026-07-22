@@ -86,7 +86,7 @@ export default function ModeChrome() {
 
   return (
     <header className="sticky top-0 z-20 bg-sidebar border-b border-border">
-      <div className="flex items-center gap-4 px-6 py-3.5">
+      <div className="flex items-center gap-2.5 sm:gap-4 px-4 sm:px-6 py-3.5">
         {/* Logo = Weg zurück zur Übersicht. */}
         <Link
           href={LAUNCHER_HREF}
@@ -124,10 +124,14 @@ export default function ModeChrome() {
           })}
         </nav>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <Suspense fallback={null}>
-            <PairSearchBar />
-          </Suspense>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Pair-Suche kostet Breite und erscheint nur auf Analyse-Seiten —
+              auf dem Handy ausgeblendet, damit die Kopfzeile nicht überläuft. */}
+          <div className="hidden sm:block">
+            <Suspense fallback={null}>
+              <PairSearchBar />
+            </Suspense>
+          </div>
           {/* Avatar öffnet das Menü zu Einstellungen und Leitfaden. */}
           <div className="relative" ref={menuRef}>
             <button

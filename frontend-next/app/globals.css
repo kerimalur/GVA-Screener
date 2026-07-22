@@ -67,6 +67,14 @@ body {
   font-feature-settings: "tnum";
 }
 
+/* Mobile-Sicherheitsnetz: Bilder sprengen schmale Viewports nicht. Grids/Panels
+   werden pro Komponente responsiv gemacht; die Seiten-Klammer (main) trägt
+   bereits overflow-x-hidden gegen horizontales Scrollen. */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Motion */
 @keyframes ui-fade-in {
   from { opacity: 0; }

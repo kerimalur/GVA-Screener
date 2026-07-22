@@ -273,7 +273,7 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       )}
 
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-[12px]">
         {kpiCards.map((kpi) => (
           <div key={kpi.label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "16px 20px" }}>
             <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-faint)", letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: "6px" }}>{kpi.label}</div>
@@ -286,7 +286,7 @@ export default function JournalView({ prefill: prefillProp }: JournalViewProps) 
       <ExpectancyCard trades={trades} />
 
       {/* Main: Filter panel + Table */}
-      <div style={{ display: "grid", gridTemplateColumns: "212px 1fr", gap: "18px", alignItems: "start" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[212px_1fr] gap-[18px] items-start">
 
         {/* Filter Panel */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "18px" }}>

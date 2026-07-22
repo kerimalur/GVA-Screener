@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Toaster from "@/components/ui/Toaster";
@@ -18,6 +18,13 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "FX Terminal — Swing-Trading Suite",
   description: "Fundamentales Swing-Trading-Terminal: COT, Makro, Sentiment, Intermarket, Saisonalitat",
+};
+
+// Explizit, damit auf dem Handy in Gerätebreite (nicht ~980px Desktop) gerendert
+// wird — Grundvoraussetzung dafür, dass die responsiven Layouts überhaupt greifen.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

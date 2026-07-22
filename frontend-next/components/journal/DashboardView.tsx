@@ -186,7 +186,7 @@ export default function DashboardView() {
       ) : (
         <>
           {/* 3 Hero-Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "18px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[18px]">
             <StatCard
               size="lg"
               label="Kontostand"
@@ -216,7 +216,7 @@ export default function DashboardView() {
           </div>
 
           {/* Secondary KPIs */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginTop: "-4px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[14px]" style={{ marginTop: "-4px" }}>
             <StatCard label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} deltaLabel={`${stats.wins}W / ${stats.losses}L / ${stats.breakevens}BE`} />
             <StatCard label="Profit Factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)} deltaLabel={`Expectancy ${stats.expectancy >= 0 ? "+" : ""}${stats.expectancy.toFixed(3)}`} />
             <StatCard label="Max Drawdown" value={<span style={{ color: "var(--color-down)" }}>−{dd.maxDrawdown.toFixed(2)} R</span>} deltaLabel={`aktuell −${dd.currentDrawdown.toFixed(2)} R`} />
@@ -227,7 +227,7 @@ export default function DashboardView() {
           <PayoffPanel trades={accountTrades} />
 
           {/* Equity + Recent */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 288px", gap: "18px" }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_288px] gap-[18px]">
             <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "26px" }}>
               <div style={{ fontSize: "14.5px", fontWeight: 700, marginBottom: "18px" }}>Equity-Verlauf</div>
               {accountTrades.length === 0 ? (

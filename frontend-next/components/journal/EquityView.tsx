@@ -106,8 +106,8 @@ export default function EquityView() {
       {/* Expectancy (gefilterte Live-Trades des Kontos) */}
       <ExpectancyCard trades={filteredTrades} />
 
-      {/* 6 KPI Cards — 5-column like design (6 items, last wraps or stays) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "14px" }}>
+      {/* 6 KPI Cards — auf dem Handy 2, dann 3, ab lg alle 6 nebeneinander */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-[14px]">
         {KPI_ITEMS(stats, dd).map(({ label, value, color }) => (
           <div key={label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "18px 20px" }}>
             <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-faint)", textTransform: "uppercase", marginBottom: "8px" }}>{label}</div>
@@ -132,7 +132,7 @@ export default function EquityView() {
       </div>
 
       {/* Secondary Charts */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "18px" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-[18px]">
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "18px", padding: "26px" }}>
           <div style={{ fontSize: "14.5px", fontWeight: 700, marginBottom: "22px" }}>R-Multiple-Verteilung</div>
           <RMultipleChart trades={filteredTrades} height={180} />
