@@ -31,11 +31,14 @@ check("/journal/outlook", modus("/journal/outlook"), "journal");
 check("/ml/replay", modus("/ml/replay"), "backtest");
 check("/makro/real-yield", modus("/makro/real-yield"), "labor");
 check("/dashboard (News)", modus("/dashboard"), "labor");
-check("/einstellungen", modus("/einstellungen"), "system");
+// Einstellungen und Leitfaden hängen am Avatar-Menü, gehören zu keinem Modus.
+check("/einstellungen", modus("/einstellungen"), null);
+check("/leitfaden", modus("/leitfaden"), null);
 
 // Längster Treffer gewinnt: sonst schluckt "/journal" beide Unterseiten.
 check("/journal/backtest gehört zu Backtesten", modus("/journal/backtest"), "backtest");
-check("/journal/strategie gehört zu System", modus("/journal/strategie"), "system");
+check("/journal/strategie gehört zu Journalieren", modus("/journal/strategie"), "journal");
+check("aktiver Tab /journal/strategie", activeTabHref("/journal/strategie"), "/journal/strategie");
 
 // --- Aktiver Tab -------------------------------------------------------------
 check("aktiver Tab /journal/equity", activeTabHref("/journal/equity"), "/journal/equity");
@@ -61,7 +64,7 @@ check("exakt /ml ist gesperrt", isHiddenRoute("/ml"), true);
 check("aber /ml/ranking nicht", isHiddenRoute("/ml/ranking"), false);
 
 // --- Struktur ----------------------------------------------------------------
-check("fünf Modi", MODES.map((m) => m.key), ["trades", "journal", "backtest", "labor", "system"]);
+check("vier Modi", MODES.map((m) => m.key), ["trades", "journal", "backtest", "labor"]);
 check(
   "jede Basisroute ist selbst ein Tab des Modus",
   MODES.filter((m) => !m.tabs.some((t) => t.href === m.base)).map((m) => m.key),

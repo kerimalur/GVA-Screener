@@ -3,10 +3,13 @@ import Panel from "@/components/layout/Panel";
 export const dynamic = "force-static";
 
 /**
- * Analyse-Leitfaden: erklärt den GVA-Workflow (was getradet wird, wie man von
- * der Linie zum Trade kommt) und was die Zahlen der Konfluenz-Quellen bedeuten.
- * Rein statischer Referenz-Text — keine Live-Daten. Stand: GVA-Cockpit als
- * Startseite, Fundamentales ist Konfluenz statt Signal (vgl. STATUS.md).
+ * Leitfaden — beschreibt ausschliesslich den heute genutzten Workflow und die
+ * aktuell aktiven Begriffe: GVA-Linie als Signal, Cockpit als Handels-Startseite,
+ * der eine Status-Lebenszyklus, das Währungs-Ranking als Konfluenz und das feste
+ * Trade-Budget. Die früher hier erklärten Einzel-Faktor-Ansichten (COT
+ * Intelligence, Retail, Saisonalität 2.0, Intermarket, Weekly Outlook,
+ * Setup-Finder) sind in der App ausgeblendet und stehen deshalb bewusst nicht
+ * mehr im Leitfaden. Rein statischer Referenz-Text, keine Live-Daten.
  */
 
 function Read({ children }: { children: React.ReactNode }) {
@@ -30,7 +33,7 @@ function Act({ children }: { children: React.ReactNode }) {
 function Threshold({ v, children }: { v: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-2">
-      <span className="font-mono font-bold text-text shrink-0 w-28">{v}</span>
+      <span className="font-mono font-bold text-text shrink-0 w-32">{v}</span>
       <span className="text-muted">{children}</span>
     </li>
   );
@@ -40,7 +43,7 @@ export default function Page() {
   return (
     <div className="space-y-5 max-w-[1000px] mx-auto">
 
-      {/* Kern: Was getradet wird — GVA */}
+      {/* 1 — Kern: Was getradet wird */}
       <Panel
         title="Was du tradest — GVA"
         subtitle="Die GVA-Linie ist das Signal. Alles Fundamentale ist Konfluenz, kein Gate."
@@ -52,7 +55,8 @@ export default function Page() {
             <span className="text-down">Short-Linie</span> (Widerstand, oben) und eine{" "}
             <span className="text-up">Long-Linie</span> (Unterstützung, unten). Berührt der Marktpreis
             eine Linie, ist das ein <span className="text-warn font-medium">HIT</span> — der einzige
-            eigentliche Trade-Auslöser. Bei einem Live-Hit kommt ein Telegram-Alert.
+            eigentliche Trade-Auslöser. Bei einem Live-Hit kommt ein Telegram-Alert und das Pair steht
+            im Cockpit unter „Getroffen“.
           </p>
           <div className="grid md:grid-cols-2 gap-3">
             <div className="rounded border border-up/30 bg-up/5 p-3">
@@ -67,58 +71,55 @@ export default function Page() {
               <div className="text-text font-bold text-[13px] mb-1">Konfluenz (kein Gate)</div>
               <ul className="text-[12px] text-muted space-y-0.5">
                 <li>Währungs-Ranking (Stärke-Quintil Q5/Q1)</li>
-                <li>COT · Zinsen · Saison · Retail (Referenz unten)</li>
-                <li>Gibt Rückenwind/Gegenwind — verbietet nichts</li>
+                <li>Gibt Rückenwind oder Gegenwind</li>
+                <li>Verbietet nie einen Trade</li>
               </ul>
             </div>
           </div>
-          <p className="text-[12px] text-faint">
-            Früher rechneten zwei Faktor-Modelle selbst eine Richtung (Weekly Outlook, Setup-Finder).
-            Diese Ansichten sind heute ausgeblendet — die Richtung kommt von der GVA-Linie, die Zahlen
-            unten sind nur noch Konfluenz.
-          </p>
         </div>
       </Panel>
 
-      {/* Workflow: von der Linie zum Trade */}
+      {/* 2 — Workflow */}
       <Panel
         title="Dein Workflow — von der Linie zum Trade"
-        subtitle="Radar → Hit → Übernehmen → Cockpit → Outlook → Journal"
+        subtitle="Übersicht → Cockpit → Entscheiden → Outlook → Journal"
       >
         <div className="space-y-4 text-[13px] leading-relaxed">
           <ol className="space-y-2 text-muted">
             <li>
-              <span className="text-text font-medium">1. Startseite / Radar.</span> Der visuelle Radar
-              zeigt je Pair, wo der Preis zwischen Long- und Short-Linie steht. Gehittete Pairs
-              pulsieren.
+              <span className="text-text font-medium">1. Übersicht.</span> Die Startseite (das
+              Rauten-Logo oben links) beantwortet „was mache ich heute?“ und zeigt die offenen Zähler
+              je Modus.
             </li>
             <li>
-              <span className="text-text font-medium">2. Übernehmen.</span> Klick auf ein gehittetes
-              Pair → im Detail-Fenster <span className="font-mono text-warn">PENDING → COCKPIT</span>.
-              Das Pair erscheint dann im Cockpit (als „Getroffen“) und im Outlook mit Status „Aktiv“.
-              Ohne diesen Klick passiert nichts — es wird nichts automatisch übernommen.
+              <span className="text-text font-medium">2. Cockpit.</span> Deine Handels-Startseite. Jeder
+              Hit landet hier automatisch — kein manuelles Übernehmen nötig. Vier Lanes (siehe
+              Begriffe): <span className="text-text">Nähert sich → Getroffen → Watchlist → In Arbeit</span>.
+              Klick auf eine Karte öffnet die fundamentale Lage (Verdikt, beide Quintile, Linien-Info,
+              High-Impact-Kalender der Woche). Über <span className="font-mono text-accent">+ Setup</span>{" "}
+              erfasst du ein Setup von Hand, das nicht aus einem GVA-Hit stammt.
             </li>
             <li>
-              <span className="text-text font-medium">3. Cockpit (Startseite fürs Handeln).</span> Drei
-              Lanes, siehe Vokabular unten: <span className="text-text">Nähert sich → Getroffen → In
-              Arbeit</span>. Klick auf eine Karte öffnet die fundamentale Lage (Ranking + Kalender).
+              <span className="text-text font-medium">3. Entscheiden.</span> Die Knöpfe sitzen direkt auf
+              der Karte: <span className="text-up">Genommen</span> schreibt einen Trade ins Journal
+              (zählt in die Winrate), <span className="text-text">Beobachten</span> legt das Setup auf die
+              Watchlist, <span className="text-down">Verwerfen</span> schliesst es ab.
             </li>
             <li>
-              <span className="text-text font-medium">4. Entscheiden.</span>{" "}
-              <span className="text-up">Genommen</span> schreibt einen Trade ins Journal (zählt in die
-              Winrate), <span className="text-text">Beobachten</span> und{" "}
-              <span className="text-down">Verwerfen</span> ordnen ein, ohne zu handeln.
-            </li>
-            <li>
-              <span className="text-text font-medium">5. Outlook.</span> Detailebene über dem Setup:
-              These, Checkliste, Ziele (Entry/SL/TP). Status wandert Beobachtung → Wartend → Aktiv →
+              <span className="text-text font-medium">4. Outlook.</span> Detailebene über dem Setup:
+              These, Checkliste, Ziele (Entry/SL/TP). Der Status wandert Beobachtung → Wartend → Aktiv →
               Ausgeführt/Verworfen.
+            </li>
+            <li>
+              <span className="text-text font-medium">5. Journal.</span> Genommene Trades laufen ins
+              Journal — Dashboard, Trades, Equity, Trade-Kalender und Strategien liegen im Modus
+              „Journalieren“.
             </li>
           </ol>
         </div>
       </Panel>
 
-      {/* Vokabular: der eine Lebenszyklus */}
+      {/* 3 — Vokabular: der eine Lebenszyklus */}
       <Panel
         title="Begriffe — der eine Status-Lebenszyklus"
         subtitle="Cockpit und Outlook sprechen dieselbe Sprache"
@@ -129,26 +130,23 @@ export default function Page() {
               Preis läuft auf eine Linie zu (≤ 100 Pips), aus dem Live-Scanner. Ephemer — verschwindet
               von selbst, wird nicht gespeichert.
             </Threshold>
-            <Threshold v="Getroffen">
-              Linie berührt (frischer HIT), noch nicht entschieden. So erscheint auch ein per „Pending“
-              übernommenes Pair im Cockpit.
-            </Threshold>
-            <Threshold v="Beobachtung">Gesehen, wird beobachtet — noch keine feste Absicht.</Threshold>
-            <Threshold v="Wartend">Trigger/Einstieg definiert, Preis ist noch nicht da.</Threshold>
-            <Threshold v="Aktiv">Trade läuft. Ein übernommenes Pair steht im Outlook auf „Aktiv“.</Threshold>
+            <Threshold v="Getroffen">Linie berührt (frischer HIT), noch nicht entschieden.</Threshold>
+            <Threshold v="Beobachtung">Gesehen, wird beobachtet — noch keine feste Absicht (Lane „Watchlist“).</Threshold>
+            <Threshold v="Wartend">Trigger/Einstieg definiert, Preis ist noch nicht da (Lane „In Arbeit“).</Threshold>
+            <Threshold v="Aktiv">Trade läuft (Lane „In Arbeit“).</Threshold>
             <Threshold v="Ausgeführt / Verworfen">
               Abgeschlossen (im Journal) bzw. abgebrochen — fällt aus der Offen-Ansicht.
             </Threshold>
           </ul>
           <Read>
-            „Wartend“ meint überall dasselbe: eine bewusste, bestehende Absicht. Die Cockpit-Lane für
-            das ephemere Heranlaufen heißt deshalb bewusst <span className="text-text">„Nähert sich“</span>
-            {" "}und nicht mehr „Wartend“.
+            „Wartend“ meint überall dasselbe: eine bewusste, bestehende Absicht. Die Cockpit-Lane für das
+            ephemere Heranlaufen heisst deshalb <span className="text-text">„Nähert sich“</span> und nicht
+            „Wartend“.
           </Read>
         </div>
       </Panel>
 
-      {/* Konfluenz-Ranking */}
+      {/* 4 — Konfluenz: Ranking */}
       <Panel
         title="Konfluenz — Währungs-Ranking (Q5/Q1)"
         subtitle="Stärke-Quintil je Währung: gibt Rückenwind oder Gegenwind"
@@ -158,7 +156,11 @@ export default function Page() {
             <Threshold v="Stärke-Quintil">
               Position des Zins-+-Saison-Scores einer Währung in ihrer eigenen 156-Wochen-Verteilung.{" "}
               <span className="text-up">Q5</span> = stärkstes Fünftel, <span className="text-down">Q1</span>{" "}
-              = schwächstes. Q2–Q4 = Mittelfeld.
+              = schwächstes.
+            </Threshold>
+            <Threshold v="Nur Q5 / Q1">
+              Es zählen ausschliesslich die Extrem-Quintile. <span className="text-text">Q2–Q4 sind
+              neutral</span> — keine Aussage, kein Rücken-/Gegenwind.
             </Threshold>
             <Threshold v="Rückenwind / Gegenwind">
               Steht die Base auf <span className="text-up">Q5</span> und die Quote auf{" "}
@@ -168,8 +170,7 @@ export default function Page() {
           </ul>
           <Read>
             Das Ranking ist <span className="text-text">Konfluenz, kein Gate</span>. Ein GVA-Setup gegen
-            das Ranking bleibt handelbar — es trägt nur eine Warnung. Die Zahlen darunter (COT, Zinsen,
-            Saison, Retail) sind die Bausteine dieses Rankings und als Referenz unten erklärt.
+            das Ranking bleibt handelbar — es trägt nur eine Warnung.
           </Read>
           <Act>
             Bevorzuge Setups mit Rückenwind. Bei Gegenwind kleiner/vorsichtiger handeln oder einen
@@ -178,180 +179,58 @@ export default function Page() {
         </div>
       </Panel>
 
-      {/* COT */}
-      <Panel title="COT — Commitment of Traders" subtitle="Positionierung der großen Terminmarkt-Akteure">
+      {/* 5 — Trade-Budget */}
+      <Panel
+        title="Trade-Budget — 8 Live-Trades pro Monat"
+        subtitle="Feste Obergrenze, damit Disziplin sichtbar bleibt"
+      >
         <div className="space-y-3 text-[13px]">
-          <p className="text-muted">
-            Drei Kennzahlen je Währung. <span className="text-text">Flow</span> (Veränderung) ist das primäre
-            Signal, <span className="text-text">Perzentil</span> (Niveau) nur Kontext/Extremwarnung.
-          </p>
           <ul className="space-y-1.5">
-            <Threshold v="Netto">
-              Long-Kontrakte minus Short-Kontrakte der Non-Commercials (bzw. Leveraged Funds im TFF-Report).
-              Positiv = netto long. Absolutwert allein sagt wenig — erst im Verlauf/Perzentil.
+            <Threshold v="8 pro Monat">
+              Ein Kästchen = ein Live-Trade, <span className="text-text">kontenübergreifend</span>{" "}
+              (Funded + Eigenkapital zusammen). Backtest-Trades zählen nie.
             </Threshold>
-            <Threshold v="Perzentil 0–100">
-              Wo steht das aktuelle Netto im 5-Jahres-Fenster? <span className="text-text">90.+</span> = so long wie
-              selten (Konträr-Risiko, überfüllt). <span className="text-text">10.−</span> = Extrem-Short.
-              40–60 = neutral.
+            <Threshold v="Freischaltung">
+              In festen 7-Tage-Blöcken ab dem 1.: bis 7. → 2 frei, bis 14. → 4, bis 21. → 6, ab 22. → 8.
+              Ungenutzte Kästchen verfallen nicht (kumulativ).
             </Threshold>
-            <Threshold v="4W-Flow % OI">
-              Netto-Änderung über 4 Wochen, in % des Open Interest (vergleichbar über Währungen).{" "}
-              <span className="text-up">≥ +2 %</span> = Kapital fließt zu (bullish),{" "}
-              <span className="text-down">≤ −2 %</span> = fließt ab. Im Pair-Screener zählt die{" "}
-              <span className="text-text">Differenz Base−Quote ≥ 4</span>.
-            </Threshold>
-            <Threshold v="Streak">
-              Wochen in Folge mit gleichem Flow-Vorzeichen. <span className="text-text">≥ 3</span> = anhaltende
-              Akkumulation (bzw. Distribution) — starkes Zeichen für echtes Smart-Money-Interesse.
+            <Threshold v="Wo sichtbar">
+              Widget im Journal-Dashboard (über dem Konto-Umschalter, zeigt alle Trades) und Chip in der
+              Cockpit-Kopfzeile („N von 8 übrig“).
             </Threshold>
           </ul>
           <Read>
-            Beispiel EUR im 92. Perzentil, Flow −1,5 % über 4W: Positionierung historisch extrem long, aber das
-            Geld beginnt abzufließen → Vorsicht bei EUR-Longs, mögliche Wende. Ein <span className="text-up">hoher
-            Perzentil + noch positiver Flow</span> ist dagegen ein intakter Trend (nur eng traillen).
+            Das Budget <span className="text-text">blockiert nie</span> das „Genommen“ — ein beim Broker
+            offener Trade muss ins Journal, sonst werden Winrate und Adherence wertlos. Es macht den
+            Verbrauch nur sichtbar.
           </Read>
-          <Act>
-            Flow gibt die Richtung, Perzentil die Warnung. Handle mit dem Flow, aber reduziere Größe/ziehe Stops
-            enger, wenn das Niveau bei ≥ 90 oder ≤ 10 steht. Streak ≥ 3 in Signalrichtung = Extra-Konfidenz.
-          </Act>
         </div>
       </Panel>
 
-      {/* Makro & Zinsen */}
-      <Panel title="Makro & Zinsen" subtitle="Leitzins-Differenz + Anleiherenditen">
+      {/* 6 — Modi-Landkarte */}
+      <Panel title="Die vier Modi" subtitle="Was wo liegt — der Rest der App als Landkarte">
         <div className="space-y-3 text-[13px]">
           <ul className="space-y-1.5">
-            <Threshold v="Zinsdifferenz">
-              Leitzins Base − Quote. <span className="text-up">&gt; +0,25 pp</span> stützt die Base-Währung
-              (Carry). Wichtiger als das Niveau ist die <span className="text-text">Drehung</span>: dreht die
-              Differenz um <span className="text-text">&gt; 0,2 pp in 6M</span> zugunsten einer Seite, zählt das
-              als Signal.
+            <Threshold v="Trades finden">
+              Cockpit · Währungs-Ranking · Visuelles Radar &amp; Heatmap 28 (Admin). Der tägliche Weg zum
+              Setup.
             </Threshold>
-            <Threshold v="Leitzins-Trend">
-              Je Währung: Änderung des Leitzinses über 6M. <span className="text-up">≥ +25 bps</span> = strafferer
-              Kurs (bullish für die Währung), <span className="text-down">≤ −25 bps</span> = Lockerung.
+            <Threshold v="Journalieren">
+              Dashboard · Trades · Equity · Outlook · Trade-Kalender · Strategien. Alles rund um erfasste
+              Trades und definierte Setups.
             </Threshold>
-            <Threshold v="10Y-Spread">
-              Renditedifferenz 10-jähriger Anleihen Base−Quote, Trend über 3M.{" "}
-              <span className="text-up">≥ +15 bps</span> steigend = Kapital sucht die Base-Währung. Reagiert
-              schneller als der Leitzins (Markterwartung).
+            <Threshold v="Backtesten">
+              Backtest-Lab · Replay (GVA-Hits). Setups an der Historie prüfen.
+            </Threshold>
+            <Threshold v="Labor">
+              Factor-Lab · Engine-Log · Macro Terminal · Real Yield · News. Erklärt das „Warum“ hinter der
+              Konfluenz — keine tägliche Entscheidungsquelle.
             </Threshold>
           </ul>
           <Read>
-            Zinsen sind der langsamste, verlässlichste Treiber. Steigende Differenz + steigender 10Y-Spread in
-            dieselbe Richtung = fundamentaler Rückenwind. Widersprechen sie sich, ist der Markt unentschieden.
+            Einstellungen und diesen Leitfaden erreichst du oben rechts über das Avatar-Menü (dein
+            Initial). Sie haben keinen eigenen Modus-Tab.
           </Read>
-          <Act>
-            Nutze Zinsen als Trend-Filter: Ein GVA/BOS-Setup mit dem Zinsgefälle im Rücken hat bessere Odds.
-            Gegen ein klares, sich ausweitendes Zinsgefälle nur mit starkem technischem Grund handeln.
-          </Act>
-        </div>
-      </Panel>
-
-      {/* Retail */}
-      <Panel title="Retail-Sentiment" subtitle="Positionierung der Kleinanleger (Myfxbook) — konträr gelesen">
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="Long-% je Pair">
-              Anteil der Retail-Trader, die long sind. <span className="text-down">≥ 65 % long</span> = überfüllte
-              Long-Seite → konträres <span className="text-down">Short-Signal</span>.{" "}
-              <span className="text-up">≤ 35 % long</span> = konträres Long-Signal. 35–65 = kein Signal.
-            </Threshold>
-            <Threshold v="Δ pp / Woche">
-              Veränderung ggü. Vorwoche. Steigt die überfüllte Seite weiter, verschärft sich das Konträr-Signal.
-            </Threshold>
-            <Threshold v="Cockpit-Aggregat">
-              Im Währungs-Cockpit über die 7 Pairs einer Währung gemittelt (als Quote invertiert). Schwelle enger:{" "}
-              <span className="text-down">≥ 60 %</span> / <span className="text-up">≤ 40 %</span>.
-            </Threshold>
-          </ul>
-          <Read>
-            Retail liegt in Trends meist falsch — sie kaufen Dips im Abwärtstrend. 80 % long bei EURUSD heißt: die
-            Masse erwartet Anstieg, was den Boden für weiteren Fall legt. Es ist ein <span className="text-text">
-            Timing-/Kontext-Faktor</span>, kein alleiniger Grund.
-          </Read>
-          <Act>
-            Als Bestätigung nutzen: Short-Setup + überfüllte Retail-Long-Seite = Rückenwind. Niemals allein wegen
-            Sentiment handeln — extreme Werte können lange extrem bleiben.
-          </Act>
-        </div>
-      </Panel>
-
-      {/* Saisonalität */}
-      <Panel title="Saisonalität" subtitle="Historische Monats-Tendenz je Pair">
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="Ø Return">
-              Durchschnittsrendite des aktuellen Monats über die Historie.{" "}
-              <span className="text-up">≥ +0,3 %</span> bei <span className="text-up">≥ 60 % positiven Jahren</span>{" "}
-              = saisonal long. <span className="text-down">≤ −0,3 % & ≤ 40 %</span> = short.
-            </Threshold>
-            <Threshold v="Jahre Basis">
-              Nur ab <span className="text-text">≥ 8 Jahren</span> Datenbasis gewertet — sonst zu wenig
-              Aussagekraft.
-            </Threshold>
-          </ul>
-          <Read>
-            Schwächster der Faktoren, reiner Tiebreaker. Aussagekräftig nur bei hoher Trefferquote über viele
-            Jahre (z. B. „11 von 15 Jahren positiv“).
-          </Read>
-          <Act>
-            Als kleines Zusatzgewicht behandeln. Bei Gleichstand der stärkeren Faktoren kann Saisonalität den
-            Ausschlag geben — sie überstimmt Zinsen/COT aber nie.
-          </Act>
-        </div>
-      </Panel>
-
-      {/* Intermarket */}
-      <Panel title="Intermarket" subtitle="Korrelationen, DXY, Overlays — reiner Kontext">
-        <div className="space-y-3 text-[13px]">
-          <p className="text-muted">
-            Zeigt Zusammenhänge zwischen Märkten. <span className="text-text">Fließt in kein Signal</span> — dient
-            der Einordnung, ob ein Trade isoliert steht oder vom Gesamtmarkt getragen wird.
-          </p>
-          <ul className="space-y-1.5">
-            <Threshold v="Korrelation">
-              +1 = gleichläufig, −1 = gegenläufig, 0 = kein Zusammenhang. Zwei hoch korrelierte Longs (z. B.
-              EURUSD + GBPUSD) sind <span className="text-text">ein Risiko, nicht zwei</span>.
-            </Threshold>
-            <Threshold v="DXY">
-              US-Dollar-Index. Steigt der DXY, stehen alle USD-Quote-Pairs (EURUSD, GBPUSD …) unter Druck —
-              nützlich, um USD-Stärke gebündelt zu sehen.
-            </Threshold>
-          </ul>
-          <Read>
-            Relevanz fürs GVA/BOS-Trading: mittel. Vor allem als <span className="text-text">Risiko-Check</span> —
-            nicht mehrere korrelierte Positionen gleichzeitig, und ein USD-Trade gegen einen starken DXY-Trend
-            hat es schwerer.
-          </Read>
-          <Act>
-            Vor dem Eröffnen prüfen: Bündele ich unbewusst dasselbe Risiko? Passt der Trade zum DXY? Kein
-            eigenständiger Einstiegsgrund.
-          </Act>
-        </div>
-      </Panel>
-
-      {/* Kalender */}
-      <Panel title="Kalender & News-Flags" subtitle="High-Impact-Events — Timing-Warnung, kein Richtungsfaktor">
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="⚡ IN PLAY">
-              Eine Währung des Pairs hatte in den letzten 7 Tagen ein Drift-Event (CPI, NFP, Zinsentscheid) — der
-              Markt „verdaut“ es noch, oft mit anhaltender Bewegung.
-            </Threshold>
-            <Threshold v="News-Badge">
-              Anstehende High-Impact-Events der nächsten 7 Tage. ⚡ = Drift-Event (bewegt stark).
-            </Threshold>
-          </ul>
-          <Read>
-            Kein Richtungssignal, sondern <span className="text-text">Timing</span>. Vor einem High-Impact-Event
-            ist die Spread-/Slippage-Gefahr hoch und technische Level halten schlechter.
-          </Read>
-          <Act>
-            Nicht blind in ein Drift-Event hineinhandeln. Entweder davor mit engem Risiko oder die erste Reaktion
-            abwarten. „IN PLAY“ nach dem Event kann einen sauberen Trend liefern.
-          </Act>
         </div>
       </Panel>
 

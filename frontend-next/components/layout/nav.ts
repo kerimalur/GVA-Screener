@@ -21,7 +21,7 @@ export interface NavItem {
   requiresAdmin?: boolean;
 }
 
-export type ModeKey = "trades" | "journal" | "backtest" | "labor" | "system";
+export type ModeKey = "trades" | "journal" | "backtest" | "labor";
 
 /** Welcher Zähler auf der Modus-Kachel steht. `null` = kein Badge. */
 export type ModeBadge = "offeneHits" | "ohneAdherence" | "offeneReplays" | "letzteNacht";
@@ -62,7 +62,7 @@ const RAW_MODES: AppMode[] = [
     label: "Journalieren",
     icon: "ph-notebook",
     base: "/journal/dashboard",
-    summary: "Dashboard · Trades · Equity · Outlook · Kalender",
+    summary: "Dashboard · Trades · Equity · Outlook · Kalender · Strategien",
     badge: "ohneAdherence",
     tabs: [
       { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
@@ -72,6 +72,9 @@ const RAW_MODES: AppMode[] = [
       // Outlook (ph-binoculars) = Detailebene darüber.
       { href: "/journal/outlook", label: "Outlook", icon: "ph-binoculars" },
       { href: "/journal/kalender", label: "Trade-Kalender", icon: "ph-calendar-heart" },
+      // Strategien sitzt direkt hinter dem Kalender: definierte Setups gehören
+      // zum Journalieren, nicht mehr in einen eigenen System-Modus.
+      { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
     ],
   },
   {
@@ -104,19 +107,11 @@ const RAW_MODES: AppMode[] = [
       { href: "/dashboard", label: "News", icon: "ph-newspaper" },
     ],
   },
-  {
-    key: "system",
-    label: "System",
-    icon: "ph-gear",
-    base: "/journal/strategie",
-    summary: "Strategien · Einstellungen · Leitfaden",
-    badge: null,
-    tabs: [
-      { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
-      { href: "/einstellungen", label: "Einstellungen", icon: "ph-gear" },
-      { href: "/leitfaden", label: "Leitfaden", icon: "ph-book-open" },
-    ],
-  },
+  // Kein „System"-Modus mehr: Strategien liegt jetzt im Journalieren-Modus,
+  // Einstellungen und Leitfaden hängen am Avatar-Menü der Kopfzeile
+  // (components/layout/ModeChrome.tsx). Beide Routen bleiben unverändert
+  // erreichbar, nur ohne eigenen Modus-Tab — modeForPath() liefert für sie
+  // `null`, die Kopfzeile rendert dort keine Tab-Leiste.
 ];
 
 /**
@@ -201,6 +196,6 @@ export const PAGE_TITLES: Record<string, string> = {
   "/ml/engine-log": "Engine-Log — Nächtliche Experiment-Suche",
   "/ml/modell": "ML-Modell — Anleitung",
   "/ml/season": "Saisonalität 2.0 — Feature-Explorer",
-  "/leitfaden": "Analyse-Leitfaden",
+  "/leitfaden": "Leitfaden",
   "/einstellungen": "Einstellungen",
 };
