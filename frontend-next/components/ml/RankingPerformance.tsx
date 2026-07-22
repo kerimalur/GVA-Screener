@@ -5,7 +5,7 @@ import Segmented from "@/components/ui/Segmented";
 import CandleChart from "@/components/charts/CandleChart";
 import { fetchCandles, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "@/lib/ml/ranking";
-import { candleKey } from "@/lib/ml/perfCandles";
+import { candleKey } from "@/lib/ml/candleKey";
 import { sinceForPair, wochenSeit } from "@/lib/ml/signalStart";
 
 /**
@@ -30,14 +30,15 @@ export default function RankingPerformance({
   pairs: PairIdea[];
   /** Pair-Anzeigename → 'YYYY-MM-DD'; fehlt = Signal ist neu. */
   startByPair: Record<string, string>;
-  /** `${SYMBOL}|${D|W}` → Kerzen, serverseitig vorgeladen. */
-  preloaded: Record<string, Candle[]>;
+  /** `${SYMBOL}|${D|W}` → Kerzen, serverseitig vorgeladen. Fehlt der Prop, lädt
+   *  das Panel clientseitig nach (kein Server-Preload, aber funktionsfähig). */
+  preloaded?: Record<string, Candle[]>;
 }) {
   const [sel, setSel] = useState(0);
   const [gran, setGran] = useState<"D" | "W">("D");
   const [mode, setMode] = useState<"candle" | "line">("candle");
   // Start mit den vorgeladenen Daten; clientseitige Nachladungen füllen Lücken.
-  const [cache, setCache] = useState<Record<string, Candle[]>>(preloaded);
+  const [cache, setCache] = useState<Record<string, Candle[]>>(preloaded ?? {});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
   const active = pairs[sel];
@@ -55,11 +56,20 @@ export default function RankingPerformance({
   useEffect(() => {
     if (!need) return;
     let alive = true;
-    setLoadingKey(key);
-    fetchCandles(symbol, gran, start)
-      .then((cs) => alive && setCache((c) => ({ ...c, [key]: cs })))
-      .catch(() => alive && setCache((c) => ({ ...c, [key]: [] })))
-      .finally(() => alive && setLoadingKey((k) => (k === key ? null : k)));
+    // queueMicrotask hält alle setState-Aufrufe aus dem synchronen Effect-Body
+    // (Lint-Regel react-hooks/set-state-in-effect) — gleiche Deferral wie zuvor.
+    const run = async () => {
+      setLoadingKey(key);
+      try {
+        const cs = await fetchCandles(symbol, gran, start);
+        if (alive) setCache((c) => ({ ...c, [key]: cs }));
+      } catch {
+        if (alive) setCache((c) => ({ ...c, [key]: [] }));
+      } finally {
+        if (alive) setLoadingKey((k) => (k === key ? null : k));
+      }
+    };
+    queueMicrotask(run);
     return () => {
       alive = false;
     };

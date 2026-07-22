@@ -1,6 +1,22 @@
+import { Suspense } from "react";
 import Panel from "@/components/layout/Panel";
 import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
 import RankingPerformance from "@/components/ml/RankingPerformance";
+import { loadPerfCandles } from "@/lib/ml/perfCandles";
+
+/** Lädt die Kerzen der Kandidaten-Pairs (Render) vor und rendert das Panel.
+ *  Eigene async-Grenze hinter <Suspense>, damit ein Render-Kaltstart nur dieses
+ *  Panel verzögert und nicht die ganze Ranking-Seite blockiert. */
+async function PerformancePanelBody({
+  pairs,
+  startByPair,
+}: {
+  pairs: PairIdea[];
+  startByPair: Record<string, string>;
+}) {
+  const preloaded = await loadPerfCandles(pairs, startByPair);
+  return <RankingPerformance pairs={pairs} startByPair={startByPair} preloaded={preloaded} />;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -251,7 +267,15 @@ export default async function Page() {
         subtitle="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
       >
         <div className="p-5">
-          <RankingPerformance pairs={perfPairs} startByPair={d.signalStartByPair} />
+          <Suspense
+            fallback={
+              <div className="h-[260px] flex items-center justify-center text-muted text-sm font-mono">
+                Lade Kursdaten …
+              </div>
+            }
+          >
+            <PerformancePanelBody pairs={perfPairs} startByPair={d.signalStartByPair} />
+          </Suspense>
         </div>
       </Panel>
 
