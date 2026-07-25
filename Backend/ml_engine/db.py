@@ -6,6 +6,24 @@ import requests
 from ml.db import _config, _headers, insert, select_all, update  # noqa: F401
 
 
+def select_limited(table: str, params: dict, limit: int = 1000) -> list[dict]:
+    """EIN SELECT mit hartem Limit — ohne die Pagination von `select_all`.
+
+    `select_all` blättert immer bis zum Ende durch. Bei ml_experiments (>20k
+    Zeilen inkl. metrics-JSON) ist das teuer, wenn nur die Spitze der
+    hall_score-Rangliste gebraucht wird.
+    """
+    url, key = _config()
+    r = requests.get(
+        f"{url}/rest/v1/{table}",
+        params={**params, "limit": limit},
+        headers=_headers(key),
+        timeout=60,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 def insert_ignore(table: str, rows: list[dict] | dict, on_conflict: str) -> int:
     """Insert-only: Duplikate (PK-Konflikt) werden ignoriert, nie überschrieben.
 

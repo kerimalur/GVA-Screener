@@ -112,11 +112,24 @@ alter table ml_engine_nights
   add column if not exists stable_config jsonb,
   add column if not exists stable_score real;
 
+-- Migration ml_engine_nights_baseline (2026-07-25, additiv + idempotent):
+-- Die Baseline (Zins+Saison-Composite) lag bisher unsichtbar in ml_experiments.
+-- Ohne sie ist «bester Score 0.517» bedeutungslos — sie ist die Latte.
+-- stagnant: best_hall hat sich ML_STAGNATION_NIGHTS Naechte nicht bewegt
+-- (Suchraum auskonvergiert, siehe run_experiments._is_stagnant).
+alter table ml_engine_nights
+  add column if not exists baseline_hall real,
+  add column if not exists baseline_hitrate real,
+  add column if not exists stagnant boolean;
+
 -- Live-Sicht: aggregiert ml_experiments pro UTC-Nacht (deckt auch die laufende
 -- Nacht ab, bevor der Runner seine Zusammenfassung schreibt).
 -- 2026-07-19: mean_/std_hitrate des besten Experiments hinten angehaengt
 -- (create or replace erlaubt nur Anfuegen). stable_* kann die View nicht
 -- liefern (Hysterese ist zustandsbehaftet) — nur Tabelle.
+-- 2026-07-25: baseline_hall/baseline_hitrate der Nacht angehaengt. NULL, wenn
+-- in dieser Nacht keine Baseline lief — bewusst NICHT vorgetragen, fehlende
+-- Daten duerfen nicht wie Messwerte aussehen. stagnant bleibt Tabellen-only.
 create or replace view ml_engine_nights_live
 with (security_invoker = true) as
 select
@@ -133,6 +146,43 @@ select
      ->> 'mean_hitrate')::real as mean_hitrate,
   ((array_agg(metrics order by hall_score desc nulls last)
      filter (where status = 'done' and hall_score is not null))[1]
-     ->> 'std_hitrate')::real as std_hitrate
+     ->> 'std_hitrate')::real as std_hitrate,
+  max(hall_score) filter (
+    where status = 'done' and config ->> 'algo' = 'baseline') as baseline_hall,
+  ((array_agg(metrics order by hall_score desc nulls last) filter (
+     where status = 'done' and hall_score is not null
+       and config ->> 'algo' = 'baseline'))[1]
+     ->> 'mean_hitrate')::real as baseline_hitrate
 from ml_experiments
 group by 1;
+
+-- Holdout-Validierung (Migration ml_holdout_results, 2026-07-25).
+-- APPEND-ONLY: kein Update, kein Delete, kein Upsert. Jeder Lauf hinterlaesst
+-- eine dauerhafte Spur, damit nachvollziehbar bleibt, wie oft der Holdout
+-- befragt wurde — jede weitere Befragung senkt seine Aussagekraft.
+create table if not exists ml_holdout_results (
+  id bigint generated always as identity primary key,
+  run_at timestamptz not null default now(),
+  run_index int not null,              -- wievielter Holdout-Lauf insgesamt
+  config jsonb not null,
+  config_id text not null,             -- stability.config_id()
+  family text not null,                -- stability.family_key() als Text
+  is_baseline boolean not null default false,
+  holdout_hitrate double precision,
+  holdout_std double precision,
+  ci_low double precision,             -- 95 %, Cluster-Bootstrap ueber Folds
+  ci_high double precision,
+  n_predictions int,
+  search_hitrate double precision,     -- derselbe Config-Wert aus der Suche
+  selection_gap double precision,      -- search_hitrate - holdout_hitrate
+  delta_vs_baseline double precision,  -- vs. Baseline desselben Horizonts
+  delta_ci_low double precision,       -- gepaartes Bootstrap-KI der Differenz
+  delta_ci_high double precision,
+  holdout_start date,
+  holdout_end date,
+  git_sha text,
+  notes text
+);
+create index if not exists ml_holdout_results_run_idx
+  on ml_holdout_results (run_index desc, id desc);
+alter table ml_holdout_results enable row level security;

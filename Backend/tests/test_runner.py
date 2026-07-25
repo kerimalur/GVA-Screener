@@ -103,6 +103,67 @@ def test_reseed_wiederholt_top_configs_mit_neuen_seeds(fake_env, monkeypatch):
     assert all(r["status"] == "done" for r in same)
 
 
+# --- Baseline sichtbar (2026-07-25) -----------------------------------------
+
+def _row(algo, hall, hit, status="done"):
+    return {"status": status, "hall_score": hall,
+            "config": {"algo": algo, "horizon": 4, "features": ["scores"]},
+            "metrics": {"mean_hitrate": hit}}
+
+
+def test_baseline_nimmt_den_besten_baseline_lauf():
+    rows = [_row("logreg", 0.60, 0.62), _row("baseline", 0.49, 0.512),
+            _row("baseline", 0.51, 0.528)]
+    hall, hit = runner._best_baseline(rows)
+    assert hall == pytest.approx(0.51)
+    assert hit == pytest.approx(0.528)
+
+
+def test_ohne_baseline_in_der_nacht_bleibt_es_none():
+    """Kein Vortrag des letzten bekannten Werts — fehlende Daten duerfen
+    nicht wie Messwerte aussehen."""
+    assert runner._best_baseline([_row("logreg", 0.6, 0.62)]) == (None, None)
+
+
+def test_fehlgeschlagene_baseline_zaehlt_nicht():
+    assert runner._best_baseline([_row("baseline", 0.5, 0.5, status="failed")]) == (None, None)
+
+
+def test_nightly_schreibt_baseline_und_stagnations_flag(fake_env, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["run_experiments", "--max", "4"])
+    runner.main()
+    night = fake_env.nights[0]
+    assert "baseline_hall" in night and "baseline_hitrate" in night
+    assert night["stagnant"] is False  # erste Nacht, keine Historie
+
+
+# --- Stagnations-Erkennung ---------------------------------------------------
+
+def test_stagnation_bei_unveraendertem_best_hall():
+    history = [{"best_hall": 0.517} for _ in range(4)]
+    assert runner._is_stagnant(0.517, history, nights=5) is True
+
+
+def test_keine_stagnation_wenn_sich_etwas_bewegt():
+    history = [{"best_hall": 0.517}, {"best_hall": 0.517},
+               {"best_hall": 0.512}, {"best_hall": 0.517}]
+    assert runner._is_stagnant(0.517, history, nights=5) is False
+
+
+def test_keine_stagnation_bei_zu_kurzer_historie():
+    assert runner._is_stagnant(0.517, [{"best_hall": 0.517}], nights=5) is False
+
+
+def test_stagnation_ignoriert_luecken_in_der_historie():
+    history = [{"best_hall": 0.517}, {"best_hall": None},
+               {"best_hall": 0.517}, {"best_hall": 0.517}]
+    assert runner._is_stagnant(0.517, history, nights=5) is False
+
+
+def test_stagnation_ohne_best_hall_ist_false():
+    assert runner._is_stagnant(None, [{"best_hall": None}] * 4, nights=5) is False
+
+
 def test_holdout_wird_abgeschnitten(monkeypatch):
     from tests.test_models_synthetic import _synth_panel
     panel = _synth_panel(signal=False, n_weeks=300)

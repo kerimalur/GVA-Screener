@@ -28,26 +28,39 @@ def _fold_metrics(scores: np.ndarray, labels: pd.Series, rets: pd.Series) -> dic
     return {"hitrate": hit, "auc": auc, "n": int(len(y))}
 
 
+def score_fold(
+    data: pd.DataFrame, config: dict, train_weeks: pd.Series, test_weeks: pd.Series
+) -> dict:
+    """Ein Fold: auf `train_weeks` fitten, `test_weeks` scoren → Fold-Metriken.
+
+    Einzige Trainings-/Vorhersage-Stelle des Projekts. Suche
+    (`run_experiment_on_panel`) und Holdout-Validierung (`holdout.py`) rufen
+    beide hier hinein — damit sind die Zahlen per Konstruktion vergleichbar,
+    es gibt keine zweite Implementierung, die auseinanderlaufen könnte.
+    """
+    h = config["horizon"]
+    label_col, ret_col = f"label_{h}w", f"fwd_ret_{h}w"
+    tr = data[data["week_start"].isin(train_weeks)]
+    te = data[data["week_start"].isin(test_weeks)]
+    if config["algo"] == "baseline":
+        scores = baseline_scores(te)
+    else:
+        X_tr = design_matrix(tr, config["features"])
+        X_te = design_matrix(te, config["features"])
+        model = make_model(config["algo"], config.get("params", {}), config.get("seed", 42))
+        model.fit(X_tr, tr[label_col].astype(bool))
+        scores = predict_scores(model, config["algo"], X_te)
+    return _fold_metrics(scores, te[label_col], te[ret_col])
+
+
 def run_experiment_on_panel(panel: pd.DataFrame, config: dict) -> dict:
     """OOS-Metriken eines Experiments (Panel OHNE Holdout übergeben!)."""
     h = config["horizon"]
-    label_col, ret_col = f"label_{h}w", f"fwd_ret_{h}w"
+    label_col = f"label_{h}w"
     data = panel[panel[label_col].notna()].reset_index(drop=True)
     folds = purged_walk_forward(data["week_start"], horizon=h)
 
-    fold_rows = []
-    for train_weeks, test_weeks in folds:
-        tr = data[data["week_start"].isin(train_weeks)]
-        te = data[data["week_start"].isin(test_weeks)]
-        if config["algo"] == "baseline":
-            scores = baseline_scores(te)
-        else:
-            X_tr = design_matrix(tr, config["features"])
-            X_te = design_matrix(te, config["features"])
-            model = make_model(config["algo"], config.get("params", {}), config.get("seed", 42))
-            model.fit(X_tr, tr[label_col].astype(bool))
-            scores = predict_scores(model, config["algo"], X_te)
-        fold_rows.append(_fold_metrics(scores, te[label_col], te[ret_col]))
+    fold_rows = [score_fold(data, config, tr_w, te_w) for tr_w, te_w in folds]
 
     hits = [f["hitrate"] for f in fold_rows if not np.isnan(f["hitrate"])]
     aucs = [f["auc"] for f in fold_rows if not np.isnan(f["auc"])]

@@ -3,7 +3,107 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-21
+Stand: 2026-07-25
+
+## Holdout-Validierung + Baseline sichtbar + Nightly gedrosselt (2026-07-25)
+
+**Ausgangslage.** 13 Nächte, 22.488 Experimente. Seit dem 20.07. über sechs
+Nächte und ~14.000 Experimente **unverändert**: `logreg · 4W · rates+scores`,
+Ø-Trefferquote 0.544 ± 0.027, hall_score 0.517. Kein Fehler, sondern zwei
+strukturelle Gründe: (1) `_search_panel()` schneidet die letzten 104 Wochen ab
+→ neue Marktdaten erreichen die Suche zwei Jahre lang nicht, das Suchpanel ist
+über Nächte hinweg identisch; (2) logreg ist deterministisch → gleicher Seed
+oder nicht, gleiche Zahl. Der Random-Search ist im gegebenen Raum auskonvergiert.
+
+**Das eigentliche Problem.** 0.544 ist ein **Maximum aus 22.488 Ziehungen**, kein
+Messwert. Bei so vielen Versuchen findet man immer etwas, das nach Edge aussieht.
+Ohne Holdout-Zahl und ohne Baseline-Vergleich ist der Wert nicht interpretierbar.
+
+### Was gebaut wurde
+- **`ml_engine/holdout.py`** (rein, ohne DB): Split, Kennzahlen, Konfidenz-
+  intervalle. `wilson_interval` (analytisch, ohne scipy) nur als Referenz —
+  berichtet wird `bootstrap_fold_ci`, ein **Cluster-Bootstrap über die Folds**.
+  Grund: 8 Währungen derselben Woche sind korreliert (Korb demeaned) und 4W-
+  Fenster überlappen → Wilson über Einzelprognosen wäre viel zu eng. Differenz
+  zur Baseline per **gepaartem** Bootstrap (identische Folds, gleicher Horizont).
+- **Fold-Logik geteilt statt dupliziert**: `splits.purge_train()` ist jetzt die
+  einzige Stelle, die «was darf trainiert werden» definiert; `purged_walk_forward`
+  (Suche) und neu `holdout_walk_forward` (Holdout, Blöcke à 26W ab Holdout-Rand)
+  benutzen sie beide. `evaluate.score_fold()` ist die einzige Trainings-/
+  Vorhersage-Stelle — Suche und Holdout rechnen per Konstruktion identisch.
+- **`ml_engine/run_holdout.py`** — CLI: Standardlauf = stabile Config +
+  3 Baselines; `--top-families N`, `--config '<json>'`, `--dry-run`.
+  Kennzahlen je Config: `holdout_hitrate`, 95-%-KI, `n_predictions`,
+  `search_hitrate`, **`selection_gap`** (Suche − Holdout = der quantifizierte
+  Selection Bias), `delta_vs_baseline` + KI der Differenz.
+  **Ein-Schuss-Disziplin**: `run_index` aus der Tabelle, ab Lauf 2 laute Warnung
+  + Pflicht-Bestätigung (`--i-know-what-im-doing` oder interaktiv), Warntext
+  landet in `notes`. Schreibt **ausschliesslich** nach `ml_holdout_results`,
+  nie nach `ml_experiments`/`ml_engine_nights`. `promote.py` unverändert —
+  Holdout-Werte sind nirgends Auswahlkriterium.
+- **Baseline sichtbar** (`_write_night_summary`): `baseline_hall` /
+  `baseline_hitrate` = bester Baseline-Lauf der Nacht (Maximum über alle
+  Horizonte, damit direkt mit `best_hall` daneben vergleichbar). Lief keine
+  Baseline → **NULL, kein Vortrag** des letzten Werts.
+- **Konvergenz-Erkennung** (`_is_stagnant`): bleibt `best_hall` über
+  `ML_STAGNATION_NIGHTS` (5) Nächte unverändert → Flag `stagnant` + laute
+  Meldung im Log.
+- **Suchlogik unangetastet**: `HOLDOUT_WEEKS = 104` und `_search_panel()`
+  unverändert; in `run_experiments.py` wurde nur `_write_night_summary()`
+  ergänzt.
+- **Frontend** (`/ml/engine-log`): neuer Abschnitt «Holdout-Validierung» mit
+  Tabelle (Config · Holdout-KI · n · Suche · Gap · Δ Baseline · Urteil · Lauf)
+  und Aufklapptext in Klartext. Urteil ist streng: **KI der Differenz
+  umschliesst die Null → «kein Nachweis»**, neutral eingefärbt, auch bei
+  positivem Delta. Dazu Baseline-Spalte + Baseline-Linie/Referenzlinie im
+  Verlauf, Stagnations-Banner + ⏸-Marker je Nacht.
+- **Delta-Fix** (`lib/ml/holdoutFormat.formatDelta`): exakt 0 zeigt jetzt
+  «±0.000» statt gar nichts; winzige Deltas bekommen so viele Nachkommastellen,
+  bis sie sichtbar sind — «▲0.000» kommt nicht mehr vor.
+- **Nightly gedrosselt**: `ml-nightly.yml` von `0 2 * * *` auf `0 2 * * 0`
+  (sonntags), umbenannt in «ML Weekly Search», `workflow_dispatch` bleibt.
+  Begründung im Workflow-Kopf: nicht kaputt, sondern auskonvergiert.
+- **Neuer Workflow `ml-holdout.yml`** — bewusst **ohne** `schedule`, nur
+  `workflow_dispatch`. Inputs: `dry_run` (Default **true**), `top_families`,
+  `bestaetigen`. Actions hat kein TTY, deshalb bricht der Runner ab Lauf 2 ohne
+  `bestaetigen: true` von selbst ab. Der Bericht landet in der Job-Summary und
+  als Artifact `holdout-report`.
+
+### DB (Migrationen additiv + idempotent, in `ml_engine/migrations.sql`)
+- `ml_engine_nights` + `baseline_hall`, `baseline_hitrate`, `stagnant`
+- View `ml_engine_nights_live` + `baseline_hall`, `baseline_hitrate`
+- neu `ml_holdout_results` (**append-only**, kein Update/Delete/Upsert)
+
+### Tests
+190 pytest grün (neu `test_holdout.py` 17, `test_holdout_runner.py` 14,
+Baseline/Stagnation in `test_runner.py`). Akzeptanzkriterium «kein Look-ahead»
+liegt in `test_holdout.py::test_kein_training_aus_der_zukunft` (jeder Fold:
+`train.max() < test.min()` UND `train + horizon < test.min()` UND disjunkt).
+Kontrollwerte `scripts/holdout-check.mts` grün, ebenso alle bestehenden;
+`tsc` und `next build` sauber.
+
+### ⚠️ OFFEN — zwei Handschritte, dann stehen die Zahlen
+1. **Migrationen im Supabase-SQL-Editor ausführen** (`ml_engine/migrations.sql`,
+   die drei neuen Blöcke). Vorher zeigt der Holdout-Abschnitt leer und die
+   Baseline-Spalte «–».
+2. **Holdout-Lauf #1 starten** — GitHub → Actions → «ML Holdout Validation» →
+   Run workflow. Erst mit `dry_run: true` ansehen (rechnet alles, schreibt
+   nichts, verbraucht keinen `run_index`), dann mit `dry_run: false` festhalten.
+   Bewusst noch nicht automatisch passiert: jeder Holdout-Blick zählt.
+   Danach die Zahlen hier eintragen (Holdout-Trefferquote, KI, n,
+   `selection_gap`, Δ Baseline) samt Verdikt nach den Regeln unten.
+
+**Interpretation, sobald die Zahlen da sind** (vorab festhalten, damit sie nicht
+nachträglich passend gemacht wird):
+- Holdout-Trefferquote nahe 0.50 **oder** KI der Differenz umschliesst die Null
+  → die Suche hat Rauschen gefunden. Kein Misserfolg, sondern ein sauber
+  gemessenes Ergebnis — und es spart den nächsten Schritt (FTMO, ML-Ausbau).
+- Deutlich über der Baseline **und** KI der Differenz ohne Null → messbarer
+  Effekt. Nächster Schritt dann: in Handelsregeln übersetzen und gegen Spread
+  und Kosten rechnen — **nicht** weitersuchen.
+- Ein grosser `selection_gap` ist zu erwarten und kein Fehler. Er beziffert die
+  Verzerrung der Suchmetrik und ist die nützlichste Zahl für alle künftigen
+  Suchläufe.
 
 ## ✅ Offene manuelle Schritte erledigt (2026-07-21, Kerim)
 Kerim hat die drei blockierenden Handschritte ausgeführt:

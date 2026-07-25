@@ -33,6 +33,12 @@ TOPK_RESEED_DEFAULT = 5
 SEED_REPEATS_DEFAULT = 3
 RESEED_BUDGET_S_DEFAULT = 300.0
 
+# Konvergenz-Erkennung: bewegt sich best_hall ueber so viele Naechte nicht,
+# ist der Suchraum ausgeschoepft — weitersuchen bringt nichts, ohne den Raum
+# zu erweitern. Wird als Flag `stagnant` gefuehrt und im Log gemeldet.
+STAGNATION_NIGHTS_DEFAULT = 5
+STAGNATION_EPS = 1e-6
+
 
 def _int_env(name: str, default: int) -> int:
     try:
@@ -174,6 +180,53 @@ def _reseed_top_configs(panel: pd.DataFrame, rng: np.random.Generator, git_sha: 
             _evaluate_and_store(exp["id"], cfg, panel, git_sha)
 
 
+def _best_baseline(rows: list[dict]) -> tuple[float | None, float | None]:
+    """(baseline_hall, baseline_hitrate) der Nacht — bester Baseline-Lauf.
+
+    Bewusst das Maximum ueber ALLE Horizonte, nicht je Horizont: best_hall
+    daneben ist ebenfalls ein Maximum ueber alle Horizonte, nur so sind die
+    beiden Spalten in derselben Zeile direkt vergleichbar. Der Vergleich je
+    Horizont gehoert in die Holdout-Auswertung (run_holdout.py), wo Modell und
+    Baseline auf identischen Folds gepaart gemessen werden.
+
+    Lief in dieser Nacht keine Baseline, ist das Ergebnis (None, None) — der
+    letzte bekannte Wert wird NICHT vorgetragen. Fehlende Daten duerfen nicht
+    wie Messwerte aussehen.
+    """
+    best_hall, best_hit = None, None
+    for r in rows:
+        cfg = r["config"] if isinstance(r["config"], dict) else json.loads(r["config"])
+        if cfg.get("algo") != "baseline" or r.get("status") != "done":
+            continue
+        hall = r.get("hall_score")
+        if hall is None:
+            continue
+        if best_hall is None or float(hall) > best_hall:
+            best_hall = float(hall)
+            m = r.get("metrics") or {}
+            m = m if isinstance(m, dict) else json.loads(m)
+            hit = m.get("mean_hitrate")
+            best_hit = None if hit is None else float(hit)
+    return best_hall, best_hit
+
+
+def _is_stagnant(best_hall: float | None, history: list[dict], nights: int | None = None) -> bool:
+    """True, wenn best_hall ueber `nights` Naechte (inkl. heute) unveraendert ist.
+
+    `history` sind die juengsten ml_engine_nights-Zeilen ABSTEIGEND ohne heute.
+    Kein Urteil ueber die Qualitaet — nur die Feststellung, dass der aktuelle
+    Suchraum nichts Neues mehr hergibt.
+    """
+    nights = _int_env("ML_STAGNATION_NIGHTS", STAGNATION_NIGHTS_DEFAULT) if nights is None \
+        else max(1, nights)
+    if best_hall is None or nights <= 1:
+        return False
+    prior = [h.get("best_hall") for h in history[: nights - 1]]
+    if len(prior) < nights - 1 or any(p is None for p in prior):
+        return False
+    return all(abs(float(p) - float(best_hall)) < STAGNATION_EPS for p in prior)
+
+
 def _write_night_summary() -> None:
     """Nacht-Zusammenfassung dauerhaft nach ml_engine_nights (idempotent:
     upsert nur auf die EIGENE Nacht — ältere Nächte bleiben unberührt).
@@ -183,6 +236,13 @@ def _write_night_summary() -> None:
         vs. «instabile Edge» — hall_score = mean − std),
       - stable_config/stable_score: stabile Linie mit Hysterese (wechselt nur
         bei Marge ueber mehrere Naechte, siehe stability.decide_stable).
+
+    Seit 2026-07-25 zusaetzlich:
+      - baseline_hall/baseline_hitrate: die Latte, gegen die alles gemessen
+        wird. Lag bisher unsichtbar in ml_experiments; ohne sie ist ein
+        Bestwert von 0.517 nicht interpretierbar.
+      - stagnant: best_hall bewegt sich seit ML_STAGNATION_NIGHTS Naechten
+        nicht mehr → Suchraum auskonvergiert.
     """
     night = datetime.now(timezone.utc).date().isoformat()
     rows = db.select_all("ml_experiments", {
@@ -216,6 +276,16 @@ def _write_night_summary() -> None:
             "order": "night.desc",
         })
     ]
+    baseline_hall, baseline_hit = _best_baseline(rows)
+    stagnant = _is_stagnant(best_hall, history)
+    if stagnant:
+        n = _int_env("ML_STAGNATION_NIGHTS", STAGNATION_NIGHTS_DEFAULT)
+        print("=" * 72)
+        print(f"STAGNATION: best_hall unveraendert seit {n} Naechten "
+              f"({best_hall}). Der aktuelle Suchraum ist auskonvergiert — "
+              f"weitersuchen bringt nichts, ohne ihn zu erweitern "
+              f"(Features, Horizonte, Modellfamilien).")
+        print("=" * 72)
     prev_stable = next((h["stable_config"] for h in history if h.get("stable_config")), None)
     cand_cfg, cand_score = robust_candidate(done_rows)
     _, incumbent_score = best_of_family(done_rows, family_key(prev_stable))
@@ -243,6 +313,10 @@ def _write_night_summary() -> None:
         "std_hitrate": _m("std_hitrate"),
         "stable_config": stable_rep,
         "stable_score": None if stable_score is None else round(float(stable_score), 6),
+        # NULL statt Vortrag, wenn heute keine Baseline lief (siehe _best_baseline).
+        "baseline_hall": None if baseline_hall is None else round(baseline_hall, 6),
+        "baseline_hitrate": None if baseline_hit is None else round(baseline_hit, 6),
+        "stagnant": stagnant,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, upsert_on="night")
 

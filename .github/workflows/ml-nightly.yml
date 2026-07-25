@@ -1,7 +1,25 @@
-name: ML Nightly Search
+name: ML Weekly Search
+
+# Von täglich (02:00 UTC) auf wöchentlich gedrosselt am 2026-07-25.
+#
+# Grund ist NICHT, dass der Job kaputt wäre — er läuft sauber durch. Der
+# Random-Search ist im aktuellen Suchraum auskonvergiert: über sechs Nächte und
+# rund 14.000 Experimente hat sich das Ergebnis nicht mehr bewegt
+# (logreg · 4W · rates+scores, hall_score 0.517). Zwei strukturelle Gründe:
+#   1. run_experiments._search_panel() schneidet die letzten 104 Wochen ab
+#      (Holdout-Disziplin) — neue Marktdaten erreichen die Suche zwei Jahre
+#      lang gar nicht, das Suchpanel ist über Nächte hinweg identisch.
+#   2. Das gewinnende Modell ist logreg und damit deterministisch: gleiche
+#      Config + gleiches Panel = bitgenau dieselbe Zahl, egal welcher Seed.
+#
+# Sobald der Suchraum erweitert wird (weitere Features, Horizonte,
+# Modellfamilien), kann die Frequenz wieder hoch. workflow_dispatch bleibt,
+# manuelle Läufe sind jederzeit möglich. Die Konvergenz-Erkennung in
+# run_experiments._is_stagnant() meldet so einen Zustand künftig selbst
+# (Flag `stagnant` in ml_engine_nights, sichtbar im Engine-Log).
 on:
   schedule:
-    - cron: "0 2 * * *"    # 02:00 UTC
+    - cron: "0 2 * * 0"    # sonntags 02:00 UTC
   workflow_dispatch:
 
 jobs:
