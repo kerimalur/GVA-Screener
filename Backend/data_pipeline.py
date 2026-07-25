@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 import requests
 import pandas as pd
@@ -13,8 +14,35 @@ OANDA_ACCOUNT_ID = os.getenv('OANDA_ACCOUNT_ID')
 # In-Prozess-TTL-Cache für Tageskerzen. D-Kerzen schließen nur 1×/Tag, aber der
 # Replay-Raum fragt dasselbe Pair mehrfach ab (Hits + find_hit je Bewertung).
 # Ohne Cache = jeder Aufruf ein voller OANDA-Fetch (Render-Kaltstart → langsam).
-_DAILY_CACHE: dict[tuple[str, int], tuple[float, pd.DataFrame]] = {}
+# Eintrag: (Zeitstempel, DataFrame, TTL) — Fehlschläge werden kurz negativ
+# gecacht, damit ein OANDA-Ausfall nicht 20 Pairs × 10 s Timeout seriell kostet.
+_DAILY_CACHE: dict[tuple[str, int], tuple[float, pd.DataFrame, float]] = {}
 _DAILY_TTL_SEC = 300.0
+_DAILY_FAIL_TTL_SEC = 30.0
+
+# Single-Flight je (instrument, count): das Performance-Panel im Ranking fragt
+# D+W für ~20 Pairs gleichzeitig ab. Ohne Lock löst jeder dieser Aufrufe einen
+# eigenen 5000-Kerzen-Fetch aus (GIL + Render-CPU → minutenlang). Mit Lock holt
+# der erste, die anderen warten und nehmen das Cache-Ergebnis.
+_DAILY_LOCKS: dict[tuple[str, int], threading.Lock] = {}
+_DAILY_LOCKS_GUARD = threading.Lock()
+
+
+def _daily_lock(cache_key: tuple[str, int]) -> threading.Lock:
+    with _DAILY_LOCKS_GUARD:
+        lock = _DAILY_LOCKS.get(cache_key)
+        if lock is None:
+            lock = threading.Lock()
+            _DAILY_LOCKS[cache_key] = lock
+        return lock
+
+
+def _daily_cached(cache_key: tuple[str, int]):
+    """Gültiger Cache-Eintrag oder None (auch negativ gecachte Fehlschläge)."""
+    cached = _DAILY_CACHE.get(cache_key)
+    if cached and (time.monotonic() - cached[0]) < cached[2]:
+        return cached[1]
+    return None
 
 
 def fetch_live_prices(instruments: list) -> dict:
@@ -65,10 +93,22 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
         return pd.DataFrame()
 
     cache_key = (instrument, count)
-    cached = _DAILY_CACHE.get(cache_key)
-    if cached and (time.monotonic() - cached[0]) < _DAILY_TTL_SEC:
-        return cached[1]
+    hit = _daily_cached(cache_key)
+    if hit is not None:
+        return hit
 
+    with _daily_lock(cache_key):
+        # Zweiter Blick unter dem Lock: wer gewartet hat, nimmt das Ergebnis
+        # des ersten Aufrufs statt selbst nochmal OANDA zu fragen.
+        hit = _daily_cached(cache_key)
+        if hit is not None:
+            return hit
+        return _fetch_daily_oanda_uncached(instrument, count, cache_key)
+
+
+def _fetch_daily_oanda_uncached(instrument: str, count: int,
+                                cache_key: tuple[str, int]) -> pd.DataFrame:
+    """Der eigentliche OANDA-Call. Nur aus fetch_daily_oanda unter Lock."""
     headers = {
         "Authorization": f"Bearer {OANDA_API_KEY}",
         "Accept-Datetime-Format": "UNIX",
@@ -84,7 +124,9 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
         response.raise_for_status()
     except Exception as e:
         print(f"OANDA API Request Fehler bei {instrument}: {e}")
-        return pd.DataFrame()
+        empty = pd.DataFrame()
+        _DAILY_CACHE[cache_key] = (time.monotonic(), empty, _DAILY_FAIL_TTL_SEC)
+        return empty
 
     candles = []
     for candle in response.json().get('candles', []):
@@ -99,12 +141,34 @@ def fetch_daily_oanda(instrument: str, count: int = 5000) -> pd.DataFrame:
             })
     df = pd.DataFrame(candles)
     if df.empty:
+        _DAILY_CACHE[cache_key] = (time.monotonic(), df, _DAILY_FAIL_TTL_SEC)
         return df
     df = df.set_index('time')
     df = df[df.index.dayofweek < 5].copy()  # Wochenend-Artefakte raus
     df = df.sort_index()
-    _DAILY_CACHE[cache_key] = (time.monotonic(), df)
+    _DAILY_CACHE[cache_key] = (time.monotonic(), df, _DAILY_TTL_SEC)
     return df
+
+
+def daily_for_candles(instrument: str, since: str = "") -> pd.DataFrame:
+    """Tageskerzen für den Performance-Chart (Währungs-Ranking).
+
+    Nimmt die warme 5000er-Cache des Scanners, wenn sie steht — sonst nur so
+    viele Kerzen, wie `since` wirklich braucht. Ein Signal von vor 6 Wochen
+    braucht keine 20 Jahre Historie; das war auf Render der Hauptgrund für die
+    minutenlangen Ladezeiten des Performance-Panels."""
+    warm = _daily_cached((instrument, 5000))
+    if warm is not None:
+        return warm
+    count = 5000
+    if since:
+        try:
+            tage = (pd.Timestamp.now().normalize() - pd.to_datetime(since)).days
+            # +60 Kalendertage Puffer, damit die W-Resample-Randwoche sauber ist
+            count = int(min(5000, max(120, tage + 60)))
+        except Exception:
+            count = 5000
+    return fetch_daily_oanda(instrument, count=count)
 
 
 def gva_3d_block_ids(index: pd.DatetimeIndex, anchor: pd.Timestamp = GVA_3D_ANCHOR) -> np.ndarray:

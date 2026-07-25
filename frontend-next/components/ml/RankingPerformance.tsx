@@ -105,33 +105,53 @@ export default function RankingPerformance({
 
   return (
     <div className="space-y-4">
-      {/* Pair-Auswahl (wirkt wie Tabs) — Grün/Rot = Bewegung vs. Signal (Übersicht) */}
-      <div className="flex flex-wrap gap-1.5">
-        {pairs.map((p, i) => {
-          const fav = favorableOf(p, pctFor(p));
-          const selected = i === sel;
-          const tone = selected
-            ? "bg-accent/15 text-accent border-accent"
-            : fav === true
-              ? "bg-up/10 text-up border-up/40 hover:border-up"
-              : fav === false
-                ? "bg-down/10 text-down border-down/40 hover:border-down"
-                : "bg-surface text-muted border-border hover:text-text hover:border-border2";
+      {/* Pair-Auswahl (wirkt wie Tabs) — nach Signalrichtung getrennt: alle LONGs
+          in einer Reihe, alle SHORTs in der nächsten. Gemischt war die Reihe
+          nicht vergleichbar, weil Grün/Rot je Richtung anders zu lesen ist.
+          Grün/Rot = Bewegung in/gegen Signalrichtung. */}
+      <div className="space-y-2">
+        {(["long", "short"] as const).map((dir) => {
+          const group = pairs
+            .map((p, i) => ({ p, i }))
+            .filter((x) => x.p.direction === dir);
+          if (group.length === 0) return null;
           return (
-            <button
-              key={p.pair}
-              onClick={() => setSel(i)}
-              title={
-                fav == null
-                  ? "noch kein Verlauf"
-                  : fav
-                    ? "in Signalrichtung (im Plus)"
-                    : "gegen das Signal"
-              }
-              className={`px-2.5 py-1 rounded text-xs font-bold font-mono border transition-colors ${tone}`}
-            >
-              {p.pair}
-            </button>
+            <div key={dir} className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={`w-14 shrink-0 text-[10px] font-bold font-mono ${
+                  dir === "long" ? "text-up" : "text-down"
+                }`}
+              >
+                {dir.toUpperCase()}
+              </span>
+              {group.map(({ p, i }) => {
+                const fav = favorableOf(p, pctFor(p));
+                const selected = i === sel;
+                const tone = selected
+                  ? "bg-accent/15 text-accent border-accent"
+                  : fav === true
+                    ? "bg-up/10 text-up border-up/40 hover:border-up"
+                    : fav === false
+                      ? "bg-down/10 text-down border-down/40 hover:border-down"
+                      : "bg-surface text-muted border-border hover:text-text hover:border-border2";
+                return (
+                  <button
+                    key={p.pair}
+                    onClick={() => setSel(i)}
+                    title={
+                      fav == null
+                        ? "noch kein Verlauf"
+                        : fav
+                          ? "in Signalrichtung (im Plus)"
+                          : "gegen das Signal"
+                    }
+                    className={`px-2.5 py-1 rounded text-xs font-bold font-mono border transition-colors ${tone}`}
+                  >
+                    {p.pair}
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </div>

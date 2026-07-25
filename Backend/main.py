@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles, recent_gvas
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
@@ -606,12 +606,12 @@ def get_calendar():
 def get_candles(pair: str, granularity: str = "D", since: str = ""):
     """Kursverlauf eines Pairs für den Performance-Chart im Währungs-Ranking.
 
-    Reuse der warmen Tageskerzen-Cache des Scanners (count=5000, kein extra
-    OANDA-Call); 'W' wird daraus resampled. `since` (ISO 'YYYY-MM-DD') =
-    Signal-Start. Datenquelle OANDA."""
-    inst = pair.replace("_", "").upper()
+    Reuse der warmen Tageskerzen-Cache des Scanners, sonst nur der von `since`
+    benötigte Ausschnitt (daily_for_candles); 'W' wird daraus resampled.
+    `since` (ISO 'YYYY-MM-DD') = Signal-Start. Datenquelle OANDA."""
+    inst = pair.replace("/", "").replace("_", "").upper()
     try:
-        daily = fetch_daily_oanda(inst, count=5000)
+        daily = daily_for_candles(inst, since)
     except Exception as e:
         print(f"candles: OANDA-Fehler {pair}: {e}")
         return {"pair": pair, "granularity": str(granularity).upper(), "candles": []}
@@ -620,6 +620,40 @@ def get_candles(pair: str, granularity: str = "D", since: str = ""):
         "granularity": str(granularity).upper(),
         "candles": simple_candles(daily, granularity, since),
     }
+
+
+@app.get("/api/candles/batch")
+def get_candles_batch(pairs: str, since: str = ""):
+    """Kerzen mehrerer Pairs in EINEM Request — für das Performance-Panel.
+
+    Das Panel braucht D+W für alle Kandidaten-Pairs (bis ~20). Als Einzelaufrufe
+    waren das ~40 parallele Requests auf Render, jeder mit eigenem OANDA-Fetch —
+    in Summe minutenlang. Hier läuft es sequenziell mit genau einem OANDA-Fetch
+    je Pair, und spätere Pairs profitieren von der Cache des laufenden Requests.
+
+    `pairs`: kommagetrennt, Eintrag optional mit eigenem Start als
+    `EURUSD:2026-06-01` (jedes Signal hat einen anderen Startpunkt); ohne
+    Doppelpunkt gilt `since`.
+    Antwort: `{"pairs": {"EURUSD": {"D": [...], "W": [...]}, ...}}`"""
+    out: dict[str, dict[str, list]] = {}
+    for raw in pairs.split(",")[:30]:
+        sym, _, own_since = raw.strip().partition(":")
+        inst = sym.replace("/", "").replace("_", "").upper()
+        if not inst or inst in out:
+            continue
+        start = own_since.strip() or since
+        try:
+            daily = daily_for_candles(inst, start)
+        except Exception as e:
+            print(f"candles/batch: OANDA-Fehler {inst}: {e}")
+            continue
+        if daily.empty:
+            continue
+        out[inst] = {
+            "D": simple_candles(daily, "D", start),
+            "W": simple_candles(daily, "W", start),
+        }
+    return {"pairs": out}
 
 
 @app.get("/health")

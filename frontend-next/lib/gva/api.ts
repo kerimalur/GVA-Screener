@@ -127,10 +127,43 @@ export async function fetchCandles(
   const res = await fetch(
     `${API_URL}/api/candles?pair=${encodeURIComponent(pair)}` +
       `&granularity=${granularity}&since=${encodeURIComponent(since)}`,
+    { signal: AbortSignal.timeout(CANDLE_TIMEOUT_MS) },
   );
   if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   const json = await res.json();
   return Array.isArray(json?.candles) ? (json.candles as Candle[]) : [];
+}
+
+/** Harte Obergrenze für Kerzen-Requests. Ohne Timeout hängt ein kaltes/lahmes
+ *  Render den SSR-Render bzw. den Spinner unbegrenzt („lädt ewig"). */
+const CANDLE_TIMEOUT_MS = 25_000;
+
+/**
+ * Kerzen mehrerer Pairs in EINEM Request (Backend `/api/candles/batch`).
+ * Jedes Pair bringt seinen eigenen Signal-Start mit. Rückgabe je Symbol
+ * (ohne „/") beide Granularitäten — genau das, was das Performance-Panel
+ * vorlädt. Einzelrequests je Pair/Granularität waren auf Render zu langsam.
+ */
+export async function fetchCandlesBatch(
+  items: { symbol: string; since: string }[],
+): Promise<Record<string, { D: Candle[]; W: Candle[] }>> {
+  if (items.length === 0) return {};
+  const spec = items.map((i) => `${i.symbol}:${i.since}`).join(",");
+  const res = await fetch(
+    `${API_URL}/api/candles/batch?pairs=${encodeURIComponent(spec)}`,
+    { signal: AbortSignal.timeout(CANDLE_TIMEOUT_MS) },
+  );
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  const json = await res.json();
+  const out: Record<string, { D: Candle[]; W: Candle[] }> = {};
+  for (const [sym, v] of Object.entries((json?.pairs ?? {}) as Record<string, unknown>)) {
+    const e = v as { D?: unknown; W?: unknown };
+    out[sym] = {
+      D: Array.isArray(e?.D) ? (e.D as Candle[]) : [],
+      W: Array.isArray(e?.W) ? (e.W as Candle[]) : [],
+    };
+  }
+  return out;
 }
 
 /**

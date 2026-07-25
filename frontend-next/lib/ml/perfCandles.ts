@@ -1,5 +1,5 @@
 import "server-only";
-import { fetchCandles, type Candle } from "@/lib/gva/api";
+import { fetchCandlesBatch, type Candle } from "@/lib/gva/api";
 import type { PairIdea } from "./ranking";
 import { candleKey } from "./candleKey";
 import { sinceForPair } from "./signalStart";
@@ -10,29 +10,40 @@ import { sinceForPair } from "./signalStart";
  * und die Grün/Rot-Übersicht sofort steht. Kerze/Linie sind reine Zeichenmodi
  * derselben Daten — also nur D+W je Pair.
  *
- * Reuse von `/api/candles` (Render), das die warme Tageskerzen-Cache des Scanners
- * nutzt (W wird daraus resampled) → keine zusätzlichen OANDA-Calls. Jeder Fetch
- * ist einzeln abgesichert: fällt Render (Kaltstart) aus, fehlt nur der Eintrag,
- * das Panel lädt ihn dann clientseitig nach.
+ * EIN Request (`/api/candles/batch`) statt 2 pro Pair: bei ~20 Kandidaten waren
+ * das ~40 parallele Aufrufe auf Render, jeder mit eigenem OANDA-Fetch über die
+ * volle Historie — das Panel lud minutenlang. Das Backend arbeitet die Liste
+ * sequenziell ab, nutzt seine Tageskerzen-Cache und holt nur den von `since`
+ * gebrauchten Ausschnitt. Fällt der Request aus (Render-Kaltstart, Timeout),
+ * kommt eine leere Map zurück und das Panel lädt das aktive Pair clientseitig.
  */
 export async function loadPerfCandles(
   pairs: PairIdea[],
   startByPair: Record<string, string>,
 ): Promise<Record<string, Candle[]>> {
-  const jobs: Promise<[string, Candle[]] | null>[] = [];
+  const items: { symbol: string; since: string }[] = [];
   for (const p of pairs) {
     const symbol = p.pair.replace("/", "");
-    const start = sinceForPair(startByPair[p.pair]) ?? "";
-    if (!start) continue; // neues Signal ohne Verlauf → nichts vorzuladen
-    for (const gran of ["D", "W"] as const) {
-      jobs.push(
-        fetchCandles(symbol, gran, start)
-          .then((cs) => [candleKey(symbol, gran), cs] as [string, Candle[]])
-          .catch(() => null),
-      );
-    }
+    const since = sinceForPair(startByPair[p.pair]) ?? "";
+    if (!since) continue; // neues Signal ohne Verlauf → nichts vorzuladen
+    if (items.some((i) => i.symbol === symbol)) continue;
+    items.push({ symbol, since });
   }
+  if (items.length === 0) return {};
+
+  let batch: Record<string, { D: Candle[]; W: Candle[] }>;
+  try {
+    batch = await fetchCandlesBatch(items);
+  } catch {
+    return {};
+  }
+
   const out: Record<string, Candle[]> = {};
-  for (const r of await Promise.all(jobs)) if (r) out[r[0]] = r[1];
+  for (const { symbol } of items) {
+    const entry = batch[symbol];
+    if (!entry) continue;
+    out[candleKey(symbol, "D")] = entry.D;
+    out[candleKey(symbol, "W")] = entry.W;
+  }
   return out;
 }
