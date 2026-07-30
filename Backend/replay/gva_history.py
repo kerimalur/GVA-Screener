@@ -13,7 +13,16 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from analyzer import GVA_SIZE_FACTOR, GVA_TOL_PCT
+from analyzer import (
+    GVA_ATR_LENGTH,
+    GVA_SIZE_FACTOR,
+    GVA_TOL_BASIS,
+    GVA_TOL_PCT,
+    GVA_TOUCH_TOL_ATR,
+    GVA_TOUCH_WICK,
+    _touch_bounds,
+    wilder_atr,
+)
 from data_pipeline import fetch_daily_oanda, resample_3d_bars
 
 
@@ -34,6 +43,10 @@ def collect_hits(
     instrument: str,
     size_factor: float = GVA_SIZE_FACTOR,
     tol_pct: float = GVA_TOL_PCT,
+    tol_basis: str = GVA_TOL_BASIS,
+    touch_tol_atr: float = GVA_TOUCH_TOL_ATR,
+    touch_wick: bool = GVA_TOUCH_WICK,
+    atr_length: int = GVA_ATR_LENGTH,
 ) -> list[dict]:
     """Portierte analyze_gva_zones-Loop, die jeden Hit sammelt.
 
@@ -50,6 +63,7 @@ def collect_hits(
     active_shorts: list[dict] = []
     active_longs: list[dict] = []
     hits: list[dict] = []
+    atr_series = wilder_atr(df_3d, atr_length)
 
     for i in range(1, len(df_3d)):
         prev = df_3d.iloc[i - 1]
@@ -64,12 +78,19 @@ def collect_hits(
         prev_body = abs(prev["close"] - prev["open"])
         curr_body = abs(curr["close"] - curr["open"])
         valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
-        tol = prev_body * tol_pct
+
+        atr_now = atr_series.iloc[i]
+        atr_now = 0.0 if pd.isna(atr_now) else float(atr_now)
+        tol = (atr_now if tol_basis == "atr" else prev_body) * tol_pct
+        touch_tol = atr_now * touch_tol_atr
+
         bot_match = abs(min(prev["open"], prev["close"]) - min(curr["open"], curr["close"])) <= tol
         top_match = abs(max(prev["open"], prev["close"]) - max(curr["open"], curr["close"])) <= tol
 
+        touch_hi, touch_lo = _touch_bounds(curr, touch_wick)
+
         for x in active_shorts:
-            if curr["high"] >= x["level"]:
+            if touch_hi >= x["level"] - touch_tol:
                 hits.append(
                     {
                         "direction": "SHORT",
@@ -81,7 +102,7 @@ def collect_hits(
                     }
                 )
         for x in active_longs:
-            if curr["low"] <= x["level"]:
+            if touch_lo <= x["level"] + touch_tol:
                 hits.append(
                     {
                         "direction": "LONG",
@@ -93,8 +114,8 @@ def collect_hits(
                     }
                 )
 
-        active_shorts = [x for x in active_shorts if curr["high"] < x["level"]]
-        active_longs = [x for x in active_longs if curr["low"] > x["level"]]
+        active_shorts = [x for x in active_shorts if touch_hi < x["level"] - touch_tol]
+        active_longs = [x for x in active_longs if touch_lo > x["level"] + touch_tol]
 
         # Level = Body-Top/Boden der Signal-Kerze B (Pine: top_B/bot_B);
         # High/Low der Signal-Kerze werden für die SL-Berechnung mitgeführt.
@@ -117,6 +138,8 @@ def collect_lines(
     instrument: str,
     size_factor: float = GVA_SIZE_FACTOR,
     tol_pct: float = GVA_TOL_PCT,
+    tol_basis: str = GVA_TOL_BASIS,
+    atr_length: int = GVA_ATR_LENGTH,
 ) -> list[dict]:
     """Jede GEBILDETE GVA-Linie (unabhängig davon, ob sie je gehittet wurde) —
     fürs Kalibrieren gegen TradingView. Gleiche Muster-/Level-Logik wie
@@ -125,6 +148,7 @@ def collect_lines(
         return []
 
     lines: list[dict] = []
+    atr_series = wilder_atr(df_3d, atr_length)
     for i in range(1, len(df_3d)):
         prev = df_3d.iloc[i - 1]
         curr = df_3d.iloc[i]
@@ -138,7 +162,11 @@ def collect_lines(
         prev_body = abs(prev["close"] - prev["open"])
         curr_body = abs(curr["close"] - curr["open"])
         valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
-        tol = prev_body * tol_pct
+
+        atr_now = atr_series.iloc[i]
+        atr_now = 0.0 if pd.isna(atr_now) else float(atr_now)
+        tol = (atr_now if tol_basis == "atr" else prev_body) * tol_pct
+
         bot_match = abs(min(prev["open"], prev["close"]) - min(curr["open"], curr["close"])) <= tol
         top_match = abs(max(prev["open"], prev["close"]) - max(curr["open"], curr["close"])) <= tol
 
@@ -183,11 +211,14 @@ def reconstruct_lines(
     return lines
 
 
-def refine_hit_day(hit: dict, daily: pd.DataFrame) -> str:
-    """Tagesgenauer Hit-Tag innerhalb des 3D-Blocks: erster Tag (ab Block-
-    Start), an dem die Linie tatsächlich berührt wurde. Fallback: Block-Datum."""
+def refine_hit_day(hit: dict, daily: pd.DataFrame, block_days: int = 6) -> str:
+    """Tagesgenauer Hit-Tag innerhalb des Blocks: erster Tag (ab Block-Start),
+    an dem die Linie tatsächlich berührt wurde. Fallback: Block-Datum.
+
+    `block_days` = Suchfenster ab Block-Start. 6 für 3D-Blöcke (3 Handelstage
+    können bis zu 6 Kalendertage überspannen), 7 für Wochenkerzen."""
     block_start = pd.Timestamp(hit["hit_block_date"])
-    window = daily.loc[block_start : block_start + pd.Timedelta(days=6)]
+    window = daily.loc[block_start : block_start + pd.Timedelta(days=block_days)]
     for ts, row in window.iterrows():
         if hit["direction"] == "SHORT" and row["high"] >= hit["level"]:
             return ts.date().isoformat()

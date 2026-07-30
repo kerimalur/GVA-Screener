@@ -197,6 +197,25 @@ def resample_3d_bars(df_daily: pd.DataFrame, anchor: pd.Timestamp = GVA_3D_ANCHO
     return df_3d.sort_index().dropna()
 
 
+def resample_weekly_bars(df_daily: pd.DataFrame) -> pd.DataFrame:
+    """Wochenkerzen wie TradingView (Forex): Woche endet Freitag.
+
+    Gleiche Konvention wie simple_candles('W') — Gruppierung per 'W-FRI'.
+    Der Index ist wie bei resample_3d_bars der ERSTE Tag der Woche (nicht das
+    Perioden-Ende), damit Linien-/Hit-Daten in beiden Timeframes gleich
+    gelesen werden. Wochen ohne Kerze fallen raus (kein NaN-Block)."""
+    if df_daily.empty:
+        return df_daily
+    df = df_daily.sort_index().copy()
+    df['week_id'] = df.index.to_period('W-FRI')
+    grp = df.groupby('week_id')
+    df_w = grp.agg({
+        'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum',
+    })
+    df_w.index = grp.apply(lambda x: x.index.min())
+    return df_w.sort_index().dropna()
+
+
 def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     df = fetch_daily_oanda(instrument, count)
     if df.empty:
@@ -213,8 +232,10 @@ def recent_gvas(shorts: list | None, longs: list | None, limit: int = 3) -> list
     noch nicht getroffenen Linien (ZONES `shorts`/`longs`). Datum ist
     'DD.MM.YYYY' aus analyzer.py; nicht parsbare Daten wandern ans Ende."""
     items = (
-        [{"type": "SHORT", "level": x["level"], "date": x["date"]} for x in (shorts or [])]
-        + [{"type": "LONG", "level": x["level"], "date": x["date"]} for x in (longs or [])]
+        [{"type": "SHORT", "level": x["level"], "date": x["date"],
+          "tf": x.get("tf", "3D")} for x in (shorts or [])]
+        + [{"type": "LONG", "level": x["level"], "date": x["date"],
+            "tf": x.get("tf", "3D")} for x in (longs or [])]
     )
 
     def _key(it: dict):
@@ -225,7 +246,8 @@ def recent_gvas(shorts: list | None, longs: list | None, limit: int = 3) -> list
 
     items.sort(key=_key, reverse=True)
     return [
-        {"type": it["type"], "level": round(float(it["level"]), 5), "date": it["date"]}
+        {"type": it["type"], "level": round(float(it["level"]), 5),
+         "date": it["date"], "tf": it["tf"]}
         for it in items[:limit]
     ]
 

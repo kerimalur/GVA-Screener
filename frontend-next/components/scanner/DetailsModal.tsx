@@ -1,6 +1,13 @@
 "use client";
 
-import { radarType, type MarketData, type RadarType, type RecentGva } from "@/lib/gva/api";
+import {
+  radarType,
+  type GvaTf,
+  type MarketData,
+  type RadarType,
+  type RecentGva,
+} from "@/lib/gva/api";
+import TfBadge from "./TfBadge";
 
 interface BadgeStyle {
   badge: string;
@@ -34,6 +41,7 @@ function LineRow({
   side,
   level,
   date,
+  tf,
   price,
   pair,
   isNear,
@@ -41,6 +49,7 @@ function LineRow({
   side: "SHORT" | "LONG";
   level: number | null;
   date: string | null;
+  tf?: GvaTf | null;
   price: number;
   pair: string;
   isNear: boolean;
@@ -63,8 +72,9 @@ function LineRow({
               </span>
             )}
           </span>
-          <span className="font-mono text-lg font-bold">
+          <span className="font-mono text-lg font-bold flex items-center gap-2">
             {level != null ? level.toFixed(5) : "–"}
+            {level != null && <TfBadge tf={tf} />}
           </span>
         </div>
         <div className="text-right">
@@ -92,6 +102,7 @@ function HistoryRow({ g }: { g: RecentGva }) {
       >
         {long ? "LONG" : "SHORT"}
       </span>
+      <TfBadge tf={g.tf} />
       <span className="font-mono text-sm">{g.level.toFixed(5)}</span>
       <span className="text-[10px] font-mono text-muted">{g.date}</span>
     </div>
@@ -161,6 +172,7 @@ export default function DetailsModal({ item, onClose, onMark, onAdopt }: Details
             side="LONG"
             level={item.long}
             date={item.long_date}
+            tf={item.long_tf}
             price={item.price}
             pair={item.pair}
             isNear={item.near === "LONG"}
@@ -169,6 +181,7 @@ export default function DetailsModal({ item, onClose, onMark, onAdopt }: Details
             side="SHORT"
             level={item.short}
             date={item.short_date}
+            tf={item.short_tf}
             price={item.price}
             pair={item.pair}
             isNear={item.near === "SHORT"}
@@ -204,6 +217,7 @@ export default function DetailsModal({ item, onClose, onMark, onAdopt }: Details
                 >
                   {item.last_touched.type}
                 </span>
+                <TfBadge tf={item.last_touched.tf} />
                 <span className="font-mono text-sm">{item.last_touched.level.toFixed(5)}</span>
               </div>
               <div className="flex justify-between mt-1.5 text-[10px] font-mono text-muted">

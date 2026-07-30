@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { radarType, sortByDistance, type MarketData, type RadarType } from "@/lib/gva/api";
+import {
+  radarType,
+  sortByDistance,
+  targetLine,
+  type MarketData,
+  type RadarType,
+} from "@/lib/gva/api";
+import TfBadge from "./TfBadge";
 
 const CURRENCIES = ["Alle", "EUR", "GBP", "AUD", "NZD", "USD", "CAD", "CHF", "JPY"];
 
@@ -92,6 +99,8 @@ export default function RadarView({ data, onSelect }: RadarViewProps) {
           const style = rowStyle(type);
           const pct = markerPct(item, type);
           const isHit = type === "hit-short" || type === "hit-long";
+          // Timeframe der aktuell relevanten Linie (3D / Woche)
+          const { level: targetLvl, tf: targetTf } = targetLine(item, type);
           const distanceLabel = isHit
             ? "HIT"
             : item.distance != null
@@ -111,6 +120,7 @@ export default function RadarView({ data, onSelect }: RadarViewProps) {
                   }`}
                 />
                 {item.pair}
+                {targetLvl != null && <TfBadge tf={targetTf} />}
               </div>
 
               <div className="flex-1 px-4 relative flex items-center">

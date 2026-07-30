@@ -3,13 +3,14 @@ import time
 import threading
 from datetime import datetime, timezone
 
+import pandas as pd
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_daily_oanda, resample_3d_bars, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, resample_weekly_bars, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
@@ -175,6 +176,9 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
     long_lvl = long["level"] if long else None
     short_date = short["date"] if short else None
     long_date = long["date"] if long else None
+    # Timeframe der Linie (3D oder W) — Altbestand ohne Tag gilt als 3D.
+    short_tf = short.get("tf", "3D") if short else None
+    long_tf = long.get("tf", "3D") if long else None
 
     pip_size = 0.01 if "JPY" in pair else 0.0001
 
@@ -216,16 +220,17 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
             side = "SHORT" if short_hit else "LONG"
             level = short_lvl if short_hit else long_lvl
             date = short_date if short_hit else long_date
+            tf = short_tf if short_hit else long_tf
 
             # Sticky setzen + Alert (nur bei echten Live-Ticks).
             if fire_alerts:
                 TRIGGERED[pair] = {
                     "side": side, "level": round(level, 5), "date": date,
-                    "pending": False, "detected_late": False,
+                    "tf": tf, "pending": False, "detected_late": False,
                 }
                 cache_key = f"{pair}_{side}"
                 if ALERT_CACHE.get(cache_key) != level:
-                    msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
+                    msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE ({tf})\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
                     send_telegram_alert(msg + cockpit_deep_link(pair))
                     # Additiv: HIT auch als Signal in Supabase ablegen (Journal-Inbox).
                     # Fire-and-forget im eigenen Thread, no-op ohne Konfiguration.
@@ -252,8 +257,10 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
         "price": round(price, 5),
         "short": round(short_lvl, 5) if short_lvl else None,
         "short_date": short_date,
+        "short_tf": short_tf,
         "long": round(long_lvl, 5) if long_lvl else None,
         "long_date": long_date,
+        "long_tf": long_tf,
         "status": status,
         "triggered": pair in TRIGGERED,
         "pending": bool(TRIGGERED.get(pair, {}).get("pending")),
@@ -316,11 +323,29 @@ def _save_scan_state(scan_state: dict, scanned_ok: list[str]):
     supabase_signals.set_state_value(late_hits.LAST_SCAN_BY_PAIR_KEY, scan_state)
 
 
-def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
+def _newest_touch(*touches):
+    """Juengster Touch aus mehreren Timeframes (3D / W). Datumsformat ist
+    'DD.MM.YYYY' aus analyzer.py; unparsbare Eintraege verlieren."""
+    valid = [t for t in touches if t]
+    if not valid:
+        return None
+
+    def _key(t: dict):
+        try:
+            return pd.to_datetime(t.get("touched_date", ""), format="%d.%m.%Y")
+        except Exception:
+            return pd.Timestamp.min
+
+    return max(valid, key=_key)
+
+
+def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None, df_w=None):
     """Nachtraeglich erkannten Hit eines Paars verarbeiten (Arbeitspaket B).
 
     Erkennung kommt komplett aus replay.gva_history.collect_hits — keine zweite
     Hit-Logik. Hier wird nur entschieden, ob daraus ein Signal + Alert wird.
+    Beide Timeframes (3D und Woche) werden nachgetragen; der juengste Treffer
+    ueber beide gewinnt.
     """
     if since_day is None:
         return
@@ -329,7 +354,11 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
             return  # offener HIT -> sticky, nichts nachtragen
         consumed = {s: set(v) for s, v in CONSUMED.get(pair, {}).items()}
 
-    found = late_hits.find_late_hits(df_3d, daily, pair, since_day, consumed)
+    found = late_hits.find_late_hits(df_3d, daily, pair, since_day, consumed, tf="3D")
+    if df_w is not None and not df_w.empty:
+        found += late_hits.find_late_hits(
+            df_w, daily, pair, since_day, consumed, tf="W")
+        found.sort(key=lambda h: h["hit_date"])
     if not found:
         return
 
@@ -354,6 +383,7 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
             "side": side,
             "level": level,
             "date": hit.get("line_formed_date"),
+            "tf": hit.get("tf", "3D"),
             "pending": False,
             "detected_late": True,
         }
@@ -366,7 +396,8 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None):
         pair, side, level, snapshot,
         detected_late=True, line_formed_date=hit.get("line_formed_date"),
     )
-    print(f"Nachtraeglich erkannt: {pair} {side} @ {level} (Hit-Tag {hit['hit_date']})")
+    print(f"Nachtraeglich erkannt: {pair} {side} {hit.get('tf', '3D')} @ {level} "
+          f"(Hit-Tag {hit['hit_date']})")
 
 
 def compute_zones():
@@ -396,8 +427,23 @@ def compute_zones():
                 print(f"Zonen: keine 3D-Kerzen fuer {pair} — Nachtrag-Fenster bleibt offen")
                 continue
 
-            # Parameter kommen aus analyzer.py (Pine v4: 5% Body-Toleranz, Faktor 1.4)
-            short_lvl, short_date, long_lvl, long_date, price, last_touched, all_shorts, all_longs = analyze_gva_zones(df_3d, pair)
+            # Parameter kommen aus analyzer.py (Pine v5.9.1: 15% Toleranz, Faktor 1.4).
+            # GVAs entstehen auf ZWEI Timeframes (Kerim: 3D und Wochenchart) —
+            # beide werden gescannt, jede Linie traegt ihr "tf"-Tag mit.
+            df_w = resample_weekly_bars(daily)
+            _, _, _, _, price, touched_3d, shorts_3d, longs_3d = analyze_gva_zones(
+                df_3d, pair, tf="3D")
+            touched_w, shorts_w, longs_w = None, [], []
+            if not df_w.empty and len(df_w) >= 2:
+                *_, touched_w, shorts_w, longs_w = analyze_gva_zones(df_w, pair, tf="W")
+
+            # Zusammenfuehren + wieder nach Naehe zum Preis sortieren:
+            # Shorts aufsteigend (naechste ueber Preis zuerst), Longs absteigend.
+            all_shorts = sorted(shorts_3d + shorts_w, key=lambda x: x["level"])
+            all_longs = sorted(longs_3d + longs_w, key=lambda x: -x["level"])
+
+            # Juengster Touch aus beiden Timeframes (Datum 'DD.MM.YYYY')
+            last_touched = _newest_touch(touched_3d, touched_w)
 
             ZONES[pair] = {
                 "shorts": all_shorts,
@@ -408,7 +454,7 @@ def compute_zones():
 
             # Erst NACH dem Nachtrag als erfolgreich zaehlen — wirft der
             # Nachtrag, darf das Fenster dieses Paars nicht zugehen.
-            _handle_late_hits(pair, df_3d, daily, _since_day(scan_state, pair))
+            _handle_late_hits(pair, df_3d, daily, _since_day(scan_state, pair), df_w)
             scanned_ok.append(pair)
         except Exception as e:
             failed.append(pair)

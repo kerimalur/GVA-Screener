@@ -1,0 +1,981 @@
+//@version=5
+indicator("Waagerechte Szenarien Pro v5.9.1 — GVA State Machine", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=100)
+
+// ============================================================================
+// ÄNDERUNGEN v5.9 -> v5.9.1
+//   - gva_toleranz_pct: Default 5.0 -> 15.0, maxval 50.0 -> 200.0
+//   Sonst unverändert.
+// ============================================================================
+
+// ============================================================================
+// EINSTELLUNGEN
+// ============================================================================
+
+group_setup = "⚙️ Haupteinstellungen"
+is_enabled = input.bool(true, "Indikator Aktiviert", group=group_setup)
+tf_string  = input.timeframe("3D", "Zeichnungs-Timeframe (HTF)", group=group_setup)
+
+group_opens = "📊 Open Linien (D/W/M/Y)"
+show_daily_open   = input.bool(true, "Daily Open anzeigen",   group=group_opens)
+show_weekly_open  = input.bool(true, "Weekly Open anzeigen",  group=group_opens)
+show_monthly_open = input.bool(true, "Monthly Open anzeigen", group=group_opens)
+show_yearly_open  = input.bool(true, "Yearly Open anzeigen",  group=group_opens)
+color_daily_open   = input.color(color.new(#00C851, 0), "Farbe Daily Open (grün)",    group=group_opens)
+color_weekly_open  = input.color(color.new(#FF8C00, 0), "Farbe Weekly Open (orange)", group=group_opens)
+color_monthly_open = input.color(color.new(#FF0000, 0), "Farbe Monthly Open (rot)",   group=group_opens)
+color_yearly_open  = input.color(color.new(#2962FF, 0), "Farbe Yearly Open (blau)",   group=group_opens)
+
+group_gva = "🎯 GVA Detection"
+gva_toleranz_pct        = input.float(15.0, "Boden/Top-Toleranz (%)",          minval=0.1, maxval=200.0, step=0.5, group=group_gva, tooltip="Wie nah die Body-Böden/Tops der zwei Kerzen beieinander liegen dürfen. Basis wählbar (Body der 1. Kerze oder ATR). Default 15%.")
+gva_kerze2_groesser_pct = input.float(40.0, "2. Kerze mindestens X% grösser",  minval=0.0, maxval=500.0, step=5.0, group=group_gva, tooltip="Body der 2. Kerze muss min. um X% grösser sein als Body der 1. Kerze. Default 40% (=1.4x).")
+tol_basis               = input.string("Body 1. Kerze", "Toleranz-Basis", options=["Body 1. Kerze", "ATR (HTF)"], group=group_gva, tooltip="Body 1. Kerze: Toleranz = X% der Body-Grösse der ersten Kerze. ATR (HTF): Toleranz = X% des ATR auf dem Zeichnungs-Timeframe (wie in v3.2, aber TF-stabil).")
+
+group_touch = "📍 Touch"
+touch_wick    = input.bool(true,  "Docht (Wick) zählt als Berührung", group=group_touch)
+touch_tol_atr = input.float(0.0,  "Touch-Toleranz (x ATR HTF)", minval=0.0, maxval=0.5, step=0.005, group=group_touch, tooltip="0 = exakter Punkt. Höher = Linie stoppt schon kurz vor dem Level. ATR vom Zeichnungs-TF, damit auf allen Timeframes identisch.")
+atr_length    = input.int(14, "ATR Periode (HTF)", minval=1, maxval=50, group=group_touch)
+
+group_optik = "🎨 Optik"
+color_long  = input.color(color.new(#00C851, 0), "Farbe Long GVA",  group=group_optik)
+color_short = input.color(color.new(#FF4444, 0), "Farbe Short GVA", group=group_optik)
+line_width  = input.int(2, "Linienstärke (aktiv)", minval=1, maxval=5, group=group_optik)
+
+// ============================================================================
+// 🤖 STATE MACHINE (v5.2)
+// Ablauf pro gehitteter GVA:
+//   Aktiv → Beobachtung (Preis hinter der Linie) → BoS → Fib/Entry-Box
+// BoS-Definition (Kerim, konservativ):
+//   Referenz ist NICHT irgendein Pullback-High im Downtrend, sondern das
+//   letzte VALIDE High — also das letzte Swing-High, das selbst ein High
+//   gebrochen hat. Erholungs-Hochs, die immer tiefer liegen, zählen nicht;
+//   dadurch bleibt die Referenz am Ursprungs-High der Abwärtsbewegung.
+//   Die Referenz-Linie wird ab dem GVA-Hit sichtbar eingezeichnet.
+//   Wick über Wick zählt NICHT — BoS erst, wenn eine Struktur-Kerze per
+//   BODY CLOSE über der Referenz schliesst (Long) bzw. darunter (Short).
+// Nach dem BoS (Default: 1x reicht):
+//   Fib vom markierten Low zum markierten High (Long; Short gespiegelt),
+//   Entry = Box zwischen 0.618 und 0.786 Retracement,
+//   SL = unter dem Low (± Puffer), TP = Entry + 4R (1:4, Input).
+// Der Struktur-Timeframe ist wählbar (Default 15m — das TF, auf dem das
+// Modell gelernt wurde). Auf Charts ≤ Struktur-TF aggregiert das Script die
+// Chart-Kerzen selbst, auf höheren Charts holt es die Struktur-Kerzen via
+// request.security_lower_tf. Sichtbar nur ab 4h-Chart und tiefer.
+// Struktur bewusst so gehalten, dass sie 1:1 nach Python (GVA Screener)
+// portierbar ist.
+// ============================================================================
+
+group_sm = "🤖 State Machine (BoS / Entry-Box)"
+sm_enabled   = input.bool(true,   "State Machine aktiv", group=group_sm)
+sm_tf        = input.timeframe("15", "Struktur-Timeframe (BoS)", group=group_sm, tooltip="Timeframe, auf dem Swings und Break of Structure erkannt werden. Default 15m (das TF, auf dem das Modell gelernt wurde). Auf 1h stellen für die konservativere Variante.")
+piv_len      = input.int(3,       "Pivot-Länge (Struktur-Kerzen je Seite)", minval=1, maxval=10, group=group_sm, tooltip="Ein Swing-High/Low ist eine Struktur-Kerze, deren High/Low höher/tiefer ist als die X Kerzen links UND rechts. Bestätigung erst X Kerzen später (kein Repaint).")
+ref_local    = input.bool(true,   "BoS-Referenz lokal (letztes Swing-High/Low)", group=group_sm, tooltip="An: Referenz ist das jeweils LETZTE bestätigte Swing-High nach dem Hit (Long; Short gespiegelt) — die Linie wandert mit jedem neuen Swing, bis einer per Body Close gebrochen wird. Aus: konservative Variante — das letzte 'valide' High, das selbst ein High gebrochen hat (z.B. Ursprungs-High der Bewegung).")
+bos_tf       = input.timeframe("15", "BoS Body-Close Timeframe", group=group_sm, tooltip="Timeframe, auf dem der Body Close über/unter der Referenz zählen muss. Hits, Swings und Konsolidierung laufen IMMER auf dem Struktur-TF (15m empfohlen) — hier stellst du nur die BoS-Bestätigung um, z.B. auf 60 für die konservativere 1h-Close-Variante. Muss ein Vielfaches des Struktur-TF sein.")
+bos_needed   = input.int(1,       "Anzahl BoS bis Setup", minval=1, maxval=5, group=group_sm, tooltip="Default 1: der erste Break of Structure in GVA-Richtung löst das Setup aus.")
+fib_e1       = input.float(0.618, "Entry-Box oben (Fib)", step=0.001, group=group_sm)
+fib_e2       = input.float(0.786, "Entry-Box unten (Fib)", step=0.001, group=group_sm)
+tp_mode      = input.string("-100% Fib", "TP-Modus", options=["-100% Fib", "R-Multiple (1:X)"], group=group_sm, tooltip="Standard: TP liegt immer am -100%-Extension-Level des Fibs. Alternativ als R-Vielfaches des Risikos (Entry bis SL).")
+rr_tp        = input.float(4.0,   "→ Target (R-Multiple)", minval=0.5, step=0.5, group=group_sm, tooltip="Nur im Modus 'R-Multiple': TP = Entry + X mal Risiko.")
+sl_buf_atr   = input.float(0.0,   "SL-Puffer (x ATR HTF)", minval=0.0, step=0.05, group=group_sm, tooltip="0 = SL exakt am Low/High. Höher = Puffer unter dem Low (Long) bzw. über dem High (Short).")
+show_tpsl    = input.bool(false,  "SL/TP-Linien anzeigen", group=group_sm, tooltip="Aus = nur Entry-Box, BoS-Linie und Low/High-Marker. SL/TP stehen trotzdem im Alert.")
+sm_timeout   = input.int(500,     "Timeout (Struktur-Kerzen nach Hit, 0=aus)", minval=0, group=group_sm, tooltip="Kommt innerhalb dieser Anzahl Struktur-Kerzen kein Setup, wird die GVA aus dem Tracking genommen (ohne Rückstände im Chart).")
+sm_max_setups = input.int(3,      "Max. Setups im Chart", minval=1, maxval=10, group=group_sm, tooltip="Nur die letzten X Setups bleiben sichtbar — ältere werden komplett gelöscht (Box, Linien, Labels).")
+show_swings  = input.bool(false,  "Swing-Punkte anzeigen", group=group_sm)
+show_bos_lbl = input.bool(true,   "BoS-Labels anzeigen", group=group_sm)
+color_entry_box = input.color(color.new(#FFD600, 0), "Farbe Entry-Box", group=group_sm)
+color_fib_tp    = input.color(color.new(#00C851, 0), "Farbe Target", group=group_sm)
+color_fib_sl    = input.color(color.new(#FF4444, 0), "Farbe Stop-Loss", group=group_sm)
+color_bos_line  = input.color(color.new(#FFFFFF, 0), "Farbe BoS-Linie", group=group_sm)
+
+// --- 🧪 Experimente / Filter — alles einzeln schaltbar zum Testen ---
+group_filt = "🧪 Experimente / Filter"
+rearm_on      = input.bool(true,  "Re-Arm: nur nach verpasstem Setup (ohne Entry)", group=group_filt, tooltip="Pro GVA gibt es maximal EINEN Trade. Re-Arm greift nur, wenn das Setup ohne Entry-Fill verfiel — nach einem gefüllten Trade (TP oder SL) ist die GVA verbraucht. Timeout startet beim Re-Arm neu.")
+keep_box_open = input.bool(false, "Box bei 'TP ohne Entry' offen lassen", group=group_filt, tooltip="An: Die Entry-Box läuft weiter, bis der Preis sie füllt — auch wenn das TP vorher ohne Entry erreicht wurde.")
+re_anchor     = input.bool(true,  "Fib nachziehen bis Entry (neue Highs/Lows)", group=group_filt, tooltip="Solange die Entry-Box NICHT gefüllt ist und der Preis neue Highs macht (Long; Short: neue Lows), wird das Fib nachgezogen: gleiches Low, neues High — Box, TP und Extensions wandern mit. Sobald gefüllt, ist alles fixiert.")
+cons_on   = input.bool(false, "Konsolidierungs-Filter aktiv", group=group_filt, tooltip="Setup nur, wenn zwischen Hit und BoS genug Struktur-Kerzen nahe der GVA geschlossen haben. Filtert 'nur getappte' GVAs raus.")
+cons_min  = input.int(8,     "→ min. Closes an der GVA", minval=1, group=group_filt)
+cons_zone = input.float(0.5, "→ GVA-Zone (x ATR HTF)", minval=0.05, step=0.05, group=group_filt)
+filt_on     = input.bool(false, "HTF-Trend-Filter aktiv", group=group_filt, tooltip="Long-Setups werden geblockt, solange der Filter-TF frische Lower Lows macht (Short gespiegelt: frische Higher Highs). Geblockte Setups gehen zurück in Beobachtung (Re-Arm).")
+filt_tf     = input.timeframe("60", "→ Filter-Timeframe", group=group_filt)
+filt_len    = input.int(20, "→ Fenster (Kerzen)", minval=5, group=group_filt)
+filt_recent = input.int(5,  "→ 'frisch' = jünger als X Kerzen", minval=1, group=group_filt)
+hits_needed = input.int(2,  "GVA-Hits bis Setup scharf", minval=1, maxval=3, group=group_filt, tooltip="2 = die GVA muss ein zweites Mal berührt werden, bevor BoS/Setup gesucht wird — erst der zweite Hit bestätigt die Zone als echten Support/Resistance. 1 = altes Verhalten (erster Hit zählt). Struktur, Extremes und Konsolidierung zählen ab dem letzten Hit neu.")
+hit2_gap    = input.int(1, "→ min. Kerzen ohne Berührung zwischen Hits", minval=1, group=group_filt, tooltip="So viele Struktur-Kerzen müssen das Level NICHT berühren, bevor die nächste Berührung als neuer Hit zählt. 1 = Kerze geht weg, nächste Berührung ist Hit 2. Nur direkt aufeinanderfolgende Kerzen zählen nicht doppelt.")
+
+// ============================================================================
+// TIMEFRAME CHECKS
+// ============================================================================
+
+current_tf_in_minutes = timeframe.in_seconds() / 60
+bool show_on_ltf = current_tf_in_minutes >= 15 and current_tf_in_minutes <= 240
+
+// State Machine nur ab 4h-Chart und tiefer sichtbar/aktiv (auf 3D etc. nichts)
+bool sm_active = sm_enabled and current_tf_in_minutes <= 240
+
+// Dezenter Hinweis auf höheren Timeframes
+var table hint_tbl = na
+if sm_enabled and current_tf_in_minutes > 240 and na(hint_tbl)
+    hint_tbl := table.new(position.top_right, 1, 1)
+    table.cell(hint_tbl, 0, 0, "🤖 BoS/Setups: sichtbar ab 4h und tiefer", text_color=color.gray, bgcolor=color.new(color.black, 60), text_size=size.small)
+
+// ============================================================================
+// OPEN LINIEN (D/W/M/Y) — unverändert aus v3.2
+// ============================================================================
+
+// --- DAILY OPEN (grün, "D") ---
+var line  daily_open_line  = na
+var label daily_open_label = na
+float daily_open_price = request.security(syminfo.tickerid, "D", open, lookahead=barmerge.lookahead_on)
+
+if show_daily_open and show_on_ltf
+    if na(daily_open_line) or ta.change(time("D"))
+        if not na(daily_open_line)
+            line.delete(daily_open_line)
+            label.delete(daily_open_label)
+        daily_open_line  := line.new(bar_index, daily_open_price, bar_index, daily_open_price, color=color_daily_open, width=1, style=line.style_solid, extend=extend.right)
+        daily_open_label := label.new(bar_index, daily_open_price, "D", color=color.new(color.white, 100), style=label.style_none, textcolor=color.white, size=size.small)
+    else
+        line.set_x2(daily_open_line, bar_index)
+        label.set_x(daily_open_label, bar_index + 5)
+
+// --- WEEKLY OPEN (orange, "W") ---
+var line  weekly_open_line  = na
+var label weekly_open_label = na
+float weekly_open_price = request.security(syminfo.tickerid, "W", open, lookahead=barmerge.lookahead_on)
+
+if show_weekly_open and show_on_ltf
+    if na(weekly_open_line) or ta.change(time("W"))
+        if not na(weekly_open_line)
+            line.delete(weekly_open_line)
+            label.delete(weekly_open_label)
+        weekly_open_line  := line.new(bar_index, weekly_open_price, bar_index, weekly_open_price, color=color_weekly_open, width=1, style=line.style_solid, extend=extend.right)
+        weekly_open_label := label.new(bar_index, weekly_open_price, "W", color=color.new(color.white, 100), style=label.style_none, textcolor=color.white, size=size.small)
+    else
+        line.set_x2(weekly_open_line, bar_index)
+        label.set_x(weekly_open_label, bar_index + 5)
+
+// --- MONTHLY OPEN (rot, "M") ---
+var line  monthly_open_line  = na
+var label monthly_open_label = na
+float monthly_open_price = request.security(syminfo.tickerid, "M", open, lookahead=barmerge.lookahead_on)
+
+if show_monthly_open and show_on_ltf
+    if na(monthly_open_line) or ta.change(time("M"))
+        if not na(monthly_open_line)
+            line.delete(monthly_open_line)
+            label.delete(monthly_open_label)
+        monthly_open_line  := line.new(bar_index, monthly_open_price, bar_index, monthly_open_price, color=color_monthly_open, width=1, style=line.style_solid, extend=extend.right)
+        monthly_open_label := label.new(bar_index, monthly_open_price, "M", color=color.new(color.white, 100), style=label.style_none, textcolor=color.white, size=size.small)
+    else
+        line.set_x2(monthly_open_line, bar_index)
+        label.set_x(monthly_open_label, bar_index + 5)
+
+// --- YEARLY OPEN (blau, "Y") ---
+var line  yearly_open_line  = na
+var label yearly_open_label = na
+float yearly_open_price = request.security(syminfo.tickerid, "12M", open, lookahead=barmerge.lookahead_on)
+
+if show_yearly_open and show_on_ltf
+    if na(yearly_open_line) or ta.change(time("12M"))
+        if not na(yearly_open_line)
+            line.delete(yearly_open_line)
+            label.delete(yearly_open_label)
+        yearly_open_line  := line.new(bar_index, yearly_open_price, bar_index, yearly_open_price, color=color_yearly_open, width=1, style=line.style_solid, extend=extend.right)
+        yearly_open_label := label.new(bar_index, yearly_open_price, "Y", color=color.new(color.white, 100), style=label.style_none, textcolor=color.white, size=size.small)
+    else
+        line.set_x2(yearly_open_line, bar_index)
+        label.set_x(yearly_open_label, bar_index + 5)
+
+// ============================================================================
+// HTF-DATEN (nur GESCHLOSSENE Kerzen -> kein Repaint, auf allen TFs identisch)
+// Kerze A = vorletzte geschlossene HTF-Kerze, Kerze B = letzte geschlossene
+// ============================================================================
+
+[oA, cA, oB, cB, tB, htf_atr] = request.security(syminfo.tickerid, tf_string,
+     [open[2], close[2], open[1], close[1], time[1], ta.atr(atr_length)[1]],
+     lookahead=barmerge.lookahead_off)
+
+body_A = math.abs(cA - oA)
+body_B = math.abs(cB - oB)
+
+bot_A = math.min(oA, cA)
+bot_B = math.min(oB, cB)
+top_A = math.max(oA, cA)
+top_B = math.max(oB, cB)
+
+// Toleranzen — beide auf HTF-Basis, damit auf jedem Chart-TF identisch
+body_match_tolerance = tol_basis == "Body 1. Kerze" ? body_A * (gva_toleranz_pct / 100.0) : nz(htf_atr) * (gva_toleranz_pct / 100.0)
+touch_tolerance      = nz(htf_atr) * touch_tol_atr
+
+gva_size_factor = 1.0 + (gva_kerze2_groesser_pct / 100.0)
+
+// ============================================================================
+// STRUKTUR-DATENFEED für State Machine
+// Chart ≤ Struktur-TF: Chart-Kerzen werden selbst aggregiert.
+// Chart > Struktur-TF: Struktur-Kerzen via request.security_lower_tf.
+// (ltf_req "1" auf kleinen TFs ist nur ein Platzhalter — die Arrays werden
+//  dort nicht verwendet, verhindert aber einen Runtime-Error.)
+// ============================================================================
+
+sm_tf_minutes = timeframe.in_seconds(sm_tf) / 60
+// Fix v5.5: Platzhalter ist jetzt der Chart-TF selbst statt "1" — die
+// 1m-Intrabar-Anfragen liessen den Indikator auf Charts ≤ Struktur-TF
+// (v.a. im Replay) komplett verschwinden. Die Arrays werden auf diesen
+// Charts ohnehin nicht verwendet (dort wird selbst aggregiert).
+ltf_req = current_tf_in_minutes > sm_tf_minutes ? sm_tf : timeframe.period
+
+// 🧪 HTF-Trend-Filter: macht der Filter-TF gerade frische Lower Lows / Higher Highs?
+[flt_lb, flt_hb] = request.security(syminfo.tickerid, filt_tf,
+     [ta.lowestbars(low, filt_len)[1], ta.highestbars(high, filt_len)[1]],
+     lookahead=barmerge.lookahead_off)
+htf_down_active = not na(flt_lb) and -flt_lb <= filt_recent
+htf_up_active   = not na(flt_hb) and -flt_hb <= filt_recent
+arr_hi = request.security_lower_tf(syminfo.tickerid, ltf_req, high)
+arr_lo = request.security_lower_tf(syminfo.tickerid, ltf_req, low)
+arr_cl = request.security_lower_tf(syminfo.tickerid, ltf_req, close)
+arr_t  = request.security_lower_tf(syminfo.tickerid, ltf_req, time)
+
+// ============================================================================
+// DATENSTRUKTUREN
+// ============================================================================
+
+var line[]  bull_lines  = array.new<line>()
+var float[] bull_levels = array.new<float>()
+
+var line[]  bear_lines  = array.new<line>()
+var float[] bear_levels = array.new<float>()
+
+// --- State Machine: gehittete GVAs im Tracking ---
+// state: 1 = Aktiv (gehittet), 2 = Beobachtung (Preis hinter der Linie), 3 = Setup
+type GvaTrack
+    float level
+    bool  isLong
+    int   state
+    int   hitT
+    line  ln
+    label lbl
+    int   barsSinceHit = 0
+    int   bosCount     = 0
+    int   consCount    = 0   // Struktur-Closes nahe der GVA (Konsolidierungs-Filter)
+    int   hitCount     = 1   // Anzahl GVA-Berührungen
+    int   awayCnt      = 0   // Struktur-Kerzen ohne Berührung seit letztem Hit
+    bool  armed        = false // erst nach genug Hits wird Struktur/BoS gesucht
+    float refP         = na  // valides Referenz-High (Long) / -Low (Short), das gebrochen werden muss
+    int   refT         = na  // Zeitpunkt dieses Swings
+    line  refLn        = na  // sichtbare Referenz-Linie ab dem Hit
+    float extP         = na  // Extrem seit Hit: tiefstes Low (Long) / höchstes High (Short)
+    int   extT         = na
+    label[] bosLbls    = na
+    line[]  bosLns     = na
+
+var GvaTrack[] tracks = array.new<GvaTrack>()
+
+// --- Bestätigte 1h-Swings (global; Basis für die Referenz-Suche) ---
+var float[] swHighP = array.new<float>()
+var int[]   swHighT = array.new<int>()
+var float[] swLowP  = array.new<float>()
+var int[]   swLowT  = array.new<int>()
+
+// --- Setups (Entry-Box / SL / TP) inkl. Lifecycle:
+// phase: 0 = wartet auf Entry-Fill, 1 = im Trade, 2 = beendet
+type FibSetup
+    bool  isLong
+    float gvaLevel  // GVA-Level (für Re-Arm)
+    float loP       // Fib-Anker Low
+    float hiP       // Fib-Anker High
+    float e1        // Entry-Box Kante am 0.618 (Referenz-Entry)
+    float e2        // Entry-Box Kante am 0.786
+    float slP
+    float tpP
+    box   entryBox
+    line  tpLn
+    line  slLn
+    label tpLbl
+    label slLbl
+    label statusLbl
+    label loLbl
+    label hiLbl
+    line  ext50Ln
+    line  ext100Ln
+    label ext50Lbl
+    label ext100Lbl
+    label[] bosLbls
+    line[]  bosLns
+    int   phase = 0
+
+var FibSetup[] setups = array.new<FibSetup>()
+
+// --- 1h-Kerzen-Historie (eigene Arrays, TF-unabhängig) ---
+var float[] a_hi = array.new<float>()
+var float[] a_lo = array.new<float>()
+var float[] a_cl = array.new<float>()
+var int[]   a_t  = array.new<int>()
+
+// ============================================================================
+// STATE MACHINE — HILFSFUNKTIONEN
+// ============================================================================
+
+// Setup komplett löschen (Box + alle Linien + Labels) — für "Max. Setups"
+f_delSetup(FibSetup s) =>
+    box.delete(s.entryBox)
+    if not na(s.tpLn)
+        line.delete(s.tpLn)
+    if not na(s.slLn)
+        line.delete(s.slLn)
+    if not na(s.tpLbl)
+        label.delete(s.tpLbl)
+    if not na(s.slLbl)
+        label.delete(s.slLbl)
+    label.delete(s.statusLbl)
+    label.delete(s.loLbl)
+    label.delete(s.hiLbl)
+    if not na(s.ext50Ln)
+        line.delete(s.ext50Ln)
+    if not na(s.ext100Ln)
+        line.delete(s.ext100Ln)
+    if not na(s.ext50Lbl)
+        label.delete(s.ext50Lbl)
+    if not na(s.ext100Lbl)
+        label.delete(s.ext100Lbl)
+    if not na(s.bosLbls) and array.size(s.bosLbls) > 0
+        for k = 0 to array.size(s.bosLbls) - 1
+            label.delete(array.get(s.bosLbls, k))
+    if not na(s.bosLns) and array.size(s.bosLns) > 0
+        for k = 0 to array.size(s.bosLns) - 1
+            line.delete(array.get(s.bosLns, k))
+
+// Setup beenden: Box/Linien stoppen (kein endloses extend.right), Resultat anzeigen
+f_finishSetup(FibSetup s, string resultTxt) =>
+    s.phase := 2
+    box.set_extend(s.entryBox, extend.none)
+    box.set_right(s.entryBox, bar_index)
+    if not na(s.tpLn)
+        line.set_extend(s.tpLn, extend.none)
+        line.set_x2(s.tpLn, bar_index)
+    if not na(s.slLn)
+        line.set_extend(s.slLn, extend.none)
+        line.set_x2(s.slLn, bar_index)
+    if not na(s.ext50Ln)
+        line.set_extend(s.ext50Ln, extend.none)
+        line.set_x2(s.ext50Ln, bar_index)
+    if not na(s.ext100Ln)
+        line.set_extend(s.ext100Ln, extend.none)
+        line.set_x2(s.ext100Ln, bar_index)
+    label.set_text(s.statusLbl, resultTxt)
+
+// Track-Rückstände löschen (Status-Label + BoS-Labels/Linien) — für Timeout
+f_delTrackVisuals(GvaTrack tr) =>
+    label.delete(tr.lbl)
+    if not na(tr.refLn)
+        line.delete(tr.refLn)
+    if not na(tr.bosLbls) and array.size(tr.bosLbls) > 0
+        for k = 0 to array.size(tr.bosLbls) - 1
+            label.delete(array.get(tr.bosLbls, k))
+    if not na(tr.bosLns) and array.size(tr.bosLns) > 0
+        for k = 0 to array.size(tr.bosLns) - 1
+            line.delete(array.get(tr.bosLns, k))
+
+// Valides Referenz-High finden (Long): das letzte Swing-High, das selbst ein
+// High gebrochen hat (höher war als sein Vorgänger). Immer tiefere
+// Erholungs-Hochs im Downtrend werden übersprungen — die Referenz bleibt
+// dadurch am Ursprungs-High der Bewegung.
+f_findRefHigh() =>
+    float p = na
+    int   t = na
+    n = array.size(swHighP)
+    if n >= 2
+        for i = n - 1 to 1
+            if array.get(swHighP, i) > array.get(swHighP, i - 1)
+                p := array.get(swHighP, i)
+                t := array.get(swHighT, i)
+                break
+        if na(p)
+            p := array.get(swHighP, 0)
+            t := array.get(swHighT, 0)
+    else if n == 1
+        p := array.get(swHighP, 0)
+        t := array.get(swHighT, 0)
+    [p, t]
+
+// Valides Referenz-Low finden (Short): das letzte Swing-Low, das selbst ein
+// Low gebrochen hat (tiefer war als sein Vorgänger).
+f_findRefLow() =>
+    float p = na
+    int   t = na
+    n = array.size(swLowP)
+    if n >= 2
+        for i = n - 1 to 1
+            if array.get(swLowP, i) < array.get(swLowP, i - 1)
+                p := array.get(swLowP, i)
+                t := array.get(swLowT, i)
+                break
+        if na(p)
+            p := array.get(swLowP, 0)
+            t := array.get(swLowT, 0)
+    else if n == 1
+        p := array.get(swLowP, 0)
+        t := array.get(swLowT, 0)
+    [p, t]
+
+// 🔁 Re-Arm: nach gescheitertem Setup an derselben GVA neu beobachten
+// (frisches Extrem, neue Referenz — findet auch den zweiten Anlauf)
+f_rearm(FibSetup s, int hT) =>
+    if rearm_on
+        lbl0 = label.new(hT, s.gvaLevel, "🔁 Re-Arm", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.gray, 40), textcolor=color.white, size=size.small)
+        float rp = na
+        int   rt = na
+        if s.isLong
+            [a1, b1] = f_findRefHigh()
+            rp := a1
+            rt := b1
+        else
+            [a2, b2] = f_findRefLow()
+            rp := a2
+            rt := b2
+        line rln = na
+        if not na(rp)
+            rln := line.new(rt, rp, hT, rp, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+        array.push(tracks, GvaTrack.new(level=s.gvaLevel, isLong=s.isLong, state=2, hitT=hT, ln=line(na), lbl=lbl0, refP=rp, refT=rt, refLn=rln, armed=true, bosLbls=array.new<label>(), bosLns=array.new<line>()))
+
+// 📐 Fib nachziehen (nur solange Entry-Box ungefüllt): gleiches Low,
+// neues High (Long; Short gespiegelt) — Box, TP, SL-Puffer und
+// Extensions werden neu gerechnet und mitgezogen
+f_reanchor(FibSetup s, int hT) =>
+    rng = s.hiP - s.loP
+    if rng > 0
+        d = s.isLong ? 1 : -1
+        e1P = s.isLong ? s.hiP - rng * fib_e1 : s.loP + rng * fib_e1
+        e2P = s.isLong ? s.hiP - rng * fib_e2 : s.loP + rng * fib_e2
+        slP = s.isLong ? s.loP - nz(htf_atr) * sl_buf_atr : s.hiP + nz(htf_atr) * sl_buf_atr
+        x50P  = s.isLong ? s.hiP + 0.5 * rng : s.loP - 0.5 * rng
+        x100P = s.isLong ? s.hiP + 1.0 * rng : s.loP - 1.0 * rng
+        risk = math.abs(e1P - slP)
+        tpP  = tp_mode == "-100% Fib" ? x100P : e1P + d * rr_tp * risk
+        s.e1 := e1P
+        s.e2 := e2P
+        s.slP := slP
+        s.tpP := tpP
+        box.set_top(s.entryBox, math.max(e1P, e2P))
+        box.set_bottom(s.entryBox, math.min(e1P, e2P))
+        if not na(s.tpLn)
+            line.set_y1(s.tpLn, tpP)
+            line.set_y2(s.tpLn, tpP)
+            label.set_y(s.tpLbl, tpP)
+            label.set_text(s.tpLbl, (tp_mode == "-100% Fib" ? "TP -100%  " : "TP 1:" + str.tostring(rr_tp) + "  ") + str.tostring(tpP, format.mintick))
+        if not na(s.slLn)
+            line.set_y1(s.slLn, slP)
+            line.set_y2(s.slLn, slP)
+            label.set_y(s.slLbl, slP)
+            label.set_text(s.slLbl, "SL  " + str.tostring(slP, format.mintick))
+        if not na(s.ext50Ln)
+            line.set_y1(s.ext50Ln, x50P)
+            line.set_y2(s.ext50Ln, x50P)
+            label.set_y(s.ext50Lbl, x50P)
+        if not na(s.ext100Ln)
+            line.set_y1(s.ext100Ln, x100P)
+            line.set_y2(s.ext100Ln, x100P)
+            label.set_y(s.ext100Lbl, x100P)
+        // High/Low-Marker mitziehen
+        if s.isLong
+            label.set_x(s.hiLbl, hT)
+            label.set_y(s.hiLbl, s.hiP)
+        else
+            label.set_x(s.loLbl, hT)
+            label.set_y(s.loLbl, s.loP)
+
+// ============================================================================
+// KERN: Verarbeitung EINER geschlossenen Struktur-Kerze (Default 15m)
+// (identische Logik auf jedem Chart-TF — 1:1 nach Python portierbar)
+// ============================================================================
+
+f_onH1(float hHi, float hLo, float hCl, int hT) =>
+
+    // --- 1) 1h-Kerze in Historie aufnehmen ---
+    array.push(a_hi, hHi)
+    array.push(a_lo, hLo)
+    array.push(a_cl, hCl)
+    array.push(a_t,  hT)
+    if array.size(a_t) > 3000
+        array.shift(a_hi)
+        array.shift(a_lo)
+        array.shift(a_cl)
+        array.shift(a_t)
+
+    // --- 2) Pivot-Bestätigung (Swing = Wick, die alle piv_len Nachbarn
+    //     links UND rechts übertrifft; bestätigt erst piv_len Kerzen
+    //     später -> kein Repaint) ---
+    s = array.size(a_t)
+    if s >= 2 * piv_len + 1
+        c  = s - 1 - piv_len
+        cH = array.get(a_hi, c)
+        cL = array.get(a_lo, c)
+        cT = array.get(a_t,  c)
+        isSwingHigh = true
+        isSwingLow  = true
+        for k = c - piv_len to c + piv_len
+            if k != c
+                if array.get(a_hi, k) >= cH
+                    isSwingHigh := false
+                if array.get(a_lo, k) <= cL
+                    isSwingLow := false
+        if isSwingHigh
+            array.push(swHighP, cH)
+            array.push(swHighT, cT)
+            if array.size(swHighT) > 200
+                array.shift(swHighP)
+                array.shift(swHighT)
+            if show_swings
+                label.new(cT, cH, "▲", xloc=xloc.bar_time, style=label.style_none, textcolor=color.new(color.white, 40), size=size.tiny)
+            // Referenz-Update: lokal-Modus = jedes neue Post-Hit-Swing wird
+            // die Referenz (Linie wandert mit); konservativ = nur auffüllen,
+            // wenn noch keine Referenz existiert
+            if array.size(tracks) > 0
+                for j = 0 to array.size(tracks) - 1
+                    tr = array.get(tracks, j)
+                    if tr.isLong and tr.armed and cT > tr.hitT and (ref_local or na(tr.refP))
+                        if not na(tr.refLn)
+                            line.delete(tr.refLn)
+                        tr.refP := cH
+                        tr.refT := cT
+                        tr.refLn := line.new(cT, cH, cT + 1, cH, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+        if isSwingLow
+            array.push(swLowP, cL)
+            array.push(swLowT, cT)
+            if array.size(swLowT) > 200
+                array.shift(swLowP)
+                array.shift(swLowT)
+            if show_swings
+                label.new(cT, cL, "▼", xloc=xloc.bar_time, style=label.style_none, textcolor=color.new(color.white, 40), size=size.tiny)
+            if array.size(tracks) > 0
+                for j = 0 to array.size(tracks) - 1
+                    tr = array.get(tracks, j)
+                    if not tr.isLong and tr.armed and cT > tr.hitT and (ref_local or na(tr.refP))
+                        if not na(tr.refLn)
+                            line.delete(tr.refLn)
+                        tr.refP := cL
+                        tr.refT := cT
+                        tr.refLn := line.new(cT, cL, cT + 1, cL, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+
+    // --- 2b) BoS-Close-Aggregation: der Body Close für den BoS kann auf
+    //     einem höheren TF liegen (z.B. 1h) als der Struktur-Feed (15m).
+    //     Hits/Swings/Extremes bleiben davon unberührt.
+    var int   bcBucket = na
+    var float bcLast   = na
+    bool  bosCloseReady = false
+    float bosClose      = na
+    bcMin = timeframe.in_seconds(bos_tf) / 60
+    if bcMin <= sm_tf_minutes
+        // BoS-TF = Struktur-TF: jeder Feed-Close zählt direkt
+        bosCloseReady := true
+        bosClose      := hCl
+    else
+        bcMs = int(bcMin) * 60000
+        bucket2 = int(math.floor(hT / bcMs)) * bcMs
+        if na(bcBucket)
+            bcBucket := bucket2
+        else if bucket2 != bcBucket
+            // BoS-TF-Kerze abgeschlossen -> deren Close prüfen
+            bosCloseReady := true
+            bosClose      := bcLast
+            bcBucket      := bucket2
+        bcLast := hCl
+
+    // --- 3) Tracks aktualisieren ---
+    if array.size(tracks) > 0
+        for i = array.size(tracks) - 1 to 0
+            tr = array.get(tracks, i)
+            tr.barsSinceHit := tr.barsSinceHit + 1
+
+            // Konsolidierung an der GVA zählen (Basis für den Filter)
+            if math.abs(hCl - tr.level) <= nz(htf_atr) * cons_zone
+                tr.consCount := tr.consCount + 1
+
+            // --- Noch nicht scharf: auf weitere GVA-Berührung warten ---
+            // (Doppel-Hit-Regel: erst der X-te Hit bestätigt die Zone)
+            if not tr.armed
+                // Berührt diese Struktur-Kerze das Level?
+                bool touching = tr.isLong ? hLo <= tr.level + touch_tolerance : hHi >= tr.level - touch_tolerance
+                if not touching
+                    tr.awayCnt := tr.awayCnt + 1
+                else
+                    // Neuer Hit nur, wenn dazwischen genug Kerzen OHNE Berührung lagen
+                    if tr.awayCnt >= hit2_gap
+                        tr.hitCount := tr.hitCount + 1
+                        label.set_text(tr.lbl, "⏳ Hit " + str.tostring(tr.hitCount) + "/" + str.tostring(hits_needed))
+                    tr.awayCnt := 0
+                // Scharf schalten: Struktur/Extremes zählen ab jetzt frisch
+                if tr.hitCount >= hits_needed
+                    tr.armed := true
+                    tr.extP := na
+                    tr.extT := na
+                    tr.bosCount := 0
+                    tr.consCount := 0
+                    tr.barsSinceHit := 0
+                    tr.state := 1
+                    label.set_text(tr.lbl, "✅ " + str.tostring(tr.hitCount) + ". Hit — Aktiv")
+                    // Konservativ: Referenz sofort suchen. Lokal: leer lassen,
+                    // das nächste bestätigte Swing wird die Referenz.
+                    if not ref_local
+                        float rp = na
+                        int   rt = na
+                        if tr.isLong
+                            [a1, b1] = f_findRefHigh()
+                            rp := a1
+                            rt := b1
+                        else
+                            [a2, b2] = f_findRefLow()
+                            rp := a2
+                            rt := b2
+                        tr.refP := rp
+                        tr.refT := rt
+                        if not na(rp)
+                            tr.refLn := line.new(rt, rp, hT, rp, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+                    alert("🎯 GVA " + str.tostring(tr.hitCount) + ". Hit — Setup scharf: " + syminfo.ticker + " " + (tr.isLong ? "LONG" : "SHORT") + " @ " + str.tostring(tr.level, format.mintick), alert.freq_once_per_bar)
+            else if tr.isLong
+                // Extrem (tiefstes Low seit Hit) — Fib-Low & SL-Basis
+                if na(tr.extP) or hLo < tr.extP
+                    tr.extP := hLo
+                    tr.extT := hT
+                // Beobachtung: Preis läuft unter der Linie weiter
+                if tr.state == 1 and hCl < tr.level
+                    tr.state := 2
+                    label.set_text(tr.lbl, "👁 Beobachtung")
+                // BoS: BODY CLOSE (BoS-TF) über dem Referenz-High.
+                // Wick über Wick zählt NICHT. Funktioniert auch unterhalb der
+                // GVA-Linie — die Maschine schaut auf Struktur, nicht die Linie.
+                if not na(tr.refP) and bosCloseReady and bosClose > tr.refP
+                    tr.bosCount := tr.bosCount + 1
+                    // Referenz-Linie an der Break-Kerze beenden, "BOS" mittig drauf
+                    if not na(tr.refLn)
+                        line.set_extend(tr.refLn, extend.none)
+                        line.set_x2(tr.refLn, hT)
+                        array.push(tr.bosLns, tr.refLn)
+                        tr.refLn := na
+                    if show_bos_lbl
+                        midT = tr.refT + (hT - tr.refT) / 2
+                        array.push(tr.bosLbls, label.new(midT, tr.refP, "BOS", xloc=xloc.bar_time, style=label.style_none, textcolor=color.white, size=size.small))
+                    tr.refP := na
+                    tr.refT := na
+                    label.set_text(tr.lbl, "BoS " + str.tostring(tr.bosCount) + "/" + str.tostring(bos_needed))
+            else
+                // Extrem (höchstes High seit Hit) — Fib-High & SL-Basis
+                if na(tr.extP) or hHi > tr.extP
+                    tr.extP := hHi
+                    tr.extT := hT
+                // Beobachtung: Preis läuft über der Linie weiter
+                if tr.state == 1 and hCl > tr.level
+                    tr.state := 2
+                    label.set_text(tr.lbl, "👁 Beobachtung")
+                // BoS: BODY CLOSE (BoS-TF) unter dem Referenz-Low
+                if not na(tr.refP) and bosCloseReady and bosClose < tr.refP
+                    tr.bosCount := tr.bosCount + 1
+                    if not na(tr.refLn)
+                        line.set_extend(tr.refLn, extend.none)
+                        line.set_x2(tr.refLn, hT)
+                        array.push(tr.bosLns, tr.refLn)
+                        tr.refLn := na
+                    if show_bos_lbl
+                        midT = tr.refT + (hT - tr.refT) / 2
+                        array.push(tr.bosLbls, label.new(midT, tr.refP, "BOS", xloc=xloc.bar_time, style=label.style_none, textcolor=color.white, size=size.small))
+                    tr.refP := na
+                    tr.refT := na
+                    label.set_text(tr.lbl, "BoS " + str.tostring(tr.bosCount) + "/" + str.tostring(bos_needed))
+
+            // --- Setup: genug BoS (Default 1) -> Filter prüfen -> Fib + Alert ---
+            if tr.state != 3 and tr.bosCount >= bos_needed
+                // 🧪 Filter (alle schaltbar): geblockt = zurück in Beobachtung
+                bool blocked = false
+                string blockTxt = ""
+                if cons_on and tr.consCount < cons_min
+                    blocked := true
+                    blockTxt := "⛔ Konsolidierung " + str.tostring(tr.consCount) + "/" + str.tostring(cons_min)
+                if filt_on and ((tr.isLong and htf_down_active) or (not tr.isLong and htf_up_active))
+                    blocked := true
+                    blockTxt := "⛔ HTF-Trend aktiv"
+                if blocked
+                    tr.bosCount := 0
+                    tr.extP := na
+                    tr.extT := na
+                    tr.state := 2
+                    label.set_text(tr.lbl, blockTxt + " — beobachte weiter")
+                else
+                    tr.state := 3
+                    dirTxt = tr.isLong ? "LONG" : "SHORT"
+                    // Fib-Anker: Low = Extrem seit Hit, High = Impuls-Extrem seit
+                    // dem Low (bei Short gespiegelt). Beide werden markiert.
+                    float loP = na
+                    float hiP = na
+                    int   loT = na
+                    int   hiT = na
+                    if tr.isLong
+                        loP := tr.extP
+                        loT := tr.extT
+                        for k = array.size(a_t) - 1 to 0
+                            if array.get(a_t, k) < tr.extT
+                                break
+                            if na(hiP) or array.get(a_hi, k) > hiP
+                                hiP := array.get(a_hi, k)
+                                hiT := array.get(a_t, k)
+                    else
+                        hiP := tr.extP
+                        hiT := tr.extT
+                        for k = array.size(a_t) - 1 to 0
+                            if array.get(a_t, k) < tr.extT
+                                break
+                            if na(loP) or array.get(a_lo, k) < loP
+                                loP := array.get(a_lo, k)
+                                loT := array.get(a_t, k)
+
+                    float rng = na
+                    if not na(hiP) and not na(loP)
+                        rng := hiP - loP
+                    if not na(rng) and rng > 0
+                        d = tr.isLong ? 1 : -1
+                        // Entry-Box zwischen 0.618 und 0.786 Retracement
+                        e1P = tr.isLong ? hiP - rng * fib_e1 : loP + rng * fib_e1
+                        e2P = tr.isLong ? hiP - rng * fib_e2 : loP + rng * fib_e2
+                        // SL: unter dem Low (Long) / über dem High (Short), ± Puffer
+                        slP = tr.isLong ? loP - nz(htf_atr) * sl_buf_atr : hiP + nz(htf_atr) * sl_buf_atr
+                        // Fib-Extensions -50% / -100%
+                        x50P  = tr.isLong ? hiP + 0.5 * rng : loP - 0.5 * rng
+                        x100P = tr.isLong ? hiP + 1.0 * rng : loP - 1.0 * rng
+                        // TP: Standard am -100%-Level, alternativ R-Multiple
+                        risk = math.abs(e1P - slP)
+                        tpP  = tp_mode == "-100% Fib" ? x100P : e1P + d * rr_tp * risk
+                        // Hinweis: finaler Entry kann diskretionär auf POC / VAL
+                        // verschoben werden — bleibt bewusst manuell.
+
+                        label.set_text(tr.lbl, "✅ BoS — wartet auf Entry")
+                        label.set_color(tr.lbl, color.new(tr.isLong ? color_long : color_short, 20))
+                        // Low/High-Anker markieren
+                        lo_lbl = label.new(loT, loP, "Low", xloc=xloc.bar_time, style=label.style_label_up,   color=color.new(color.gray, 30), textcolor=color.white, size=size.small)
+                        hi_lbl = label.new(hiT, hiP, "High", xloc=xloc.bar_time, style=label.style_label_down, color=color.new(color.gray, 30), textcolor=color.white, size=size.small)
+                        // Entry-Box (0.618–0.786)
+                        bTop = math.max(e1P, e2P)
+                        bBot = math.min(e1P, e2P)
+                        eBox = box.new(bar_index, bTop, bar_index + 1, bBot, border_color=color_entry_box, border_width=1, extend=extend.right, bgcolor=color.new(color_entry_box, 82))
+                        // -50% / -100% Linien
+                        x50Ln  = line.new(bar_index, x50P,  bar_index + 1, x50P,  color=color.new(color.white, 50), width=1, style=line.style_dashed, extend=extend.right)
+                        x100Ln = line.new(bar_index, x100P, bar_index + 1, x100P, color=color.new(color.white, 50), width=1, style=line.style_dashed, extend=extend.right)
+                        x50Lb  = label.new(bar_index + 5, x50P,  "-50%",  style=label.style_none, textcolor=color.new(color.white, 30), size=size.small)
+                        x100Lb = label.new(bar_index + 5, x100P, "-100%", style=label.style_none, textcolor=color.new(color.white, 30), size=size.small)
+                        // SL/TP optional als Linien
+                        line  tLn = na
+                        line  sLn = na
+                        label tLb = na
+                        label sLb = na
+                        if show_tpsl
+                            tLn := line.new(bar_index, tpP, bar_index + 1, tpP, color=color_fib_tp, width=2, extend=extend.right, style=line.style_solid)
+                            sLn := line.new(bar_index, slP, bar_index + 1, slP, color=color_fib_sl, width=2, extend=extend.right, style=line.style_solid)
+                            tLb := label.new(bar_index + 5, tpP, (tp_mode == "-100% Fib" ? "TP -100%  " : "TP 1:" + str.tostring(rr_tp) + "  ") + str.tostring(tpP, format.mintick), style=label.style_label_left, color=color.new(color_fib_tp, 80), textcolor=color.white, size=size.small)
+                            sLb := label.new(bar_index + 5, slP, "SL  " + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(color_fib_sl, 80), textcolor=color.white, size=size.small)
+
+                        array.push(setups, FibSetup.new(isLong=tr.isLong, gvaLevel=tr.level, loP=loP, hiP=hiP, e1=e1P, e2=e2P, slP=slP, tpP=tpP, entryBox=eBox, tpLn=tLn, slLn=sLn, tpLbl=tLb, slLbl=sLb, statusLbl=tr.lbl, loLbl=lo_lbl, hiLbl=hi_lbl, ext50Ln=x50Ln, ext100Ln=x100Ln, ext50Lbl=x50Lb, ext100Lbl=x100Lb, bosLbls=tr.bosLbls, bosLns=tr.bosLns))
+                        // Alte Setups aufräumen — nur die letzten X bleiben im Chart
+                        if array.size(setups) > sm_max_setups
+                            old = array.shift(setups)
+                            f_delSetup(old)
+                        alert("✅ GVA BoS-Setup: " + syminfo.ticker + " " + dirTxt + " | Entry-Zone " + str.tostring(bBot, format.mintick) + "–" + str.tostring(bTop, format.mintick) + " | SL: " + str.tostring(slP, format.mintick) + " | TP 1:" + str.tostring(rr_tp) + ": " + str.tostring(tpP, format.mintick), alert.freq_once_per_bar)
+                    else
+                        alert("✅ GVA BoS: " + syminfo.ticker + " " + dirTxt + " | Fib-Anker nicht gefunden — manuell ziehen", alert.freq_once_per_bar)
+                        f_delTrackVisuals(tr)
+                    array.remove(tracks, i)
+                    continue
+
+            // --- Timeout: nur für SCHARFE Tracks (nach genug Hits). Wartende
+            //     Tracks ("Hit 1/2") bleiben stehen, bis die GVA erneut
+            //     berührt wird. Beim Timeout bleibt ein kleines Label zurück,
+            //     damit klar ist, was passiert ist (kein "spurloses" Löschen).
+            if sm_timeout > 0 and tr.armed and tr.barsSinceHit > sm_timeout
+                if not na(tr.refLn)
+                    line.delete(tr.refLn)
+                if not na(tr.bosLbls) and array.size(tr.bosLbls) > 0
+                    for k = 0 to array.size(tr.bosLbls) - 1
+                        label.delete(array.get(tr.bosLbls, k))
+                if not na(tr.bosLns) and array.size(tr.bosLns) > 0
+                    for k = 0 to array.size(tr.bosLns) - 1
+                        line.delete(array.get(tr.bosLns, k))
+                label.set_text(tr.lbl, "✖ Timeout")
+                label.set_color(tr.lbl, color.new(color.gray, 70))
+                array.remove(tracks, i)
+
+    // --- 4) Setups überwachen: Entry-Fill -> TP/SL -> Box/Linien stoppen ---
+    if array.size(setups) > 0
+        for i = array.size(setups) - 1 to 0
+            sp = array.get(setups, i)
+            if sp.phase == 0
+                // 📐 Neues High/Low ohne Entry-Fill -> Fib nachziehen
+                if re_anchor
+                    if sp.isLong and hHi > sp.hiP
+                        sp.hiP := hHi
+                        f_reanchor(sp, hT)
+                    else if not sp.isLong and hLo < sp.loP
+                        sp.loP := hLo
+                        f_reanchor(sp, hT)
+                if sp.isLong
+                    if hLo <= math.max(sp.e1, sp.e2)
+                        sp.phase := 1
+                        label.set_text(sp.statusLbl, "▶ Im Trade")
+                        alert("▶ Entry-Box erreicht: " + syminfo.ticker + " LONG", alert.freq_once_per_bar)
+                    else if not keep_box_open and hHi >= sp.tpP
+                        f_finishSetup(sp, "TP ohne Entry (verpasst)")
+                        f_rearm(sp, hT)
+                else
+                    if hHi >= math.min(sp.e1, sp.e2)
+                        sp.phase := 1
+                        label.set_text(sp.statusLbl, "▶ Im Trade")
+                        alert("▶ Entry-Box erreicht: " + syminfo.ticker + " SHORT", alert.freq_once_per_bar)
+                    else if not keep_box_open and hLo <= sp.tpP
+                        f_finishSetup(sp, "TP ohne Entry (verpasst)")
+                        f_rearm(sp, hT)
+            else if sp.phase == 1
+                // Pro GVA nur 1 Trade: nach TP ODER SL kein Re-Arm mehr
+                if sp.isLong
+                    if hLo <= sp.slP
+                        f_finishSetup(sp, "❌ SL")
+                    else if hHi >= sp.tpP
+                        f_finishSetup(sp, "✅ TP erreicht")
+                else
+                    if hHi >= sp.slP
+                        f_finishSetup(sp, "❌ SL")
+                    else if hLo <= sp.tpP
+                        f_finishSetup(sp, "✅ TP erreicht")
+
+// ============================================================================
+// HAUPTLOGIK
+// ============================================================================
+
+// Touch-Quelle: Wick oder nur Body
+touch_hi = touch_wick ? high : math.max(open, close)
+touch_lo = touch_wick ? low  : math.min(open, close)
+
+if is_enabled
+
+    // ================================================================
+    // GVA ERSTELLUNG — pro geschlossener HTF-Kerze genau einmal (tB wechselt)
+    // ================================================================
+    var int last_tB = na
+    if (na(last_tB) or tB != last_tB) and body_A > 0
+
+        first_bear  = cA < oA
+        first_bull  = cA > oA
+        second_bull = cB > oB
+        second_bear = cB < oB
+        second_larger = body_B >= body_A * gva_size_factor
+
+        // LONG GVA (Bear -> Bull, Body-Böden nahe beieinander)
+        if first_bear and second_bull and second_larger and math.abs(bot_A - bot_B) <= body_match_tolerance
+            last_tB := tB
+            level   = bot_B
+            newLine = line.new(tB, level, time, level, xloc=xloc.bar_time, color=color_long, width=line_width, extend=extend.right, style=line.style_solid)
+            array.push(bull_lines,  newLine)
+            array.push(bull_levels, level)
+
+        // SHORT GVA (Bull -> Bear, Body-Tops nahe beieinander)
+        if first_bull and second_bear and second_larger and math.abs(top_A - top_B) <= body_match_tolerance
+            last_tB := tB
+            level   = top_B
+            newLine = line.new(tB, level, time, level, xloc=xloc.bar_time, color=color_short, width=line_width, extend=extend.right, style=line.style_solid)
+            array.push(bear_lines,  newLine)
+            array.push(bear_levels, level)
+
+    // ================================================================
+    // LONG GVA: Touch Detection (Preis kommt von oben runter aufs Level)
+    // ================================================================
+    if array.size(bull_lines) > 0
+        for i = array.size(bull_lines) - 1 to 0
+            lvl = array.get(bull_levels, i)
+            if touch_lo <= lvl + touch_tolerance
+                ln = array.get(bull_lines, i)
+                line.set_style(ln, line.style_dashed)
+                line.set_width(ln, 1)
+                line.set_extend(ln, extend.none)
+                line.set_x2(ln, time)
+                array.remove(bull_lines,  i)
+                array.remove(bull_levels, i)
+                // --> State Machine: ab jetzt tracken (nur ≤ 4h sichtbar/aktiv)
+                if sm_active
+                    bool armed0 = hits_needed <= 1
+                    lbl0 = label.new(time, lvl, armed0 ? "⏳ Aktiv" : "⏳ Hit 1/" + str.tostring(hits_needed), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color_long, 60), textcolor=color.white, size=size.small)
+                    // Referenz-High nur suchen, wenn schon scharf (1-Hit-Modus)
+                    // und konservativer Modus aktiv
+                    float rp = na
+                    int   rt = na
+                    line  rln = na
+                    if armed0 and not ref_local
+                        [a1, b1] = f_findRefHigh()
+                        rp := a1
+                        rt := b1
+                        if not na(rp)
+                            rln := line.new(rt, rp, time, rp, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+                    array.push(tracks, GvaTrack.new(level=lvl, isLong=true, state=1, hitT=time, ln=ln, lbl=lbl0, refP=rp, refT=rt, refLn=rln, armed=armed0, bosLbls=array.new<label>(), bosLns=array.new<line>()))
+                    alert("🎯 GVA LONG gehittet (Hit 1): " + syminfo.ticker + " @ " + str.tostring(lvl, format.mintick), alert.freq_once_per_bar)
+
+    // ================================================================
+    // SHORT GVA: Touch Detection (Preis kommt von unten hoch ans Level)
+    // ================================================================
+    if array.size(bear_lines) > 0
+        for i = array.size(bear_lines) - 1 to 0
+            lvl = array.get(bear_levels, i)
+            if touch_hi >= lvl - touch_tolerance
+                ln = array.get(bear_lines, i)
+                line.set_style(ln, line.style_dashed)
+                line.set_width(ln, 1)
+                line.set_extend(ln, extend.none)
+                line.set_x2(ln, time)
+                array.remove(bear_lines,  i)
+                array.remove(bear_levels, i)
+                // --> State Machine: ab jetzt tracken (nur ≤ 4h sichtbar/aktiv)
+                if sm_active
+                    bool armed0 = hits_needed <= 1
+                    lbl0 = label.new(time, lvl, armed0 ? "⏳ Aktiv" : "⏳ Hit 1/" + str.tostring(hits_needed), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color_short, 60), textcolor=color.white, size=size.small)
+                    // Referenz-Low nur suchen, wenn schon scharf (1-Hit-Modus)
+                    // und konservativer Modus aktiv
+                    float rp = na
+                    int   rt = na
+                    line  rln = na
+                    if armed0 and not ref_local
+                        [a1, b1] = f_findRefLow()
+                        rp := a1
+                        rt := b1
+                        if not na(rp)
+                            rln := line.new(rt, rp, time, rp, xloc=xloc.bar_time, color=color_bos_line, width=1, style=line.style_solid, extend=extend.right)
+                    array.push(tracks, GvaTrack.new(level=lvl, isLong=false, state=1, hitT=time, ln=ln, lbl=lbl0, refP=rp, refT=rt, refLn=rln, armed=armed0, bosLbls=array.new<label>(), bosLns=array.new<line>()))
+                    alert("🎯 GVA SHORT gehittet (Hit 1): " + syminfo.ticker + " @ " + str.tostring(lvl, format.mintick), alert.freq_once_per_bar)
+
+    // ================================================================
+    // STRUKTUR-FEED an die State Machine (Default 15m)
+    // ================================================================
+    if sm_active
+        if current_tf_in_minutes <= sm_tf_minutes
+            // Chart-Kerzen selbst zu Struktur-Kerzen aggregieren
+            var int   aggBucket = na
+            var float aggH = na
+            var float aggL = na
+            var float aggC = na
+            bucketMs = int(sm_tf_minutes) * 60000
+            bucket = int(math.floor(time / bucketMs)) * bucketMs
+            if na(aggBucket)
+                aggBucket := bucket
+                aggH := high
+                aggL := low
+                aggC := close
+            else if bucket != aggBucket
+                // vorherige Struktur-Kerze ist abgeschlossen -> verarbeiten
+                f_onH1(aggH, aggL, aggC, aggBucket)
+                aggBucket := bucket
+                aggH := high
+                aggL := low
+                aggC := close
+            else
+                aggH := math.max(aggH, high)
+                aggL := math.min(aggL, low)
+                aggC := close
+        else
+            // Chart über Struktur-TF: geschlossene Kerzen aus security_lower_tf
+            var int[] procT = array.new_int(1, 0)
+            if barstate.isconfirmed and array.size(arr_t) > 0
+                for k = 0 to array.size(arr_t) - 1
+                    t1 = int(array.get(arr_t, k))
+                    if t1 > array.get(procT, 0)
+                        f_onH1(array.get(arr_hi, k), array.get(arr_lo, k), array.get(arr_cl, k), t1)
+                        array.set(procT, 0, t1)

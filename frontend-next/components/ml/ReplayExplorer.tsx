@@ -50,8 +50,8 @@ interface Session {
 }
 
 // GVA-Tuning (Pine-Einheiten): Toleranz % vom Body der 1. Kerze,
-// Kerze-2-mindestens-X%-grösser. Defaults = Live-Scanner (0.05 / 1.4).
-const TUNE_DEFAULTS = { tolPct: 5, sizePct: 40 };
+// Kerze-2-mindestens-X%-grösser. Defaults = Live-Scanner (0.15 / 1.4).
+const TUNE_DEFAULTS = { tolPct: 15, sizePct: 40 };
 const toApiTune = (t: { tolPct: number; sizePct: number }) => ({
   tol_pct: t.tolPct / 100,
   size_factor: 1 + t.sizePct / 100,

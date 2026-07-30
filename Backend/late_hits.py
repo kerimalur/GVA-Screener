@@ -46,44 +46,51 @@ LAST_SCAN_BY_PAIR_KEY = "last_backfill_scan_by_pair"
 
 
 def find_late_hits(
-    df_3d: pd.DataFrame,
+    df_blocks: pd.DataFrame,
     daily: pd.DataFrame,
     instrument: str,
     since_day: str,
     consumed: dict | None = None,
     size_factor: float = GVA_SIZE_FACTOR,
     tol_pct: float = GVA_TOL_PCT,
+    tf: str = "3D",
 ) -> list[dict]:
     """Alle Linien-Treffer ab `since_day` (ISO-Datum, inklusiv), die noch nicht
     verbraucht sind — chronologisch aufsteigend.
+
+    `df_blocks` sind die Kerzen des jeweiligen Timeframes (3D-Bloecke ODER
+    Wochenkerzen), `tf` benennt ihn ("3D"/"W"). Jeder Treffer traegt das Tag
+    im Ergebnis mit, damit Alert und Signal den Timeframe ausweisen koennen.
 
     `consumed` = {"SHORT": {level, ...}, "LONG": {...}} (Level auf 5 Stellen
     gerundet, identisch zu select_lines). Treffer auf bereits consumed Linien
     werden hier ausgefiltert und erzeugen damit weder Signal noch Alert.
     """
-    if df_3d is None or df_3d.empty or daily is None or daily.empty:
+    if df_blocks is None or df_blocks.empty or daily is None or daily.empty:
         return []
 
     consumed = consumed or {}
-    # refine_hit_day sucht innerhalb des 3D-Blocks (Blockstart bis +6 Tage) und
+    # Ein 3D-Block spannt bis zu 6 Kalendertage, eine Wochenkerze bis zu 7.
+    block_days = 7 if str(tf).upper() == "W" else 6
+    # refine_hit_day sucht innerhalb des Blocks (Blockstart bis +block_days) und
     # liefert nie ein frueheres Datum. Alles, was selbst im spaetesten Fall vor
     # dem Fenster laege, wird ohne pandas-Slice verworfen — sonst wuerde die
     # Verfeinerung ueber die komplette 20-Jahres-Historie laufen.
     cutoff_block = (
-        pd.Timestamp(since_day) - pd.Timedelta(days=6)
+        pd.Timestamp(since_day) - pd.Timedelta(days=block_days)
     ).date().isoformat()
 
     out: list[dict] = []
-    for hit in collect_hits(df_3d, instrument, size_factor, tol_pct):
+    for hit in collect_hits(df_blocks, instrument, size_factor, tol_pct):
         if hit["hit_block_date"] < cutoff_block:
             continue
-        day = refine_hit_day(hit, daily)
+        day = refine_hit_day(hit, daily, block_days)
         if day < since_day:
             continue
         level = round(float(hit["level"]), 5)
         if level in consumed.get(hit["direction"], set()):
             continue
-        out.append({**hit, "level": level, "hit_date": day})
+        out.append({**hit, "level": level, "hit_date": day, "tf": tf})
 
     out.sort(key=lambda h: h["hit_date"])
     return out
@@ -95,7 +102,7 @@ def alert_text(pair: str, hit: dict) -> str:
     return (
         "⏱ *GVA LINE HIT — NACHTRÄGLICH ERKANNT* ⏱\n\n"
         f"*Pair:* {pair}\n"
-        f"*Typ:* {hit['direction']} LINE\n"
+        f"*Typ:* {hit['direction']} LINE ({hit.get('tf', '3D')})\n"
         f"*Line Level:* {round(hit['level'], 5)}\n"
         f"*Getroffen am:* {hit['hit_date']}\n"
         f"*Formiert am:* {hit.get('line_formed_date', '–')}\n\n"

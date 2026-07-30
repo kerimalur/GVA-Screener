@@ -1,20 +1,62 @@
 import pandas as pd
 
-# GVA-Muster — 1:1 nach Kerims Pine Script "Waagerechte Szenarien Pro v4.0":
+# GVA-Muster — 1:1 nach Kerims Pine Script
+# "Waagerechte Szenarien Pro v5.9 — GVA State Machine":
 #   Kerze A (prev) und Kerze B (curr) auf 3D:
 #   - LONG:  A bearisch, B bullisch, Body B >= Body A * SIZE_FACTOR,
-#            |Body-Boden A - Body-Boden B| <= Body A * TOL_PCT  -> Level = Body-Boden B
+#            |Body-Boden A - Body-Boden B| <= TOLERANZ  -> Level = Body-Boden B
 #   - SHORT: A bullisch, B bearisch, gleiche Groessen-Bedingung,
-#            |Body-Top A - Body-Top B| <= Body A * TOL_PCT      -> Level = Body-Top B
-#   Touch: Wick zaehlt, exakt (keine Toleranz). Linie nach Touch weg.
-GVA_TOL_PCT = 0.05      # 5% vom Body der 1. Kerze (Pine: gva_toleranz_pct=5.0)
+#            |Body-Top A - Body-Top B| <= TOLERANZ      -> Level = Body-Top B
+#   Touch: Docht zaehlt (abschaltbar), Toleranz optional. Linie nach Touch weg.
+#
+# Nicht portiert (bewusst): die State Machine des Pine (BoS, Fib-Entry-Box,
+# Doppel-Hit-Regel, Konsolidierungs-/Trend-Filter). Der Screener meldet
+# weiterhin die ERSTE Beruehrung.
+GVA_TOL_PCT = 0.15      # Pine: gva_toleranz_pct = 15.0
 GVA_SIZE_FACTOR = 1.4   # Body B min. 40% groesser (Pine: gva_kerze2_groesser_pct=40)
+
+# Pine: tol_basis — "body" = % vom Body der 1. Kerze, "atr" = % vom HTF-ATR
+GVA_TOL_BASIS = "body"
+GVA_ATR_LENGTH = 14     # Pine: atr_length
+GVA_TOUCH_TOL_ATR = 0.0  # Pine: touch_tol_atr (0 = exakter Punkt)
+GVA_TOUCH_WICK = True    # Pine: touch_wick (False = nur Body zaehlt)
+
+
+def wilder_atr(df: pd.DataFrame, length: int = GVA_ATR_LENGTH) -> pd.Series:
+    """ATR wie Pine ta.atr(length): True Range, geglaettet mit Wilders RMA
+    (SMA-Seed ueber die ersten `length` Werte, danach rekursiv)."""
+    prev_close = df["close"].shift(1)
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - prev_close).abs(),
+            (df["low"] - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    # Wilders RMA == EWM mit alpha = 1/length; SMA-Seed wie in Pine
+    atr = tr.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
+    return atr
+
+
+def _touch_bounds(row, touch_wick: bool) -> tuple[float, float]:
+    """Pine: touch_hi/touch_lo — Docht oder nur Body."""
+    if touch_wick:
+        return row["high"], row["low"]
+    return max(row["open"], row["close"]), min(row["open"], row["close"])
 
 
 def analyze_gva_zones(df: pd.DataFrame, instrument: str,
-                      tol_pct: float = GVA_TOL_PCT, size_factor: float = GVA_SIZE_FACTOR):
+                      tol_pct: float = GVA_TOL_PCT, size_factor: float = GVA_SIZE_FACTOR,
+                      tol_basis: str = GVA_TOL_BASIS,
+                      touch_tol_atr: float = GVA_TOUCH_TOL_ATR,
+                      touch_wick: bool = GVA_TOUCH_WICK,
+                      atr_length: int = GVA_ATR_LENGTH,
+                      tf: str = "3D"):
     if df.empty or len(df) < 2:
         return None, None, None, None, None, None, [], []
+
+    atr_series = wilder_atr(df, atr_length)
 
     active_shorts = []
     active_longs = []
@@ -36,30 +78,41 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str,
         curr_body = abs(curr['close'] - curr['open'])
 
         valid_size = prev_body > 0 and curr_body >= (prev_body * size_factor)
-        tol = prev_body * tol_pct
+
+        # Pine: body_match_tolerance — Basis wahlweise Body A oder HTF-ATR.
+        # nz(htf_atr): fehlender ATR (Warmup) zaehlt wie 0, exakt wie im Pine.
+        atr_now = atr_series.iloc[i]
+        atr_now = 0.0 if pd.isna(atr_now) else float(atr_now)
+        tol = (atr_now if tol_basis == "atr" else prev_body) * tol_pct
+        touch_tol = atr_now * touch_tol_atr
+
         bot_match = abs(min(prev['open'], prev['close']) - min(curr['open'], curr['close'])) <= tol
         top_match = abs(max(prev['open'], prev['close']) - max(curr['open'], curr['close'])) <= tol
 
+        touch_hi, touch_lo = _touch_bounds(curr, touch_wick)
+
         for x in active_shorts:
-            if curr['high'] >= x['level']:
+            if touch_hi >= x['level'] - touch_tol:
                 last_touched = {
                     "type": "SHORT",
                     "level": x['level'],
                     "date": x['date'].strftime('%d.%m.%Y'),
-                    "touched_date": curr_time.strftime('%d.%m.%Y')
+                    "touched_date": curr_time.strftime('%d.%m.%Y'),
+                    "tf": tf,
                 }
 
         for x in active_longs:
-            if curr['low'] <= x['level']:
+            if touch_lo <= x['level'] + touch_tol:
                 last_touched = {
                     "type": "LONG",
                     "level": x['level'],
                     "date": x['date'].strftime('%d.%m.%Y'),
-                    "touched_date": curr_time.strftime('%d.%m.%Y')
+                    "touched_date": curr_time.strftime('%d.%m.%Y'),
+                    "tf": tf,
                 }
 
-        active_shorts = [x for x in active_shorts if curr['high'] < x['level']]
-        active_longs = [x for x in active_longs if curr['low'] > x['level']]
+        active_shorts = [x for x in active_shorts if touch_hi < x['level'] - touch_tol]
+        active_longs = [x for x in active_longs if touch_lo > x['level'] + touch_tol]
 
         # Level = Body-Top/Boden der Signal-Kerze B (bei Bull/Bear = deren Open)
         if prev_bull and curr_bear and valid_size and top_match:
@@ -87,11 +140,13 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str,
     # Shorts aufsteigend (niedrigste = naechste ueber Preis),
     # Longs absteigend (hoechste = naechste unter Preis).
     all_shorts = sorted(
-        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y')} for x in active_shorts],
+        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y'), "tf": tf}
+         for x in active_shorts],
         key=lambda x: x['level']
     )
     all_longs = sorted(
-        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y')} for x in active_longs],
+        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y'), "tf": tf}
+         for x in active_longs],
         key=lambda x: -x['level']
     )
 

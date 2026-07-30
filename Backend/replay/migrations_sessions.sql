@@ -23,7 +23,7 @@ alter table replay_sessions enable row level security;
 -- Neue Sessions erben den globalen Kalibrier-Default (Frontend/localStorage);
 -- Defaults hier = Live-Scanner-Konstanten. Migration: replay_sessions_gva_tuning
 alter table replay_sessions
-  add column if not exists tol_pct real not null default 0.05,
+  add column if not exists tol_pct real not null default 0.15,
   add column if not exists size_factor real not null default 1.4;
 
 -- 2026-07-14: Session-Wahl mit/ohne fundamentale Konfluenz (Bias as-of HIT-Datum).

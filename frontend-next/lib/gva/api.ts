@@ -1,11 +1,16 @@
 // Client-seitiger Zugriff auf das GVA-FastAPI-Backend (Render).
 // Datenvertrag identisch zu Backend GET /api/screener — NICHT ändern ohne Backend-Abgleich.
 
+/** Timeframe, auf dem die GVA entstanden ist. Altes Backend liefert das Feld
+ *  nicht → als "3D" behandeln (bis Juli 2026 gab es nur 3D). */
+export type GvaTf = "3D" | "W";
+
 export interface LastTouched {
   type: "SHORT" | "LONG";
   level: number;
   date: string;
   touched_date: string;
+  tf?: GvaTf;
 }
 
 /** Eine geformte, noch aktive GVA-Linie (Detail-Popup: letzte Setups). */
@@ -13,6 +18,7 @@ export interface RecentGva {
   type: "SHORT" | "LONG";
   level: number;
   date: string; // 'DD.MM.YYYY'
+  tf?: GvaTf;
 }
 
 export interface MarketData {
@@ -20,8 +26,10 @@ export interface MarketData {
   price: number;
   short: number | null;
   short_date: string | null;
+  short_tf: GvaTf | null;
   long: number | null;
   long_date: string | null;
+  long_tf: GvaTf | null;
   status: "HIT" | "PREPARE" | "NEUTRAL";
   near: "SHORT" | "LONG" | null;
   triggered: boolean;
@@ -204,19 +212,21 @@ export function radarType(item: MarketData): RadarType {
 export function targetLine(
   item: MarketData,
   type: RadarType,
-): { level: number | null; date: string | null } {
+): { level: number | null; date: string | null; tf: GvaTf | null } {
+  const short = { level: item.short, date: item.short_date, tf: item.short_tf ?? null };
+  const long = { level: item.long, date: item.long_date, tf: item.long_tf ?? null };
   switch (type) {
     case "short":
     case "hit-short":
-      return { level: item.short, date: item.short_date };
+      return short;
     case "long":
     case "hit-long":
-      return { level: item.long, date: item.long_date };
+      return long;
     default: {
-      if (item.near === "SHORT") return { level: item.short, date: item.short_date };
-      if (item.near === "LONG") return { level: item.long, date: item.long_date };
-      if (item.short != null) return { level: item.short, date: item.short_date };
-      return { level: item.long, date: item.long_date };
+      if (item.near === "SHORT") return short;
+      if (item.near === "LONG") return long;
+      if (item.short != null) return short;
+      return long;
     }
   }
 }

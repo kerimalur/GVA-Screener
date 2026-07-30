@@ -1,6 +1,13 @@
 "use client";
 
-import { radarType, sortByDistance, type MarketData, type RadarType } from "@/lib/gva/api";
+import {
+  radarType,
+  sortByDistance,
+  targetLine,
+  type MarketData,
+  type RadarType,
+} from "@/lib/gva/api";
+import TfBadge from "./TfBadge";
 
 function tileStyle(type: RadarType): { wrapper: string; pairText: string; subText: string } {
   switch (type) {
@@ -86,6 +93,9 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
                 <span className={`font-black text-sm tracking-wide ${style.pairText}`}>
                   {item.pair}
                 </span>
+                {targetLine(item, type).level != null && (
+                  <TfBadge tf={targetLine(item, type).tf} className="mt-1" />
+                )}
                 {sub && (
                   <span
                     className={`text-[10px] font-bold mt-1 px-2 py-0.5 rounded-full ${style.subText}`}
