@@ -94,8 +94,9 @@ check("kein Zeitstempel -> dead", snapshotFreshness(null, NOW), "dead");
 
 // --- Lanes tragen die neuen Flags durch --------------------------------------
 const md = (over: Partial<MarketData>): MarketData => ({
-  pair: "EURUSD", price: 1.09, short: 1.1, short_date: "01.07.2026", long: null,
-  long_date: null, status: "PREPARE", near: "SHORT", triggered: false, pending: false,
+  pair: "EURUSD", price: 1.09, short: 1.1, short_date: "01.07.2026", short_tf: "3D",
+  long: null, long_date: null, long_tf: null,
+  status: "PREPARE", near: "SHORT", triggered: false, pending: false,
   distance: 40, last_touched: null, stale: false, detected_late: false, ...over,
 });
 const sig = (over: Partial<SignalRecord>): SignalRecord => ({
