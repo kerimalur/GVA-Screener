@@ -136,6 +136,53 @@ def diagnose() -> tuple[bool, str]:
     return True, "ok"
 
 
+def stats() -> dict:
+    """Womit und wohin schreibt der Screener gerade?
+
+    Beantwortet die Frage, die `diagnose()` offen laesst: Die Konfiguration
+    kann stehen und der Insert trotzdem ins Leere laufen — entweder weil
+    PostgREST ihn ablehnt, oder weil die Zeilen unter einer user_id landen,
+    die nicht der im Browser eingeloggten entspricht. Das Frontend filtert
+    hart auf `user_id` (lib/journal/signals.ts), solche Zeilen sind dann
+    unsichtbar, obwohl sie existieren.
+
+    `user_id` wird gekuerzt ausgegeben — sie ist kein Geheimnis, aber es gibt
+    keinen Grund, sie vollstaendig in einen oeffentlichen Endpoint zu schreiben.
+    Zum Vergleichen reichen die ersten und letzten Zeichen.
+    """
+    url, key, user_id = _context()
+    if not url:
+        return {"configured": False}
+
+    def zaehle(tabelle: str, extra: dict | None = None) -> int | None:
+        params = {"select": "id", "user_id": f"eq.{user_id}"}
+        params.update(extra or {})
+        try:
+            r = requests.get(
+                f"{url}/rest/v1/{tabelle}",
+                params=params,
+                headers=_headers(key, {"Prefer": "count=exact",
+                                       "Range-Unit": "items", "Range": "0-0"}),
+                timeout=10,
+            )
+            if r.status_code >= 300:
+                return None
+            # Content-Range sieht aus wie "0-0/42"
+            teil = r.headers.get("Content-Range", "").split("/")[-1]
+            return int(teil) if teil.isdigit() else None
+        except Exception:
+            return None
+
+    kurz = f"{user_id[:8]}…{user_id[-4:]}" if len(user_id) > 12 else user_id
+    return {
+        "configured": True,
+        "user_id": kurz,
+        "signals_total": zaehle("signals"),
+        "signals_open": zaehle("signals", {"status": "in.(new,watchlist)"}),
+        "outlooks_total": zaehle("outlooks"),
+    }
+
+
 def to_iso_date(value) -> str | None:
     """Linien-Bildungsdatum auf ISO 'YYYY-MM-DD' normalisieren.
 

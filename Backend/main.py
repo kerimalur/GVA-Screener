@@ -765,6 +765,10 @@ def health():
         "updated": LIVE_CACHE["updated"],
         "signals_ok": signals_ok,
         "signals_reason": signals_grund,
+        # Zeigt, unter welcher user_id geschrieben wird und ob ueberhaupt
+        # Zeilen ankommen — trennt "Insert scheitert" von "Zeilen sind da,
+        # aber gehoeren einer anderen user_id als der im Browser".
+        "signals_stats": supabase_signals.stats(),
     }
 
 
