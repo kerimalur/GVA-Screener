@@ -631,6 +631,44 @@ def mark(req: MarkRequest):
     return {"ok": True}
 
 
+@app.post("/api/resync-signals")
+def resync_signals():
+    """Offene HITs nachtraeglich in signals/outlooks schreiben.
+
+    Warum es das braucht: record_hit_async laeuft NUR im Moment des Alerts, und
+    ALERT_CACHE wird auf Platte gehalten. War die Signal-Ablage damals nicht
+    konfiguriert (fehlende user_id, fehlende Supabase-Variablen), bleibt das
+    Paar zwar sticky-HIT im Scanner, bekommt aber nie wieder eine Zeile — auch
+    nicht, nachdem die Konfiguration steht. Cockpit und Outlook blieben dann
+    dauerhaft leer, ohne dass irgendwo ein Fehler sichtbar waere.
+
+    Dieser Aufruf schreibt fuer jedes offene TRIGGERED-Paar Signal und Outlook
+    nach. Doppelte Zeilen sind moeglich, wenn zu einem Paar schon eine
+    existiert — deshalb bewusst manuell und nicht automatisch beim Start.
+    """
+    ok, grund = supabase_signals.diagnose()
+    if not ok:
+        return {"ok": False, "reason": grund, "written": 0}
+
+    with _state_lock:
+        offen = [(pair, dict(t)) for pair, t in TRIGGERED.items()]
+
+    for pair, trig in offen:
+        snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
+        supabase_signals.record_hit_async(
+            pair, trig["side"], trig["level"], snapshot,
+            detected_late=bool(trig.get("detected_late")),
+            line_formed_date=trig.get("date"),
+        )
+
+    return {
+        "ok": True,
+        "written": len(offen),
+        "pairs": [p for p, _ in offen],
+        "hinweis": "Schreibt fire-and-forget. In ein paar Sekunden im Cockpit pruefen.",
+    }
+
+
 @app.get("/api/fundamentals")
 def get_fundamentals():
     """G8-Stärke/Zins/COT für Power Index, Stärke Matrix, Datenzentrum.
