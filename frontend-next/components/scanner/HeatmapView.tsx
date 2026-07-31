@@ -63,6 +63,7 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
             const type = radarType(item);
             const style = tileStyle(type);
             const isHit = type === "hit-short" || type === "hit-long";
+            const ziel = targetLine(item, type);
             const badge = type === "hit-short" ? "S" : type === "hit-long" ? "L" : null;
             const sub = isHit
               ? type === "hit-short"
@@ -93,8 +94,8 @@ export default function HeatmapView({ data, onSelect }: HeatmapViewProps) {
                 <span className={`font-black text-sm tracking-wide ${style.pairText}`}>
                   {item.pair}
                 </span>
-                {targetLine(item, type).level != null && (
-                  <TfBadge tf={targetLine(item, type).tf} className="mt-1" />
+                {ziel.level != null && (
+                  <TfBadge tf={ziel.tf} onColor={type !== "neutral"} className="mt-1" />
                 )}
                 {sub && (
                   <span

@@ -115,6 +115,27 @@ def is_configured() -> bool:
     return _config()[0] is not None
 
 
+def diagnose() -> tuple[bool, str]:
+    """Kann der Screener Signale und Outlooks schreiben?
+
+    Bisher scheiterte das lautlos: _insert bricht ohne user_id einfach ab und
+    schreibt eine Zeile ins Render-Log. Der Telegram-Alert kommt trotzdem, weil
+    er einen anderen Zugang nutzt — im Cockpit und im Outlook fehlt der Hit
+    dann aber ersatzlos, ohne dass irgendwo etwas rot wird.
+
+    Rückgabe: (ok, Grund). `ok=True` heisst, dass URL, Schlüssel UND user_id
+    stehen — nicht, dass der letzte Insert geklappt hat.
+    """
+    url, key = _config()
+    if not url:
+        return False, ("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY fehlen — "
+                       "Signale und Outlooks werden nicht geschrieben")
+    if not _resolve_user_id(url, key):
+        return False, ("keine user_id: SIGNALS_USER_ID setzen oder einmalig "
+                       "in der App einloggen, damit der Lookup greift")
+    return True, "ok"
+
+
 def to_iso_date(value) -> str | None:
     """Linien-Bildungsdatum auf ISO 'YYYY-MM-DD' normalisieren.
 

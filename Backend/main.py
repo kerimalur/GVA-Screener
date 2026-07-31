@@ -712,6 +712,10 @@ def health_ping():
 
 @app.get("/api/health")
 def health():
+    # Signal-Ablage explizit ausweisen. Faellt sie aus, kommt der Telegram-Alert
+    # trotzdem an (anderer Zugang) — Cockpit und Outlook bleiben aber leer, und
+    # das war bisher nur im Render-Log zu sehen.
+    signals_ok, signals_grund = supabase_signals.diagnose()
     return {
         "status": "ok",
         "zones": len(ZONES),
@@ -721,6 +725,8 @@ def health():
         "consumed": sum(len(v) for sides in CONSUMED.values() for v in sides.values()),
         "live": bool(LIVE_CACHE["live"]),
         "updated": LIVE_CACHE["updated"],
+        "signals_ok": signals_ok,
+        "signals_reason": signals_grund,
     }
 
 

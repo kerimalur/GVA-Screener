@@ -231,8 +231,23 @@ export function targetLine(
   }
 }
 
+/**
+ * Reihenfolge im Board: getroffene Paare zuerst, danach nach Pip-Distanz.
+ *
+ * Ein HIT ist sticky — er bleibt offen, bis Kerim ihn im Detail-Fenster
+ * erledigt oder übernimmt. Solange das nicht passiert ist, gehört er nach
+ * oben, egal wie weit der Preis inzwischen weggelaufen ist. Vorher rutschte
+ * genau der Hit nach unten, um den man sich kümmern sollte.
+ *
+ * Innerhalb der Hits entscheidet ebenfalls die Distanz, damit die Reihenfolge
+ * bei mehreren offenen Hits stabil und nachvollziehbar bleibt.
+ */
 export function sortByDistance(data: MarketData[]): MarketData[] {
+  const istHit = (m: MarketData) => m.triggered || m.status === "HIT";
   return [...data].sort((a, b) => {
+    const ha = istHit(a) ? 0 : 1;
+    const hb = istHit(b) ? 0 : 1;
+    if (ha !== hb) return ha - hb;
     const da = a.distance != null ? a.distance : Infinity;
     const db = b.distance != null ? b.distance : Infinity;
     return da - db;
