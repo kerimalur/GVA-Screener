@@ -21,6 +21,7 @@ import { SETUP_DEFINITIONS, getProblems } from "@/lib/journal/types";
 import {
   computeStats,
   buildEquityByDate,
+  buildDrawdownByDate,
   computeSetupStats,
   computeProblemStats,
   computeFundamentalStats,
@@ -125,6 +126,10 @@ export default function BacktestAnalysis({ session, onContinue, onBack, onDelete
     () => buildEquityByDate(filtered, period, session.accountSize, session.riskPercent),
     [filtered, period, session.accountSize, session.riskPercent],
   );
+  const drawdown = useMemo(
+    () => buildDrawdownByDate(filtered, period, session.accountSize, session.riskPercent),
+    [filtered, period, session.accountSize, session.riskPercent],
+  );
   const setupStats = useMemo(() => computeSetupStats(filtered), [filtered]);
   const problemStats = useMemo(() => computeProblemStats(filtered), [filtered]);
   const fundamentalStats = useMemo(() => computeFundamentalStats(filtered), [filtered]);
@@ -158,6 +163,13 @@ export default function BacktestAnalysis({ session, onContinue, onBack, onDelete
         <span className="text-muted">{stats.winRate.toFixed(1)}% WR</span>
         <span className="text-muted">
           PF {stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
+        </span>
+        <span
+          className={stats.maxDrawdownR > 0 ? "text-down" : "text-muted"}
+          title={`Grösster Rückgang vom Equity-Hoch zum Tief — über ${stats.maxDrawdownLength} Trades, Tiefpunkt bei Trade ${stats.maxDrawdownAtTrade}`}
+        >
+          MaxDD −{stats.maxDrawdownR.toFixed(1)} R
+          {stats.hasEur && stats.maxDrawdownPct > 0 && ` (${stats.maxDrawdownPct.toFixed(1)}%)`}
         </span>
         {stats.hasEur && (
           <>
@@ -209,6 +221,95 @@ export default function BacktestAnalysis({ session, onContinue, onBack, onDelete
               <Area type="monotone" dataKey="equity" stroke={chart.accent} strokeWidth={2} fill="url(#btFill)" />
             </AreaChart>
           </ResponsiveContainer>
+        )}
+      </Panel>
+
+      {/* Drawdown */}
+      <Panel
+        title="Drawdown"
+        subtitle="Abstand zum bisherigen Equity-Hoch — für FTMO die entscheidende Kennzahl"
+      >
+        {drawdown.length === 0 ? (
+          <EmptyState icon="ph-chart-line-down" title="Keine Daten im Zeitraum" />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-faint">Max. Drawdown</div>
+                <div className="font-mono text-sm text-down">
+                  −{stats.maxDrawdownR.toFixed(2)} R
+                  {stats.hasEur && stats.maxDrawdownPct > 0 && (
+                    <span className="text-faint"> · {stats.maxDrawdownPct.toFixed(1)} %</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-faint">Dauer</div>
+                <div className="font-mono text-sm">
+                  {stats.maxDrawdownLength} Trades
+                  <span className="text-faint"> · Tief bei #{stats.maxDrawdownAtTrade}</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-faint">
+                  Recovery-Faktor
+                </div>
+                <div
+                  className={`font-mono text-sm ${stats.recoveryFactor >= 1 ? "text-up" : "text-down"}`}
+                  title="Netto-R geteilt durch Max-Drawdown. Unter 1 heisst: der grösste Rückschlag war grösser als der gesamte Gewinn."
+                >
+                  {stats.recoveryFactor === 0 ? "—" : stats.recoveryFactor.toFixed(2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-faint">
+                  Längste Verlustserie
+                </div>
+                <div className="font-mono text-sm">
+                  {stats.maxConsecutiveLosses} in Folge
+                  {!stats.recovered && (
+                    <span className="text-down"> · noch im DD</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={drawdown} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+                <defs>
+                  <linearGradient id="btDD" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={chart.down} stopOpacity={0.05} />
+                    <stop offset="100%" stopColor={chart.down} stopOpacity={0.3} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: chart.text, fontSize: 10 }}
+                  stroke={chart.axis}
+                  tickFormatter={(d) => fmtDate(String(d))}
+                  minTickGap={40}
+                />
+                <YAxis
+                  tick={{ fill: chart.text, fontSize: 10 }}
+                  stroke={chart.axis}
+                  width={64}
+                  domain={["auto", 0]}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(d) => fmtDate(String(d))}
+                  formatter={(v) => [`${Number(v).toFixed(2)} R`, "Drawdown"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="ddR"
+                  stroke={chart.down}
+                  strokeWidth={2}
+                  fill="url(#btDD)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </>
         )}
       </Panel>
 

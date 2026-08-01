@@ -77,6 +77,31 @@ export interface BacktestStats {
   totalEur: number;
   accountEnd: number;
   growthPct: number;
+  /** Grösster Rückgang vom Equity-Hoch zum Tief, in R (immer >= 0). */
+  maxDrawdownR: number;
+  /** Max. Drawdown in % der Start-Account-Grösse (0 wenn keine Account-Grösse). */
+  maxDrawdownPct: number;
+  /** Trade-Nr. (1-basiert), bei der der Max-Drawdown seinen Tiefpunkt erreicht. */
+  maxDrawdownAtTrade: number;
+  /** Anzahl Trades vom Equity-Hoch bis zum Tiefpunkt des Max-Drawdowns. */
+  maxDrawdownLength: number;
+  /** Trades, die seit dem Tiefpunkt noch nicht zurück auf das alte Hoch geführt haben. */
+  tradesSinceDrawdownLow: number;
+  /** true = altes Equity-Hoch nach dem Max-Drawdown wieder erreicht. */
+  recovered: boolean;
+  /** Längste Serie aufeinanderfolgender Verlust-Trades. */
+  maxConsecutiveLosses: number;
+  /** Verhältnis Netto-R zu Max-Drawdown — je höher, desto ruhiger die Kurve. */
+  recoveryFactor: number;
+}
+
+/** Ein Punkt der Underwater-Kurve: Abstand zum bisherigen Equity-Hoch (<= 0). */
+export interface DrawdownPoint {
+  date: string;
+  /** Abstand zum Hoch in R (0 = auf Höchststand, negativ = im Drawdown). */
+  ddR: number;
+  /** Abstand zum Hoch in % der Start-Account-Grösse (0 wenn keine gesetzt). */
+  ddPct: number;
 }
 
 export const newId = () => crypto.randomUUID();
@@ -222,6 +247,13 @@ export function takenOnly(trades: BacktestTrade[]): BacktestTrade[] {
   return trades.filter((t) => t.taken !== false);
 }
 
+/** Genommene Trades in chronologischer Reihenfolge — Basis jeder Verlaufsrechnung. */
+export function sortedTaken(trades: BacktestTrade[]): BacktestTrade[] {
+  return [...takenOnly(trades)].sort((a, b) =>
+    a.date === b.date ? a.timestamp - b.timestamp : a.date.localeCompare(b.date),
+  );
+}
+
 export function computeStats(
   allTrades: BacktestTrade[],
   accountSize?: number,
@@ -231,9 +263,20 @@ export function computeStats(
   const acctSize = accountSize || 0;
   const eurRisk = computeEurRisk(accountSize, riskPercent);
   const base = { hasEur: eurRisk > 0, eurRisk, totalEur: 0, accountEnd: acctSize, growthPct: 0 };
+  const ddZero = {
+    maxDrawdownR: 0,
+    maxDrawdownPct: 0,
+    maxDrawdownAtTrade: 0,
+    maxDrawdownLength: 0,
+    tradesSinceDrawdownLow: 0,
+    recovered: true,
+    maxConsecutiveLosses: 0,
+    recoveryFactor: 0,
+  };
   if (trades.length === 0) {
-    return { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0, avgR: 0, profitFactor: 0, ...base };
+    return { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0, avgR: 0, profitFactor: 0, ...base, ...ddZero };
   }
+  const dd = computeDrawdown(trades, accountSize, riskPercent);
   const wins = trades.filter((t) => t.result === "win").length;
   const losses = trades.filter((t) => t.result === "loss").length;
   const totalR = trades.reduce((s, t) => s + t.rMultiple, 0);
@@ -253,7 +296,112 @@ export function computeStats(
     totalEur,
     accountEnd: acctSize + totalEur,
     growthPct: acctSize > 0 ? (totalEur / acctSize) * 100 : 0,
+    ...dd,
   };
+}
+
+/**
+ * Drawdown-Kennzahlen über die chronologische Trade-Folge.
+ * Gerechnet wird auf der R-Kurve (Risiko pro Trade ist fix, kein Compounding —
+ * konsistent mit computeEurRisk). % beziehen sich auf die Start-Account-Grösse.
+ */
+export function computeDrawdown(
+  allTrades: BacktestTrade[],
+  accountSize?: number,
+  riskPercent?: number,
+): Omit<BacktestStats,
+  | "totalTrades" | "wins" | "losses" | "winRate" | "totalR" | "avgR" | "profitFactor"
+  | "hasEur" | "eurRisk" | "totalEur" | "accountEnd" | "growthPct"> {
+  const trades = sortedTaken(allTrades);
+  const eurRisk = computeEurRisk(accountSize, riskPercent);
+  const acctSize = accountSize || 0;
+  const pctPerR = acctSize > 0 ? (eurRisk / acctSize) * 100 : 0;
+
+  let equity = 0;
+  let peak = 0;
+  let peakIdx = 0;      // Trade-Index des aktuellen Equity-Hochs
+  let maxDD = 0;
+  let maxDDIdx = 0;     // Trade-Index am Tiefpunkt des grössten Drawdowns
+  let maxDDPeakIdx = 0; // Trade-Index des Hochs vor dem grössten Drawdown
+  let streak = 0;
+  let maxStreak = 0;
+
+  trades.forEach((t, i) => {
+    equity += t.rMultiple;
+    if (equity > peak) {
+      peak = equity;
+      peakIdx = i + 1;
+    }
+    const dd = peak - equity;
+    if (dd > maxDD) {
+      maxDD = dd;
+      maxDDIdx = i + 1;
+      maxDDPeakIdx = peakIdx;
+    }
+    if (t.result === "loss") {
+      streak++;
+      if (streak > maxStreak) maxStreak = streak;
+    } else if (t.result === "win") {
+      streak = 0;
+    }
+  });
+
+  // Erholt = Equity steht aktuell wieder auf dem Höchststand
+  const recovered = maxDD === 0 || equity >= peak - 1e-9;
+  const totalR = equity;
+
+  return {
+    maxDrawdownR: parseFloat(maxDD.toFixed(2)),
+    maxDrawdownPct: parseFloat((maxDD * pctPerR).toFixed(2)),
+    maxDrawdownAtTrade: maxDDIdx,
+    maxDrawdownLength: maxDDIdx - maxDDPeakIdx,
+    tradesSinceDrawdownLow: maxDDIdx > 0 ? trades.length - maxDDIdx : 0,
+    recovered: maxDD === 0 ? true : recovered,
+    maxConsecutiveLosses: maxStreak,
+    recoveryFactor: maxDD > 0 ? parseFloat((totalR / maxDD).toFixed(2)) : 0,
+  };
+}
+
+/** Underwater-Kurve: pro Trade-Datum der Abstand zum bisherigen Equity-Hoch. */
+export function buildDrawdownByDate(
+  allTrades: BacktestTrade[],
+  period: EquityPeriod,
+  accountSize?: number,
+  riskPercent?: number,
+): DrawdownPoint[] {
+  const trades = sortedTaken(allTrades);
+  if (trades.length === 0) return [];
+  const eurRisk = computeEurRisk(accountSize, riskPercent);
+  const acctSize = accountSize || 0;
+  const pctPerR = acctSize > 0 ? (eurRisk / acctSize) * 100 : 0;
+
+  let equity = 0;
+  let peak = 0;
+  const byDay = new Map<string, DrawdownPoint>();
+  for (const t of trades) {
+    equity += t.rMultiple;
+    if (equity > peak) peak = equity;
+    const ddR = equity - peak; // <= 0
+    byDay.set(t.date, {
+      date: t.date,
+      ddR: parseFloat(ddR.toFixed(2)),
+      ddPct: parseFloat((ddR * pctPerR).toFixed(2)),
+    });
+  }
+  let points = [...byDay.values()];
+
+  if (period !== "all") {
+    const anchor = new Date(trades[trades.length - 1].date);
+    const start = new Date(anchor);
+    if (period === "1y") start.setFullYear(start.getFullYear() - 1);
+    if (period === "6m") start.setMonth(start.getMonth() - 6);
+    if (period === "3m") start.setMonth(start.getMonth() - 3);
+    if (period === "1m") start.setMonth(start.getMonth() - 1);
+    if (period === "1w") start.setDate(start.getDate() - 7);
+    const startStr = start.toISOString().split("T")[0];
+    points = points.filter((p) => p.date >= startStr);
+  }
+  return points;
 }
 
 export interface EquityPoint {
