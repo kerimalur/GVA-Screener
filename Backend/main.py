@@ -227,6 +227,8 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                 TRIGGERED[pair] = {
                     "side": side, "level": round(level, 5), "date": date,
                     "tf": tf, "pending": False, "detected_late": False,
+                    # Fuer die 7-Tage-Ablaufregel in lifecycle_state.reconcile().
+                    "hit_at": datetime.now(timezone.utc).isoformat(),
                 }
                 cache_key = f"{pair}_{side}"
                 if ALERT_CACHE.get(cache_key) != level:
@@ -386,6 +388,9 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None, df_w=None)
             "tf": hit.get("tf", "3D"),
             "pending": False,
             "detected_late": True,
+            # Tag des tatsaechlichen Treffers, nicht der Erkennungszeitpunkt -
+            # sonst liefe die 7-Tage-Ablaufregel ab dem falschen Datum.
+            "hit_at": f"{hit['hit_date']}T12:00:00+00:00",
         }
         ALERT_CACHE[cache_key] = level
 

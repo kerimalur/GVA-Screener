@@ -17,13 +17,44 @@ Status-Mapping (bestehende Zeilen bleiben unverändert gültig, kein Rewrite):
 gerade nicht erreichbar ist), ist aber nie mehr die Wahrheit. Beim Zusammenführen
 gilt die konservative Regel: **im Zweifel consumed** — lieber ein Alert zu wenig
 als eine Flut auf Linien, die längst gehandelt wurden.
+
+Ein offener HIT, der nie journaled/dismissed wird, bliebe sonst für immer
+sticky im Board stehen ("GVA gehittet" zeigt Wochen später noch Setups, die
+längst durchgelaufen sind). Deshalb gilt zusätzlich: **älter als
+HIT_EXPIRY_DAYS = kein aktiver Trigger mehr**, unabhängig vom Status (new
+oder watchlist). Das ist kein "consumed" - die Linie bleibt handelbar, falls
+der Preis sie später erneut beruehrt, sie verschwindet nur aus der aktiven
+Anzeige, wenn sie zu alt ist, um noch als aktuelles Setup zu gelten.
 """
 from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
 import supabase_signals
+
+# Ab diesem Alter gilt ein offener HIT nicht mehr als aktives Setup - siehe
+# Modulkopf. Bewusst als eigene Konstante, nicht an CONSUMED gekoppelt: die
+# Linie ist nicht "erledigt", nur nicht mehr aktuell genug fuers Live-Board.
+HIT_EXPIRY_DAYS = 7
+
+
+def _ist_abgelaufen(hit_at) -> bool:
+    """True, wenn `hit_at` laenger als HIT_EXPIRY_DAYS zurückliegt.
+
+    Ohne verwertbares Datum gilt der Hit als NICHT abgelaufen - eine
+    Datenlücke soll ein Setup nicht stumm aus der Anzeige werfen.
+    """
+    if not hit_at:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(hit_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - ts) > timedelta(days=HIT_EXPIRY_DAYS)
 
 # Fallback fuer Altzeilen ohne `line_formed_date` (vor der Migration
 # `signals_line_formed_date` gab es die Spalte nicht). Reine Anzeige-
@@ -69,6 +100,8 @@ def state_from_rows(rows: list[dict]) -> tuple[dict, dict, dict]:
             continue
         if pair in triggered:
             continue  # jüngste Zeile hat gewonnen (Sortierung hit_at desc)
+        if _ist_abgelaufen(row.get("hit_at")):
+            continue  # älter als HIT_EXPIRY_DAYS -> kein aktives Setup mehr
         level = _round(row["line_level"])
         if level in consumed.get(pair, {}).get(side, set()):
             continue  # Linie wurde später verbraucht -> kein offener HIT
@@ -79,6 +112,10 @@ def state_from_rows(rows: list[dict]) -> tuple[dict, dict, dict]:
             "date": row.get("line_formed_date") or _UNKNOWN_DATE,
             "pending": status == "watchlist",
             "detected_late": bool(row.get("detected_late")),
+            # Fuer reconcile(): dort laeuft der Prozess evtl. tagelang durch,
+            # ohne dass state_from_rows erneut aufgerufen wird - die Ablauf-
+            # Pruefung braucht daher ihr eigenes hit_at im laufenden Zustand.
+            "hit_at": row.get("hit_at"),
         }
         # Alert-Dedupe vorbelegen: nach dem Neustart darf derselbe offene HIT
         # nicht erneut nach Telegram gehen.
@@ -194,6 +231,15 @@ def reconcile(triggered: dict, consumed: dict, alert_cache: dict,
         if side is None or level is None:
             continue
         if _round(level) in consumed.get(pair, {}).get(side, set()):
+            triggered.pop(pair, None)
+            alert_cache.pop(f"{pair}_{side}", None)
+            changed = True
+            continue
+        # Der Prozess kann tagelang durchlaufen, ohne neu zu starten - ohne
+        # diese Prüfung würde load_lifecycle()'s Ablaufregel nur beim
+        # (seltenen) Neustart greifen und ein alter HIT bliebe im Board
+        # sticky stehen, bis irgendwann ein Consume kommt.
+        if _ist_abgelaufen(trig.get("hit_at")):
             triggered.pop(pair, None)
             alert_cache.pop(f"{pair}_{side}", None)
             changed = True
