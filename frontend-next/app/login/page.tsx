@@ -82,11 +82,11 @@ function LoginContent() {
           {/* Logo */}
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent-dim border border-accent/30 mb-4">
-              <span className="text-accent font-bold text-lg">FX</span>
+              <span className="text-accent font-bold text-lg">GVA</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">FX Terminal</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">GVA Labor</h1>
             <p className="text-sm text-muted mt-2">
-              Melde dich an um Zugang zu erhalten
+              Modelle, Faktoren, Maerkte — hier wird gemessen, nicht gehandelt.
             </p>
           </div>
 

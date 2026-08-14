@@ -40,7 +40,14 @@ app.add_middleware(
 from ml.routes import ml_router  # noqa: E402
 app.include_router(ml_router, prefix="/ml")
 
-# Replay-Modul (historische GVA-Hits + manuelle Backtest-Bewertung), siehe replay/
+# Fundamental-Modul, siehe replay/.
+#
+# Der Ordner heisst historisch `replay/`, enthaelt seit 13.08.2026 aber kein
+# Replay mehr (Backtest-Bewertung entfernt, siehe ../TRADING-UMBAU.md).
+# Was bleibt und aktiv gebraucht wird:
+#   replay/gva_history.py  -> Hit-Erkennung, genutzt von late_hits.py (Kern!)
+#   replay/fundamentals.py -> Q-Score-Panel fuer Fundamental-Track (Labor)
+# Der Prefix bleibt /replay, damit die Labor-Seiten ihre URLs behalten.
 from replay.routes import replay_router  # noqa: E402
 app.include_router(replay_router, prefix="/replay")
 

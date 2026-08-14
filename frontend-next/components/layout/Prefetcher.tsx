@@ -10,6 +10,9 @@ import { useRouter } from "next/navigation";
  * 2. füllt die Server-Caches der schweren API-Routen (COT, Season)
  * 3. prefetcht die Analyse-Routen fürs Next.js-Routing
  * Läuft einmal pro Session (sessionStorage-Guard).
+ *
+ * Seit dem Umbau zum Labor (13.08.2026) zeigen die vorgeladenen Routen auf
+ * die Faktor- und Makro-Seiten; Cockpit und Journal gibt es hier nicht mehr.
  */
 
 const GVA_API = (process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com").replace(
@@ -24,17 +27,19 @@ const WARM_URLS = [
   "/api/ml/season",
 ];
 
-// Nur erreichbare Routen: /ml/fundamental-track, /cot/intelligence und
-// /ml/season sind über `lib/nav/hidden.ts` gesperrt — sie zu prefetchen hiesse,
-// einen Redirect auf den Launcher vorzuladen.
-const PREFETCH_ROUTES = ["/cockpit", "/ml/ranking", "/journal", "/journal/outlook"];
+const PREFETCH_ROUTES = [
+  "/ml/engine-log",
+  "/ml/factor-lab",
+  "/ml/fundamental-track",
+  "/makro/terminal",
+];
 
 export default function Prefetcher() {
   const router = useRouter();
 
   useEffect(() => {
-    if (sessionStorage.getItem("gva-warmup-done")) return;
-    sessionStorage.setItem("gva-warmup-done", "1");
+    if (sessionStorage.getItem("labor-warmup-done")) return;
+    sessionStorage.setItem("labor-warmup-done", "1");
 
     for (const url of WARM_URLS) {
       fetch(url, { cache: "no-store" }).catch(() => {});

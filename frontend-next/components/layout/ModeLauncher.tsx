@@ -4,35 +4,20 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { MODES, type AppMode } from "./nav";
 import { createBrowserSupabase } from "@/lib/supabase/client";
-import { fetchScreener } from "@/lib/gva/api";
-import { loadSignals } from "@/lib/journal/signals";
-import { loadGvaOutlooks, loadOpenManualOutlooks, outlooksBySignal } from "@/lib/journal/outlooks";
-import { countTradesWithoutAdherence } from "@/lib/journal/trades";
-import { assembleLanes } from "@/lib/cockpit/board";
 
 /**
- * Startseite: „was mache ich heute?"
+ * Startseite des Labors: „woran arbeite ich gerade?"
  *
- * Die Sidebar zeigte ~20 Einträge gleichzeitig und stellte damit bei jedem
- * Seitenaufruf dieselbe Frage neu. Hier wird sie einmal beantwortet — als
- * nummerierte Liste, nicht als Kachel-Raster: fünf Zeilen liest man von oben
- * nach unten, fünf Kacheln muss man absuchen.
+ * Früher standen hier fünf Modi mit vier Zählern, von denen drei aus dem
+ * Journal und dem Cockpit kamen — offene Hits, unbewertete Trades, offene
+ * Replay-Sessions. Diese Bereiche liegen seit dem 13.08.2026 in KerimOS
+ * (siehe ../../TRADING-UMBAU.md); übrig bleibt der eine Zähler, der zum Labor
+ * gehört: wann die Engine zuletzt gerechnet hat.
  *
- * **Nichts darf den Launcher blockieren.** Jede Zahl kommt aus einem eigenen,
- * einzeln abgesicherten Fetch; scheitert einer, fehlt genau sein Zähler und der
- * Rest ist sofort bedienbar. Das Render-Backend schläft nach 15 min ein — die
- * Liste wartet nie darauf.
+ * **Nichts darf den Launcher blockieren.** Die Nacht-Angabe kommt bereits
+ * fertig vom Server, der Rest ist ein einzelner, abgesicherter Aufruf für den
+ * Vornamen. Das Render-Backend wird hier gar nicht mehr gefragt.
  */
-
-const GVA_API = (
-  process.env.NEXT_PUBLIC_GVA_API_URL || "https://gva-screener.onrender.com"
-).replace(/\/+$/, "");
-
-interface Badges {
-  offeneHits: number | null;
-  ohneAdherence: number | null;
-  offeneReplays: number | null;
-}
 
 /** Zähler rechts in der Zeile. `tone` trägt die Dringlichkeit, nicht die Zahl. */
 interface Zaehler {
@@ -92,11 +77,6 @@ export default function ModeLauncher({
   nachtIstNeu: boolean;
 }) {
   const [vorname, setVorname] = useState("");
-  const [badges, setBadges] = useState<Badges>({
-    offeneHits: null,
-    ohneAdherence: null,
-    offeneReplays: null,
-  });
   const aliveRef = useRef(true);
 
   useEffect(() => {
@@ -109,37 +89,6 @@ export default function ModeLauncher({
         user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0];
       if (name) setVorname(String(name).split(" ")[0]);
     });
-
-    // Offene Hits: dieselben Loader und dieselbe Lane-Assembly wie im Cockpit —
-    // der Launcher darf keine eigene Vorstellung davon haben, was ein offenes
-    // Setup ist. Der Scanner ist optional.
-    Promise.all([
-      fetchScreener().then((s) => s.data).catch(() => []),
-      loadSignals("new").catch(() => []),
-      loadSignals("watchlist").catch(() => []),
-      loadGvaOutlooks().catch(() => []),
-      loadOpenManualOutlooks().catch(() => []),
-    ])
-      .then(([scanner, neu, watch, gva, manuell]) => {
-        if (!aliveRef.current) return;
-        const lanes = assembleLanes(scanner, [...neu, ...watch], {}, outlooksBySignal(gva), manuell);
-        setBadges((b) => ({ ...b, offeneHits: lanes.getroffen.length }));
-      })
-      .catch(() => {});
-
-    countTradesWithoutAdherence()
-      .then((n) => aliveRef.current && setBadges((b) => ({ ...b, ohneAdherence: n })))
-      .catch(() => {});
-
-    // Replay-Sessions liegen im FastAPI-Backend (Render). Beim Kaltstart kann
-    // das lange dauern — deshalb strikt nebenläufig und ohne Fehlerpfad.
-    fetch(`${GVA_API}/replay/sessions`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { status?: string }[]) => {
-        if (!aliveRef.current || !Array.isArray(rows)) return;
-        setBadges((b) => ({ ...b, offeneReplays: rows.filter((s) => s.status !== "done").length }));
-      })
-      .catch(() => {});
 
     return () => {
       aliveRef.current = false;
@@ -155,26 +104,8 @@ export default function ModeLauncher({
       }
     : null;
 
-  const zaehlerFor = (mode: AppMode): Zaehler | null => {
-    switch (mode.badge) {
-      case "offeneHits":
-        return badges.offeneHits
-          ? { text: `${badges.offeneHits} Hits`, tone: "text-up" }
-          : null;
-      case "ohneAdherence":
-        return badges.ohneAdherence
-          ? { text: `${badges.ohneAdherence} offen`, tone: "text-warn" }
-          : null;
-      case "offeneReplays":
-        return badges.offeneReplays
-          ? { text: `${badges.offeneReplays} offen`, tone: "text-muted" }
-          : null;
-      case "letzteNacht":
-        return nachtZaehler;
-      default:
-        return null;
-    }
-  };
+  const zaehlerFor = (mode: AppMode): Zaehler | null =>
+    mode.badge === "letzteNacht" ? nachtZaehler : null;
 
   return (
     <div className="flex flex-col items-center px-6 py-10 text-center anim-fade-in">
@@ -185,8 +116,9 @@ export default function ModeLauncher({
         {begruessung}
         {vorname ? `, ${vorname}.` : "."}
       </h1>
-      <p className="text-[14.5px] text-muted mb-12">
-        Fünf Modi, ein Fokus pro Klick. Wähle, was heute zählt.
+      <p className="text-[14.5px] text-muted mb-12 max-w-[480px]">
+        Labor für Machine Learning, Quant-Auswertung und Fundamentaldaten.
+        Gehandelt wird nebenan in KerimOS — hier wird gemessen.
       </p>
 
       <div className="w-full max-w-[640px] text-left">
@@ -200,6 +132,13 @@ export default function ModeLauncher({
           />
         ))}
       </div>
+
+      <a
+        href="https://kerimos.vercel.app/trading"
+        className="mt-10 text-[12.5px] text-faint hover:text-muted transition-colors"
+      >
+        → Zum Trading in KerimOS
+      </a>
     </div>
   );
 }

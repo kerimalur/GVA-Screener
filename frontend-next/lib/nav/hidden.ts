@@ -1,34 +1,28 @@
 /**
  * Hart gesperrte Bereiche — EINE Quelle für Sperre und Navigation.
  *
- * Vorher stand die Liste nur in `proxy.ts`. Ein Nav-Eintrag konnte damit auf
- * eine Route zeigen, die der Proxy sofort wieder wegredirectet — sichtbarer
- * Tab, der ins Leere führt. Jetzt lesen beide Seiten dieselbe Liste:
- * `proxy.ts` erzwingt sie, `components/layout/nav.ts` filtert die Tabs damit.
+ * `proxy.ts` erzwingt die Liste, `components/layout/nav.ts` filtert die Tabs
+ * damit. So kann kein sichtbarer Tab auf eine Route zeigen, die der Proxy
+ * sofort wieder wegredirectet.
  *
- * Code und Seiten bleiben im Projekt. Wieder aktivieren = Pfad hier streichen
- * und den Tab in `nav.ts` ergänzen.
+ * SEIT DEM UMBAU ZUM LABOR (13.08.2026) IST DIE LISTE LEER.
+ *
+ * Sie enthielt früher `/weekly`, `/cot`, `/ml/season`, `/ml/fundamental-track`,
+ * `/ml/setup-finder`, `/ml/modell`, `/ml/training` und `/ml` — also
+ * ausgerechnet die Seiten, die den fundamentalen und quantitativen Teil
+ * ausmachen. Damals waren sie im Weg, weil die Anwendung dem täglichen
+ * Traden dienen sollte. Jetzt sind sie der Inhalt.
+ *
+ * Der Mechanismus bleibt bestehen: Eine Route wieder sperren heisst, ihren
+ * Pfad hier einzutragen — Navigation und Proxy ziehen von selbst nach.
  */
 
-export const HIDDEN_PREFIXES = [
-  "/weekly",
-  "/cot",
-  "/ml/season",
-  "/ml/fundamental-track",
-  "/ml/setup-finder",
-  "/ml/modell",
-  "/ml/training",
-  "/ml/labor",
-] as const;
+export const HIDDEN_PREFIXES: readonly string[] = [];
 
-/**
- * Exakt gesperrt, ohne Unterseiten: "/ml" ist der Daten-Check.
- * `/ml/ranking`, `/ml/factor-lab`, `/ml/engine-log`, `/ml/replay` bleiben
- * erreichbar — deshalb hier kein Prefix-Match.
- */
-export const HIDDEN_EXACT = ["/ml"] as const;
+/** Exakt gesperrt, ohne Unterseiten. Ebenfalls leer. */
+export const HIDDEN_EXACT: readonly string[] = [];
 
 export function isHiddenRoute(pathname: string): boolean {
-  if ((HIDDEN_EXACT as readonly string[]).includes(pathname)) return true;
+  if (HIDDEN_EXACT.includes(pathname)) return true;
   return HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

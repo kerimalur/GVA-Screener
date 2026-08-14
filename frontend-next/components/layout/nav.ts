@@ -1,15 +1,28 @@
 /**
- * Navigations-Architektur: fünf Modi statt einer Sidebar mit ~20 Einträgen.
+ * Navigations-Architektur des Labors.
  *
- * Die Sidebar zeigte alles gleichzeitig — sechs Gruppen, von überall aus
- * erreichbar. Das ist keine Navigation, sondern eine Auswahl, und sie musste
- * bei jedem Seitenaufruf neu getroffen werden. Jetzt beantwortet der Launcher
- * einmal die Frage „was mache ich heute?"; innerhalb eines Modus sind nur noch
- * dessen eigene Seiten sichtbar.
+ * HISTORIE (13.08.2026): Diese Anwendung war zwei Jahre lang ein
+ * Trading-Frontend — Scanner, Cockpit, Journal, Backtest, Makro-Terminal,
+ * ML-Engine, alles in einem. Genau darin lag das Problem: Entscheiden und
+ * Forschen sind zwei verschiedene Tätigkeiten mit verschiedenen Rhythmen. Wer
+ * morgens einen Trade sucht, will keine Konfidenzintervalle sehen; wer eine
+ * Hypothese prüft, will nicht von einem blinkenden Kurs abgelenkt werden.
  *
- * Keine Route wurde gelöscht oder umbenannt — es ändert sich nur, wie man
- * hinkommt. Gesperrte Routen (`lib/nav/hidden.ts`) werden hier herausgefiltert,
- * damit kein Tab auf etwas zeigt, das der Proxy sofort wegredirectet.
+ * Deshalb ist alles Entscheiden nach KerimOS gewandert (Cockpit, Ranking,
+ * Radar, Heatmap, Journal, Backtest — siehe ../../TRADING-UMBAU.md), und was
+ * hier bleibt, ist ausschliesslich **Labor**: Machine Learning, quantitative
+ * Auswertung und Fundamentaldaten.
+ *
+ * Die drei Modi folgen der Frage, die man gerade hat:
+ *
+ *   Modelle   — taugt das Modell etwas?      (Suche, Holdout, Baseline)
+ *   Faktoren  — welcher Faktor trägt?        (Einzelfaktor gegen Markt)
+ *   Märkte    — wie ist die Lage überhaupt?  (Makro, Zinsen, COT, Termine)
+ *
+ * Gesperrte Routen (`lib/nav/hidden.ts`) werden hier herausgefiltert. Seit dem
+ * Umbau ist die Liste leer — was früher gesperrt war (Saisonalität,
+ * Fundamental-Track, Setup-Finder, COT, Weekly), ist genau der Inhalt, um den
+ * es jetzt geht.
  */
 
 import { isHiddenRoute } from "@/lib/nav/hidden";
@@ -19,12 +32,21 @@ export interface NavItem {
   label: string;
   icon: string;
   requiresAdmin?: boolean;
+  /**
+   * Nur die Route selbst markieren, keine Unterseiten.
+   *
+   * Nötig für Tabs, deren Pfad Präfix anderer Routen ist: "/ml" ist die
+   * Datenlage, aber "/ml/ranking" und "/ml/factor-lab" sind eigene Seiten.
+   * Ohne dieses Flag würde "/ml" jede unbekannte "/ml/…"-Route einsammeln und
+   * die Kopfzeile behauptete, man sei auf der Datenlage — auch auf einer 404.
+   */
+  exact?: boolean;
 }
 
-export type ModeKey = "trades" | "journal" | "backtest" | "labor";
+export type ModeKey = "modelle" | "faktoren" | "maerkte";
 
 /** Welcher Zähler auf der Modus-Kachel steht. `null` = kein Badge. */
-export type ModeBadge = "offeneHits" | "ohneAdherence" | "offeneReplays" | "letzteNacht";
+export type ModeBadge = "letzteNacht";
 
 export interface AppMode {
   key: ModeKey;
@@ -40,79 +62,53 @@ export interface AppMode {
 
 /** Startseite mit den Modus-Kacheln. Immer erreichbar, nie automatisch übersprungen. */
 export const LAUNCHER_HREF = "/";
-export const LAUNCHER_LABEL = "Übersicht";
+export const LAUNCHER_LABEL = "Labor";
 
 const RAW_MODES: AppMode[] = [
   {
-    key: "trades",
-    label: "Trades finden",
-    icon: "ph-crosshair",
-    base: "/cockpit",
-    summary: "Cockpit · Währungs-Ranking · Radar · Heatmap",
-    badge: "offeneHits",
-    tabs: [
-      { href: "/cockpit", label: "Cockpit", icon: "ph-crosshair" },
-      { href: "/ml/ranking", label: "Währungs-Ranking", icon: "ph-ranking" },
-      { href: "/scanner/radar", label: "Visuelles Radar", icon: "ph-radar", requiresAdmin: true },
-      { href: "/scanner/heatmap", label: "Heatmap 28", icon: "ph-grid-nine", requiresAdmin: true },
-    ],
-  },
-  {
-    key: "journal",
-    label: "Journalieren",
-    icon: "ph-notebook",
-    base: "/journal/dashboard",
-    summary: "Dashboard · Trades · Equity · Outlook · Kalender · Rückblick · Strategien",
-    badge: "ohneAdherence",
-    tabs: [
-      { href: "/journal/dashboard", label: "Dashboard", icon: "ph-squares-four" },
-      { href: "/journal", label: "Trades", icon: "ph-notebook" },
-      { href: "/journal/equity", label: "Equity", icon: "ph-chart-line-up" },
-      // Eigenes Icon: Cockpit (ph-crosshair) = Lebenszyklus & Entscheidung,
-      // Outlook (ph-binoculars) = Detailebene darüber.
-      { href: "/journal/outlook", label: "Outlook", icon: "ph-binoculars" },
-      { href: "/journal/kalender", label: "Trade-Kalender", icon: "ph-calendar-heart" },
-      { href: "/journal/rueckblick", label: "Wochenrückblick", icon: "ph-calendar-check" },
-      // Strategien sitzt hinter Kalender/Rückblick: definierte Setups gehören
-      // zum Journalieren, nicht mehr in einen eigenen System-Modus.
-      { href: "/journal/strategie", label: "Strategien", icon: "ph-strategy" },
-    ],
-  },
-  {
-    key: "backtest",
-    label: "Backtesten",
-    icon: "ph-rewind",
-    base: "/journal/backtest",
-    summary: "Backtest-Lab · Replay (GVA-Hits)",
-    badge: "offeneReplays",
-    tabs: [
-      { href: "/journal/backtest", label: "Backtest-Lab", icon: "ph-flask" },
-      { href: "/ml/replay", label: "Replay (GVA-Hits)", icon: "ph-rewind" },
-    ],
-  },
-  {
-    // Faktor-Detail-Ansichten + Auto-News: erklären das „Warum", sind aber
-    // keine tägliche Entscheidungsquelle. Bewusst ein eigener Modus, damit sie
-    // den täglichen Weg nicht mehr verstellen.
-    key: "labor",
-    label: "Labor",
-    icon: "ph-microscope",
-    base: "/ml/factor-lab",
-    summary: "Factor-Lab · Engine-Log · Macro Terminal · Real Yield · News",
+    key: "modelle",
+    label: "Modelle",
+    icon: "ph-brain",
+    base: "/ml/engine-log",
+    summary: "Engine-Log · Holdout · Modell-Ranking · Training · Datenlage",
     badge: "letzteNacht",
     tabs: [
-      { href: "/ml/factor-lab", label: "Factor-Lab", icon: "ph-flask" },
       { href: "/ml/engine-log", label: "Engine-Log", icon: "ph-list-checks" },
-      { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
-      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
-      { href: "/dashboard", label: "News", icon: "ph-newspaper" },
+      { href: "/ml/ranking", label: "Modell-Ranking", icon: "ph-ranking" },
+      { href: "/ml/training", label: "Training", icon: "ph-graduation-cap" },
+      { href: "/ml/modell", label: "Anleitung", icon: "ph-book-open" },
+      { href: "/ml", label: "Datenlage", icon: "ph-database", exact: true },
     ],
   },
-  // Kein „System"-Modus mehr: Strategien liegt jetzt im Journalieren-Modus,
-  // Einstellungen und Leitfaden hängen am Avatar-Menü der Kopfzeile
-  // (components/layout/ModeChrome.tsx). Beide Routen bleiben unverändert
-  // erreichbar, nur ohne eigenen Modus-Tab — modeForPath() liefert für sie
-  // `null`, die Kopfzeile rendert dort keine Tab-Leiste.
+  {
+    key: "faktoren",
+    label: "Faktoren",
+    icon: "ph-flask",
+    base: "/ml/factor-lab",
+    summary: "Factor-Lab · Fundamental-Track · Setup-Finder · Saisonalität",
+    badge: null,
+    tabs: [
+      { href: "/ml/factor-lab", label: "Factor-Lab", icon: "ph-flask" },
+      { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
+      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
+      { href: "/ml/season", label: "Saisonalität", icon: "ph-calendar-blank" },
+    ],
+  },
+  {
+    key: "maerkte",
+    label: "Märkte",
+    icon: "ph-globe-hemisphere-west",
+    base: "/makro/terminal",
+    summary: "Macro Terminal · Real Yield · COT · Weekly · Termine",
+    badge: null,
+    tabs: [
+      { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
+      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
+      { href: "/cot/intelligence", label: "COT", icon: "ph-users-three" },
+      { href: "/weekly", label: "Weekly", icon: "ph-binoculars" },
+      { href: "/dashboard", label: "Termine", icon: "ph-newspaper" },
+    ],
+  },
 ];
 
 /**
@@ -131,15 +127,17 @@ export function modeByKey(key: string): AppMode | null {
 }
 
 /**
- * Route → Tab. Es gewinnt der LÄNGSTE passende Tab-Pfad, sonst würde
- * „/journal" (Trades) bei „/journal/backtest" mitleuchten und den falschen
- * Modus aufziehen.
+ * Route → Tab. Es gewinnt der LÄNGSTE passende Tab-Pfad, sonst würde „/ml"
+ * (Datenlage) bei „/ml/ranking" mitleuchten und den falschen Tab markieren.
  */
 function matchTab(pathname: string): { mode: AppMode; tab: NavItem } | null {
   let treffer: { mode: AppMode; tab: NavItem } | null = null;
   for (const mode of MODES) {
     for (const tab of mode.tabs) {
-      if (pathname === tab.href || pathname.startsWith(tab.href + "/")) {
+      const passt = tab.exact
+        ? pathname === tab.href
+        : pathname === tab.href || pathname.startsWith(tab.href + "/");
+      if (passt) {
         if (!treffer || tab.href.length > treffer.tab.href.length) {
           treffer = { mode, tab };
         }
@@ -151,7 +149,7 @@ function matchTab(pathname: string): { mode: AppMode; tab: NavItem } | null {
 
 /**
  * Modus zu einer Route. Damit rendert auch der direkte Aufruf einer Unterseite
- * (z.B. `/journal/equity` aus einem Lesezeichen) den richtigen Modus mit
+ * (z.B. `/makro/real-yield` aus einem Lesezeichen) den richtigen Modus mit
  * korrekt markiertem Tab. `null` = kein Modus (Launcher oder unbekannte Route).
  */
 export function modeForPath(pathname: string): AppMode | null {
@@ -171,33 +169,21 @@ export function activeTabHref(pathname: string): string | null {
  * knapp wäre, plus die Routen ohne eigenen Tab.
  */
 export const PAGE_TITLES: Record<string, string> = {
-  "/cockpit": "Cockpit — Trades der Woche",
-  "/dashboard": "News — Wirtschaftskalender",
-  "/weekly": "Weekly Outlook — Sonntags-Cockpit",
-  "/cot/intelligence": "COT Intelligence — Institutionelle Positionierung",
+  "/ml": "Datenlage — reicht das Material für ein Modell?",
+  "/ml/engine-log": "Engine-Log — Suche, Holdout und Baseline",
+  "/ml/ranking": "Modell-Ranking — Wochenausgabe der Engine",
+  "/ml/training": "Training — Modell und Vorhersagen",
+  "/ml/modell": "Modell — Anleitung und Annahmen",
+  "/ml/factor-lab": "Factor-Lab — welcher Faktor trifft?",
+  "/ml/fundamental-track": "Fundamental-Track — Q-Score gegen Markt",
+  "/ml/setup-finder": "Setup-Finder — Ranking gegen Outlook-Konfluenz",
+  "/ml/season": "Saisonalität — Feature-Explorer",
   "/makro/terminal": "Macro Terminal — G8 Currency Bias",
   "/makro/terminal/vergleich": "Macro Terminal — Währungsvergleich",
-  "/makro/real-yield": "Real Yield — Valuation-Bias (Zins − Inflation)",
-  "/scanner/radar": "Visuelles Radar",
-  "/scanner/heatmap": "Heatmap 28",
-  "/journal": "Trade-Journal",
-  "/journal/dashboard": "Journal-Dashboard",
-  "/journal/equity": "Equity-Kurve",
-  "/journal/outlook": "Outlook — Details & eigene Thesen",
-  "/journal/kalender": "Trade-Kalender",
-  "/journal/rueckblick": "Wochenrückblick",
-  "/journal/strategie": "Strategie-Builder",
-  "/journal/backtest": "Backtest-Lab",
-  "/ml": "Machine Learning — Daten-Check",
-  "/ml/training": "ML-Training — Modell & Predictions",
-  "/ml/ranking": "Währungs-Ranking — ML-Engine",
-  "/ml/fundamental-track": "Fundamental-Track — Q-Score vs. Markt",
-  "/ml/setup-finder": "Setup-Finder — Ranking vs. Outlook-Konfluenz",
-  "/ml/factor-lab": "Factor-Lab — welcher Faktor trifft?",
-  "/ml/replay": "Backtest-Replay — GVA-Hits bewerten",
-  "/ml/engine-log": "Engine-Log — Nächtliche Experiment-Suche",
-  "/ml/modell": "ML-Modell — Anleitung",
-  "/ml/season": "Saisonalität 2.0 — Feature-Explorer",
+  "/makro/real-yield": "Real Yield — Zins minus Inflation",
+  "/cot/intelligence": "COT — institutionelle Positionierung",
+  "/weekly": "Weekly — Wochenlage je Paar",
+  "/dashboard": "Termine — Wirtschaftskalender",
   "/leitfaden": "Leitfaden",
   "/einstellungen": "Einstellungen",
 };

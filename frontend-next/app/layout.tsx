@@ -16,8 +16,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FX Terminal — Swing-Trading Suite",
-  description: "Fundamentales Swing-Trading-Terminal: COT, Makro, Sentiment, Intermarket, Saisonalitat",
+  title: "GVA Labor — Modelle, Faktoren, Maerkte",
+  description:
+    "Quantitatives Labor: ML-Engine mit Holdout-Validierung, Faktor-Auswertung " +
+    "und Fundamentaldaten (COT, Makro, Realzins). Gehandelt wird in KerimOS.",
 };
 
 // Explizit, damit auf dem Handy in Gerätebreite (nicht ~980px Desktop) gerendert

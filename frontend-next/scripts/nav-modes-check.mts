@@ -3,9 +3,10 @@
 // Deckt ab:
 //   - jede Route findet ihren Modus und den richtigen aktiven Tab, auch beim
 //     direkten URL-Aufruf einer Unterseite
-//   - der längste Treffer gewinnt (sonst zieht "/journal" den falschen Modus
-//     für "/journal/backtest" auf)
+//   - der längste Treffer gewinnt (sonst zieht "/ml" den falschen Tab
+//     für "/ml/ranking" auf)
 //   - gesperrte Routen (proxy.ts) erscheinen in KEINER Tab-Leiste
+//   - die Routen, die es hier nicht mehr geben darf, finden keinen Modus
 import { MODES, modeForPath, activeTabHref, LAUNCHER_HREF } from "../components/layout/nav";
 import { isHiddenRoute, HIDDEN_PREFIXES } from "../lib/nav/hidden";
 
@@ -22,52 +23,60 @@ const modus = (p: string) => modeForPath(p)?.key ?? null;
 
 // --- Route -> Modus ----------------------------------------------------------
 check("Launcher gehört zu keinem Modus", modus(LAUNCHER_HREF), null);
-check("/cockpit", modus("/cockpit"), "trades");
-check("/ml/ranking", modus("/ml/ranking"), "trades");
-check("/scanner/heatmap", modus("/scanner/heatmap"), "trades");
-check("/journal (Trades)", modus("/journal"), "journal");
-check("/journal/equity per Direktaufruf", modus("/journal/equity"), "journal");
-check("/journal/outlook", modus("/journal/outlook"), "journal");
-check("/ml/replay", modus("/ml/replay"), "backtest");
-check("/makro/real-yield", modus("/makro/real-yield"), "labor");
-check("/dashboard (News)", modus("/dashboard"), "labor");
+check("/ml/engine-log", modus("/ml/engine-log"), "modelle");
+check("/ml/ranking", modus("/ml/ranking"), "modelle");
+check("/ml (Datenlage)", modus("/ml"), "modelle");
+check("/ml/factor-lab", modus("/ml/factor-lab"), "faktoren");
+check("/ml/fundamental-track", modus("/ml/fundamental-track"), "faktoren");
+check("/ml/season", modus("/ml/season"), "faktoren");
+check("/makro/terminal", modus("/makro/terminal"), "maerkte");
+check("/makro/real-yield", modus("/makro/real-yield"), "maerkte");
+check("/cot/intelligence", modus("/cot/intelligence"), "maerkte");
+check("/weekly", modus("/weekly"), "maerkte");
+check("/dashboard (Termine)", modus("/dashboard"), "maerkte");
 // Einstellungen und Leitfaden hängen am Avatar-Menü, gehören zu keinem Modus.
 check("/einstellungen", modus("/einstellungen"), null);
 check("/leitfaden", modus("/leitfaden"), null);
 
-// Längster Treffer gewinnt: sonst schluckt "/journal" beide Unterseiten.
-check("/journal/backtest gehört zu Backtesten", modus("/journal/backtest"), "backtest");
-check("/journal/strategie gehört zu Journalieren", modus("/journal/strategie"), "journal");
-check("aktiver Tab /journal/strategie", activeTabHref("/journal/strategie"), "/journal/strategie");
-
-// --- Aktiver Tab -------------------------------------------------------------
-check("aktiver Tab /journal/equity", activeTabHref("/journal/equity"), "/journal/equity");
-check("aktiver Tab /journal/backtest", activeTabHref("/journal/backtest"), "/journal/backtest");
-check("aktiver Tab /journal", activeTabHref("/journal"), "/journal");
+// Längster Treffer gewinnt: "/ml" darf "/ml/ranking" nicht schlucken.
+check("aktiver Tab /ml/ranking", activeTabHref("/ml/ranking"), "/ml/ranking");
+check("aktiver Tab /ml", activeTabHref("/ml"), "/ml");
 check(
   "Unterseite ohne eigenen Tab erbt den Elterntab",
   activeTabHref("/makro/terminal/vergleich"),
   "/makro/terminal",
 );
+check(
+  "COT-Detailseite erbt den Elterntab",
+  activeTabHref("/cot/intelligence/EUR"),
+  "/cot/intelligence",
+);
 check("Launcher hat keinen aktiven Tab", activeTabHref(LAUNCHER_HREF), null);
 check("unbekannte Route hat keinen Modus", modus("/gibtesnicht"), null);
+
+// --- Was hier nicht mehr existiert ------------------------------------------
+// Diese Bereiche liegen seit 13.08.2026 in KerimOS. Ein Modus-Treffer wäre ein
+// Zeichen, dass beim Umbau ein Tab stehen geblieben ist.
+for (const weg of ["/cockpit", "/journal", "/journal/equity", "/journal/backtest",
+                   "/scanner/radar", "/scanner/heatmap", "/ml/replay"]) {
+  check(`${weg} gibt es hier nicht mehr`, modus(weg), null);
+}
 
 // --- Gesperrte Routen tauchen nirgends als Tab auf ---------------------------
 const alleTabs = MODES.flatMap((m) => m.tabs.map((t) => t.href));
 check("kein Tab zeigt auf eine gesperrte Route", alleTabs.filter(isHiddenRoute), []);
-check(
-  "gesperrte Prefixe finden keinen Modus",
-  HIDDEN_PREFIXES.map(modus).filter(Boolean),
-  [],
-);
-check("exakt /ml ist gesperrt", isHiddenRoute("/ml"), true);
-check("aber /ml/ranking nicht", isHiddenRoute("/ml/ranking"), false);
+check("Sperrliste ist leer", [...HIDDEN_PREFIXES], []);
 
 // --- Struktur ----------------------------------------------------------------
-check("vier Modi", MODES.map((m) => m.key), ["trades", "journal", "backtest", "labor"]);
+check("drei Modi", MODES.map((m) => m.key), ["modelle", "faktoren", "maerkte"]);
 check(
   "jede Basisroute ist selbst ein Tab des Modus",
   MODES.filter((m) => !m.tabs.some((t) => t.href === m.base)).map((m) => m.key),
+  [],
+);
+check(
+  "keine doppelten Tab-Pfade über alle Modi",
+  alleTabs.filter((h, i) => alleTabs.indexOf(h) !== i),
   [],
 );
 

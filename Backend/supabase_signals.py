@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 
 import requests
 
-_USER_ID_CACHE = {"id": None, "tried": False}
+_USER_ID_CACHE = {"id": None, "tried": False, "mehrdeutig": False}
 _LOCK = threading.Lock()
 
 # Status-Mapping Signal -> Lebenszyklus. Bewusst hier, damit Backend und
@@ -76,7 +76,18 @@ def _headers(key: str, extra: dict | None = None) -> dict:
 
 
 def _resolve_user_id(url: str, key: str):
-    """Kerims auth.users-ID: env-Override oder erster User via Admin-API."""
+    """Kerims auth.users-ID: env-Override oder — nur bei GENAU EINEM Konto —
+    automatisch via Admin-API.
+
+    Frueher wurde ohne SIGNALS_USER_ID einfach der erste Nutzer genommen. Bei
+    mehreren Konten im Projekt ist das ein Ratespiel: Die Reihenfolge der
+    Admin-API ist nicht garantiert, und Signale landeten so unter einem
+    fremden Nutzer. Geschrieben wurde korrekt, sichtbar war nichts — das
+    Frontend filtert hart auf die eingeloggte user_id.
+
+    Deshalb: bei mehr als einem Konto keine Wahl treffen, sondern laut
+    abbrechen. `diagnose()` gibt den Grund an /api/health weiter.
+    """
     env_id = os.getenv("SIGNALS_USER_ID")
     if env_id:
         return env_id
@@ -85,15 +96,22 @@ def _resolve_user_id(url: str, key: str):
             return _USER_ID_CACHE["id"]
         _USER_ID_CACHE["tried"] = True
         try:
+            # per_page=2 statt 1: nur so laesst sich "genau einer" von
+            # "mehrere" unterscheiden.
             r = requests.get(
                 f"{url}/auth/v1/admin/users",
-                params={"page": 1, "per_page": 1},
+                params={"page": 1, "per_page": 2},
                 headers={"apikey": key, "Authorization": f"Bearer {key}"},
                 timeout=10,
             )
             r.raise_for_status()
             users = r.json().get("users", [])
-            if users:
+            if len(users) > 1:
+                _USER_ID_CACHE["mehrdeutig"] = True
+                print("signals: mehrere Konten im Projekt — SIGNALS_USER_ID "
+                      "setzen. Ohne sie wird nichts geschrieben, damit Signale "
+                      "nicht unter einem fremden Nutzer landen.")
+            elif users:
                 _USER_ID_CACHE["id"] = users[0]["id"]
         except Exception as e:
             print(f"signals: user-Lookup fehlgeschlagen: {e}")
@@ -131,6 +149,10 @@ def diagnose() -> tuple[bool, str]:
         return False, ("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY fehlen — "
                        "Signale und Outlooks werden nicht geschrieben")
     if not _resolve_user_id(url, key):
+        if _USER_ID_CACHE.get("mehrdeutig"):
+            return False, ("mehrere Konten im Projekt — SIGNALS_USER_ID auf die "
+                           "eigene auth.users-ID setzen, sonst landen Signale "
+                           "unter einem fremden Nutzer und bleiben unsichtbar")
         return False, ("keine user_id: SIGNALS_USER_ID setzen oder einmalig "
                        "in der App einloggen, damit der Lookup greift")
     return True, "ok"

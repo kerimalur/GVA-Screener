@@ -107,7 +107,7 @@ export function derivePairIdeas(rows: RankingRow[]): PairIdeas {
 }
 
 // Rankings ändern sich wöchentlich (Sa-Job) — 5 min Server-Cache spart die
-// ~7 Supabase-Roundtrips pro Seitenaufruf (Ranking-Seite + Dashboard-WeekPlan).
+// ~7 Supabase-Roundtrips pro Seitenaufruf der Modell-Ranking-Seite.
 // v2: Rückgabe um signalStartByPair erweitert — alter Cache-Eintrag hätte es nicht.
 export const loadRankingData = unstable_cache(loadRankingDataUncached, ["ml-ranking-v2"], {
   revalidate: 300,

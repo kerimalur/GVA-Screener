@@ -3,7 +3,53 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-07-25
+Stand: 2026-08-13
+
+## Backtest komplett entfernt — Screener wird Labor (2026-08-13)
+
+**Entscheidung (Kerim).** Der Screener gibt Backtest, Journal und
+Trades-finden an KerimOS ab und behaelt nur noch das **Labor**: Machine
+Learning und Fundamentaldaten. Der vollstaendige Plan steht in
+`../TRADING-UMBAU.md` — dort auch das KerimOS-Audit.
+
+### Etappe 0 erledigt: Backtest raus (Lab + Replay)
+Alles Entfernte liegt unter `_to_delete/` und kann nach einem Blick geloescht
+werden — nichts wurde direkt vernichtet.
+
+- **Frontend geloescht:** `app/(app)/journal/backtest/`, `app/(app)/ml/replay/`,
+  `components/journal/BacktestRoom|BacktestView|BacktestAnalysis.tsx`,
+  `components/ml/ReplayExplorer.tsx`, `lib/journal/backtests.ts`,
+  `lib/journal/stats.ts.bak`
+- **Modus `backtest`** aus `components/layout/nav.ts` entfernt, dazu das Badge
+  `offeneReplays` und die zugehoerigen `PAGE_TITLES`. Es gibt jetzt **drei**
+  Modi: Trades finden · Journalieren · Labor.
+- **`ModeLauncher.tsx`**: Replay-Zaehler und der `/replay/sessions`-Fetch raus.
+  Der Launcher spricht damit beim Start nicht mehr mit Render.
+- **`SettingsView.tsx`**: `loadBacktests()` aus dem JSON-Export entfernt
+  (Export-Version 2.0 -> 2.1). Die Untertitel der Tag-Listen sprechen nicht
+  mehr vom "Backtest-Raum".
+- **Backend `replay/routes.py`** auf zwei Endpunkte reduziert:
+  `/replay/fundamental-track` und `/replay/rankings`. Weg sind `/hits`,
+  `/lines`, `/blocks`, `/evaluate`, `/trades`, `/stats` und alle
+  `/sessions`-Routen; `replay/migrations_sessions.sql` liegt in `_to_delete/`.
+- **Ordnername `replay/` bleibt** — bewusst. `replay/gva_history.py` ist die
+  **einzige** Hit-Erkennung des Projekts (`late_hits.py` importiert
+  `collect_hits`/`refine_hit_day`), `replay/fundamentals.py` liefert das
+  Q-Score-Panel fuer den Fundamental-Track. Umbenennen waere Risiko ohne
+  Gegenwert; `main.py` erklaert das im Kommentar an der Router-Registrierung.
+- **Nicht angefasst:** `lib/ml/backtest.ts` und `components/ml/BacktestPanel.tsx`
+  — das ist der *Regel*-Backtest des Setup-Finders und gehoert zum Labor, nicht
+  zum Trade-Backtest.
+
+**Kontrollen:** `scripts/nav-modes-check.mts` angepasst und gruen (24 Werte,
+"drei Modi"). `tsc --noEmit` meldet nur noch die beiden veralteten Eintraege in
+`.next/types/validator.ts` — die verschwinden beim naechsten `next build`.
+
+### DB-Aufraeumen (offen, manuell)
+Die Tabellen **`backtest_replay`** und **`replay_sessions`** werden von keinem
+Code mehr gelesen oder beschrieben. Nach einer Sicherung koennen sie in Supabase
+geloescht werden.
+
 
 ## Holdout-Validierung + Baseline sichtbar + Nightly gedrosselt (2026-07-25)
 

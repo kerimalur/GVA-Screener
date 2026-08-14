@@ -5,7 +5,6 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { MODES, activeTabHref, modeForPath, LAUNCHER_HREF } from "./nav";
-import SignalsBadge from "./SignalsBadge";
 import PairSearchBar from "./PairSearchBar";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
@@ -113,12 +112,9 @@ export default function ModeChrome() {
                 }`}
               >
                 <i className={`ph-bold ${m.icon} text-[17px]`} />
-                {/* Unentschiedene GVA-Hits hängen am Cockpit-Modus. */}
-                {m.key === "trades" && (
-                  <span className="absolute -top-1 -right-1">
-                    <SignalsBadge />
-                  </span>
-                )}
+                {/* Kein Signal-Zaehler mehr: offene GVA-Hits entscheidet man
+                    in KerimOS (/trading/cockpit), nicht hier. Das Labor hat
+                    keine Inbox - siehe ../../TRADING-UMBAU.md. */}
               </Link>
             );
           })}

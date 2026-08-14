@@ -3,237 +3,230 @@ import Panel from "@/components/layout/Panel";
 export const dynamic = "force-static";
 
 /**
- * Leitfaden — beschreibt ausschliesslich den heute genutzten Workflow und die
- * aktuell aktiven Begriffe: GVA-Linie als Signal, Cockpit als Handels-Startseite,
- * der eine Status-Lebenszyklus, das Währungs-Ranking als Konfluenz und das feste
- * Trade-Budget. Die früher hier erklärten Einzel-Faktor-Ansichten (COT
- * Intelligence, Retail, Saisonalität 2.0, Intermarket, Weekly Outlook,
- * Setup-Finder) sind in der App ausgeblendet und stehen deshalb bewusst nicht
- * mehr im Leitfaden. Rein statischer Referenz-Text, keine Live-Daten.
+ * Leitfaden des Labors.
+ *
+ * Der alte Leitfaden beschrieb den Handels-Workflow: GVA-Linie als Signal,
+ * Cockpit als Startseite, Lebenszyklus, Trade-Budget. Das liegt seit dem
+ * 13.08.2026 in KerimOS (siehe ../../TRADING-UMBAU.md). Hier steht deshalb,
+ * was das Labor beantwortet — und, mindestens ebenso wichtig, welche Fragen es
+ * ausdrücklich NICHT beantwortet.
+ *
+ * Rein statischer Text, keine Live-Daten.
  */
 
-function Read({ children }: { children: React.ReactNode }) {
+function Frage({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded border border-border bg-surface2 p-3 text-[12.5px] leading-relaxed">
-      <div className="text-[9px] uppercase tracking-widest text-accent mb-1.5">So liest du das</div>
+      <div className="text-[9px] uppercase tracking-widest text-accent mb-1.5">
+        Welche Frage beantwortet das
+      </div>
       {children}
     </div>
   );
 }
 
-function Act({ children }: { children: React.ReactNode }) {
+function Falle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-up/30 bg-up/5 p-3 text-[12.5px] leading-relaxed">
-      <div className="text-[9px] uppercase tracking-widest text-up mb-1.5">So handelst du danach</div>
+    <div className="rounded border border-down/30 bg-down/5 p-3 text-[12.5px] leading-relaxed">
+      <div className="text-[9px] uppercase tracking-widest text-down mb-1.5">
+        Wo man sich täuscht
+      </div>
       {children}
     </div>
   );
 }
 
-function Threshold({ v, children }: { v: string; children: React.ReactNode }) {
+function Begriff({ v, children }: { v: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-2">
-      <span className="font-mono font-bold text-text shrink-0 w-32">{v}</span>
+      <span className="font-mono font-bold text-text shrink-0 w-40">{v}</span>
       <span className="text-muted">{children}</span>
     </li>
   );
 }
 
-export default function Page() {
+export default function LeitfadenSeite() {
   return (
-    <div className="space-y-5 max-w-[1000px] mx-auto">
-
-      {/* 1 — Kern: Was getradet wird */}
+    <div className="space-y-5 max-w-[1100px] mx-auto">
       <Panel
-        title="Was du tradest — GVA"
-        subtitle="Die GVA-Linie ist das Signal. Alles Fundamentale ist Konfluenz, kein Gate."
+        title="Wozu dieses Labor da ist"
+        subtitle="Und wozu ausdrücklich nicht"
       >
-        <div className="space-y-4 text-[13px] leading-relaxed">
-          <p className="text-muted">
-            Der Scanner erkennt das <span className="text-text font-medium">GVA-Kerzenmuster</span> und
-            bildet daraus <span className="text-text font-medium">Linien</span>: eine{" "}
-            <span className="text-down">Short-Linie</span> (Widerstand, oben) und eine{" "}
-            <span className="text-up">Long-Linie</span> (Unterstützung, unten). Berührt der Marktpreis
-            eine Linie, ist das ein <span className="text-warn font-medium">HIT</span> — der einzige
-            eigentliche Trade-Auslöser. Bei einem Live-Hit kommt ein Telegram-Alert und das Pair steht
-            im Cockpit unter „Getroffen“.
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <p>
+            Dieses Labor misst, ob eine Idee trägt. Es sagt <em>nicht</em>, was
+            heute zu tun ist. Entschieden, journaliert und gehandelt wird in
+            KerimOS unter <span className="font-mono text-accent">/trading</span>;
+            hier gibt es kein Cockpit, keine Signal-Inbox und keinen Backtest.
           </p>
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="rounded border border-up/30 bg-up/5 p-3">
-              <div className="text-up font-bold text-[13px] mb-1">Signal = GVA</div>
-              <ul className="text-[12px] text-muted space-y-0.5">
-                <li>GVA-Muster → Linie (Short/Long)</li>
-                <li>Preis berührt Linie → HIT</li>
-                <li>Nur GVA-Setups werden getradet</li>
-              </ul>
-            </div>
-            <div className="rounded border border-border bg-surface2 p-3">
-              <div className="text-text font-bold text-[13px] mb-1">Konfluenz (kein Gate)</div>
-              <ul className="text-[12px] text-muted space-y-0.5">
-                <li>Währungs-Ranking (Stärke-Quintil Q5/Q1)</li>
-                <li>Gibt Rückenwind oder Gegenwind</li>
-                <li>Verbietet nie einen Trade</li>
-              </ul>
-            </div>
-          </div>
+          <p>
+            Die Trennung ist der Punkt. Entscheiden und Forschen haben
+            verschiedene Rhythmen: Wer morgens einen Trade sucht, braucht in
+            zehn Sekunden eine Richtung. Wer prüft, ob ein Faktor wirkt,
+            braucht Konfidenzintervalle und Geduld. Beides auf einer Oberfläche
+            führt dazu, dass das Schnelle das Langsame verdrängt — man klickt
+            auf das blinkende Ding und schaut die Statistik nie an.
+          </p>
+          <Frage>
+            <strong className="text-text">Trägt das, was ich glaube?</strong> Wenn
+            die Antwort „weiss man nicht" lautet, ist das ein Ergebnis und kein
+            Mangel — es spart den nächsten Schritt.
+          </Frage>
         </div>
       </Panel>
 
-      {/* 2 — Workflow */}
-      <Panel
-        title="Dein Workflow — von der Linie zum Trade"
-        subtitle="Übersicht → Cockpit → Entscheiden → Outlook → Journal"
-      >
-        <div className="space-y-4 text-[13px] leading-relaxed">
-          <ol className="space-y-2 text-muted">
+      <Panel title="Modelle" subtitle="Taugt das Modell etwas?">
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <p>
+            Die ML-Engine sucht nächtlich nach Konfigurationen, die die
+            Wochen-Richtung einer Währung besser treffen als der Zufall. Das
+            Ergebnis dieser Suche ist <strong className="text-text">kein
+            Messwert</strong>, sondern ein Maximum aus vielen tausend Ziehungen.
+            Bei genug Versuchen findet man immer etwas, das nach Edge aussieht.
+          </p>
+          <p>
+            Deshalb gibt es die <strong className="text-text">Holdout-Validierung</strong>:
+            ein zurückgehaltener Zeitraum, den die Suche nie gesehen hat, plus
+            eine Baseline zum Vergleich. Der <span className="font-mono">selection_gap</span>{" "}
+            (Suche minus Holdout) beziffert genau, wie stark die Suchmetrik
+            geschönt war.
+          </p>
+          <ul className="space-y-1.5">
+            <Begriff v="Engine-Log">
+              Was die Suche in der Nacht gefunden hat, samt Baseline und
+              Stagnations-Meldung
+            </Begriff>
+            <Begriff v="Holdout">
+              Die ehrliche Zahl. Ein Blick kostet einen Versuch — deshalb der
+              Zähler und die Rückfrage ab Lauf 2
+            </Begriff>
+            <Begriff v="Modell-Ranking">
+              Wochenausgabe der Engine je Währung. Das Quintil (Q1–Q5) sagt, wo
+              der Score in seiner eigenen 156-Wochen-Verteilung steht
+            </Begriff>
+            <Begriff v="Datenlage">
+              Reicht das Material überhaupt? Lücken hier erklären fast jede
+              seltsame Zahl weiter unten
+            </Begriff>
+          </ul>
+          <Falle>
+            <strong className="text-text">Das Quintil ist kein Konfidenzmass.</strong>{" "}
+            Q5 heisst „stark im Vergleich zur eigenen Geschichte", nicht „das
+            Modell ist sich sicher". Und: schliesst das Konfidenzintervall der
+            Differenz zur Baseline die Null ein, gibt es <em>keinen Nachweis</em> —
+            auch wenn die Zahl positiv aussieht.
+          </Falle>
+        </div>
+      </Panel>
+
+      <Panel title="Faktoren" subtitle="Welcher einzelne Faktor trägt?">
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <p>
+            Ein Modell, das aus zwanzig Faktoren einen Score baut, sagt nicht,
+            welcher davon die Arbeit macht. Diese Ansichten nehmen je einen
+            Faktor auseinander und halten ihn gegen den Markt.
+          </p>
+          <ul className="space-y-1.5">
+            <Begriff v="Factor-Lab">
+              Trefferquote je Einzelfaktor über die Historie
+            </Begriff>
+            <Begriff v="Fundamental-Track">
+              Q-Score gegen die tatsächliche 1W-/4W-Bewegung, bis zu zehn Jahre
+              zurück. Die Antwort auf: „Bei diesem Fundamental-Bild ist EURUSD
+              in X % gestiegen"
+            </Begriff>
+            <Begriff v="Setup-Finder">
+              Ranking und Outlook-Konfluenz über alle 28 Paare gleichzeitig
+            </Begriff>
+            <Begriff v="Saisonalität">
+              Kalender-Effekte — der Faktor mit der grössten Verwechslungsgefahr
+            </Begriff>
+          </ul>
+          <Falle>
+            Je mehr Faktoren man einzeln prüft, desto sicherer findet man
+            zufällig einen guten. Wer zwanzig Faktoren testet, hat bei 5 %
+            Irrtumswahrscheinlichkeit im Schnitt einen Treffer, der keiner ist.
+            Ein Fund im Factor-Lab ist eine <em>Hypothese</em> — geprüft ist sie
+            erst im Holdout.
+          </Falle>
+        </div>
+      </Panel>
+
+      <Panel title="Märkte" subtitle="Wie ist die Lage überhaupt?">
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <p>
+            Die Rohdaten hinter den Faktoren, unaggregiert. Nützlich, wenn eine
+            Modellzahl überrascht und man wissen will, woher sie kommt.
+          </p>
+          <ul className="space-y-1.5">
+            <Begriff v="Macro Terminal">
+              Zinsen, Inflation, Arbeitsmarkt je G8-Währung
+            </Begriff>
+            <Begriff v="Real Yield">
+              Nominalzins minus Inflation — der Bewertungs-Bias einer Währung
+            </Begriff>
+            <Begriff v="COT">
+              Wie die grossen Adressen positioniert sind, wöchentlich von der CFTC
+            </Begriff>
+            <Begriff v="Weekly">
+              Wochenlage je Paar, zusammengezogen
+            </Begriff>
+            <Begriff v="Termine">
+              Wirtschaftskalender. Ein Modellfehler an einem NFP-Freitag ist
+              keiner
+            </Begriff>
+          </ul>
+        </div>
+      </Panel>
+
+      <Panel title="Was hier nicht mehr steht" subtitle="Und wo es jetzt liegt">
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <ul className="space-y-1.5">
+            <Begriff v="Cockpit">KerimOS · /trading/cockpit</Begriff>
+            <Begriff v="Trade-Journal">KerimOS · /trading/journal</Begriff>
+            <Begriff v="Equity, Outlook">KerimOS · /trading/journal/…</Begriff>
+            <Begriff v="Backtest">KerimOS · /trading/backtest</Begriff>
+            <Begriff v="Radar, Heatmap">KerimOS · /trading/radar, /trading/heatmap</Begriff>
+            <Begriff v="Replay">
+              entfernt — die Hit-Erkennung läuft weiter im Backend, die manuelle
+              Bewertung nicht mehr
+            </Begriff>
+          </ul>
+          <p>
+            Das Backend bleibt vollständig: GVA-Erkennung, Telegram-Alerts,
+            Makro-Pipeline und die ML-Engine laufen unverändert. Es hat nur
+            einen Konsumenten weniger und einen mehr.
+          </p>
+        </div>
+      </Panel>
+
+      <Panel title="Reihenfolge" subtitle="Was zuerst, was erst danach">
+        <div className="space-y-3 text-[13px] leading-relaxed text-muted">
+          <ol className="space-y-2 list-decimal list-inside">
             <li>
-              <span className="text-text font-medium">1. Übersicht.</span> Die Startseite (das
-              Rauten-Logo oben links) beantwortet „was mache ich heute?“ und zeigt die offenen Zähler
-              je Modus.
+              <strong className="text-text">Datenlage prüfen.</strong> Ohne
+              sauberes Material ist jede Auswertung darunter Rauschen.
             </li>
             <li>
-              <span className="text-text font-medium">2. Cockpit.</span> Deine Handels-Startseite. Jeder
-              Hit landet hier automatisch — kein manuelles Übernehmen nötig. Vier Lanes (siehe
-              Begriffe): <span className="text-text">Nähert sich → Getroffen → Watchlist → In Arbeit</span>.
-              Klick auf eine Karte öffnet die fundamentale Lage (Verdikt, beide Quintile, Linien-Info,
-              High-Impact-Kalender der Woche). Über <span className="font-mono text-accent">+ Setup</span>{" "}
-              erfasst du ein Setup von Hand, das nicht aus einem GVA-Hit stammt.
+              <strong className="text-text">Hypothese im Factor-Lab suchen.</strong>{" "}
+              Hier darf man stöbern — es kostet nichts.
             </li>
             <li>
-              <span className="text-text font-medium">3. Entscheiden.</span> Die Knöpfe sitzen direkt auf
-              der Karte: <span className="text-up">Genommen</span> schreibt einen Trade ins Journal
-              (zählt in die Winrate), <span className="text-text">Beobachten</span> legt das Setup auf die
-              Watchlist, <span className="text-down">Verwerfen</span> schliesst es ab.
+              <strong className="text-text">Im Holdout prüfen.</strong> Einmal.
+              Nicht so lange, bis das Ergebnis passt.
             </li>
             <li>
-              <span className="text-text font-medium">4. Outlook.</span> Detailebene über dem Setup:
-              These, Checkliste, Ziele (Entry/SL/TP). Der Status wandert Beobachtung → Wartend → Aktiv →
-              Ausgeführt/Verworfen.
+              <strong className="text-text">Urteil festhalten.</strong> Trägt es
+              nicht, ist es erledigt — das ist der eigentliche Gewinn: man
+              verbrennt keine Zeit mehr daran.
             </li>
             <li>
-              <span className="text-text font-medium">5. Journal.</span> Genommene Trades laufen ins
-              Journal — Dashboard, Trades, Equity, Trade-Kalender und Strategien liegen im Modus
-              „Journalieren“.
+              <strong className="text-text">Trägt es, in eine Regel übersetzen</strong>{" "}
+              und gegen Spread und Kosten rechnen. Dann erst nach KerimOS.
             </li>
           </ol>
         </div>
       </Panel>
-
-      {/* 3 — Vokabular: der eine Lebenszyklus */}
-      <Panel
-        title="Begriffe — der eine Status-Lebenszyklus"
-        subtitle="Cockpit und Outlook sprechen dieselbe Sprache"
-      >
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="Nähert sich">
-              Preis läuft auf eine Linie zu (≤ 100 Pips), aus dem Live-Scanner. Ephemer — verschwindet
-              von selbst, wird nicht gespeichert.
-            </Threshold>
-            <Threshold v="Getroffen">Linie berührt (frischer HIT), noch nicht entschieden.</Threshold>
-            <Threshold v="Beobachtung">Gesehen, wird beobachtet — noch keine feste Absicht (Lane „Watchlist“).</Threshold>
-            <Threshold v="Wartend">Trigger/Einstieg definiert, Preis ist noch nicht da (Lane „In Arbeit“).</Threshold>
-            <Threshold v="Aktiv">Trade läuft (Lane „In Arbeit“).</Threshold>
-            <Threshold v="Ausgeführt / Verworfen">
-              Abgeschlossen (im Journal) bzw. abgebrochen — fällt aus der Offen-Ansicht.
-            </Threshold>
-          </ul>
-          <Read>
-            „Wartend“ meint überall dasselbe: eine bewusste, bestehende Absicht. Die Cockpit-Lane für das
-            ephemere Heranlaufen heisst deshalb <span className="text-text">„Nähert sich“</span> und nicht
-            „Wartend“.
-          </Read>
-        </div>
-      </Panel>
-
-      {/* 4 — Konfluenz: Ranking */}
-      <Panel
-        title="Konfluenz — Währungs-Ranking (Q5/Q1)"
-        subtitle="Stärke-Quintil je Währung: gibt Rückenwind oder Gegenwind"
-      >
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="Stärke-Quintil">
-              Position des Zins-+-Saison-Scores einer Währung in ihrer eigenen 156-Wochen-Verteilung.{" "}
-              <span className="text-up">Q5</span> = stärkstes Fünftel, <span className="text-down">Q1</span>{" "}
-              = schwächstes.
-            </Threshold>
-            <Threshold v="Nur Q5 / Q1">
-              Es zählen ausschliesslich die Extrem-Quintile. <span className="text-text">Q2–Q4 sind
-              neutral</span> — keine Aussage, kein Rücken-/Gegenwind.
-            </Threshold>
-            <Threshold v="Rückenwind / Gegenwind">
-              Steht die Base auf <span className="text-up">Q5</span> und die Quote auf{" "}
-              <span className="text-down">Q1</span>, ist ein Long der Base fundamental gestützt
-              („Rückenwind“). Läuft die GVA-Linie dagegen, zeigt das Cockpit „Gegenwind“.
-            </Threshold>
-          </ul>
-          <Read>
-            Das Ranking ist <span className="text-text">Konfluenz, kein Gate</span>. Ein GVA-Setup gegen
-            das Ranking bleibt handelbar — es trägt nur eine Warnung.
-          </Read>
-          <Act>
-            Bevorzuge Setups mit Rückenwind. Bei Gegenwind kleiner/vorsichtiger handeln oder einen
-            besonders sauberen technischen Grund verlangen.
-          </Act>
-        </div>
-      </Panel>
-
-      {/* 5 — Trade-Budget */}
-      <Panel
-        title="Trade-Budget — 8 Live-Trades pro Monat"
-        subtitle="Feste Obergrenze, damit Disziplin sichtbar bleibt"
-      >
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="8 pro Monat">
-              Ein Kästchen = ein Live-Trade, <span className="text-text">kontenübergreifend</span>{" "}
-              (Funded + Eigenkapital zusammen). Backtest-Trades zählen nie.
-            </Threshold>
-            <Threshold v="Freischaltung">
-              In festen 7-Tage-Blöcken ab dem 1.: bis 7. → 2 frei, bis 14. → 4, bis 21. → 6, ab 22. → 8.
-              Ungenutzte Kästchen verfallen nicht (kumulativ).
-            </Threshold>
-            <Threshold v="Wo sichtbar">
-              Widget im Journal-Dashboard (über dem Konto-Umschalter, zeigt alle Trades) und Chip in der
-              Cockpit-Kopfzeile („N von 8 übrig“).
-            </Threshold>
-          </ul>
-          <Read>
-            Das Budget <span className="text-text">blockiert nie</span> das „Genommen“ — ein beim Broker
-            offener Trade muss ins Journal, sonst werden Winrate und Adherence wertlos. Es macht den
-            Verbrauch nur sichtbar.
-          </Read>
-        </div>
-      </Panel>
-
-      {/* 6 — Modi-Landkarte */}
-      <Panel title="Die vier Modi" subtitle="Was wo liegt — der Rest der App als Landkarte">
-        <div className="space-y-3 text-[13px]">
-          <ul className="space-y-1.5">
-            <Threshold v="Trades finden">
-              Cockpit · Währungs-Ranking · Visuelles Radar &amp; Heatmap 28 (Admin). Der tägliche Weg zum
-              Setup.
-            </Threshold>
-            <Threshold v="Journalieren">
-              Dashboard · Trades · Equity · Outlook · Trade-Kalender · Strategien. Alles rund um erfasste
-              Trades und definierte Setups.
-            </Threshold>
-            <Threshold v="Backtesten">
-              Backtest-Lab · Replay (GVA-Hits). Setups an der Historie prüfen.
-            </Threshold>
-            <Threshold v="Labor">
-              Factor-Lab · Engine-Log · Macro Terminal · Real Yield · News. Erklärt das „Warum“ hinter der
-              Konfluenz — keine tägliche Entscheidungsquelle.
-            </Threshold>
-          </ul>
-          <Read>
-            Einstellungen und diesen Leitfaden erreichst du oben rechts über das Avatar-Menü (dein
-            Initial). Sie haben keinen eigenen Modus-Tab.
-          </Read>
-        </div>
-      </Panel>
-
     </div>
   );
 }
