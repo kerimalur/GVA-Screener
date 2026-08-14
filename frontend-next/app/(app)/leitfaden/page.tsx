@@ -1,4 +1,4 @@
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 
 export const dynamic = "force-static";
 
@@ -50,7 +50,7 @@ export default function LeitfadenSeite() {
     <div className="space-y-5 max-w-[1100px] mx-auto">
       <Panel
         title="Wozu dieses Labor da ist"
-        subtitle="Und wozu ausdrücklich nicht"
+        hint="Und wozu ausdrücklich nicht"
       >
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <p>
@@ -75,7 +75,7 @@ export default function LeitfadenSeite() {
         </div>
       </Panel>
 
-      <Panel title="Modelle" subtitle="Taugt das Modell etwas?">
+      <Panel title="Modelle" hint="Taugt das Modell etwas?">
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <p>
             Die ML-Engine sucht nächtlich nach Konfigurationen, die die
@@ -119,7 +119,7 @@ export default function LeitfadenSeite() {
         </div>
       </Panel>
 
-      <Panel title="Faktoren" subtitle="Welcher einzelne Faktor trägt?">
+      <Panel title="Faktoren" hint="Welcher einzelne Faktor trägt?">
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <p>
             Ein Modell, das aus zwanzig Faktoren einen Score baut, sagt nicht,
@@ -152,7 +152,7 @@ export default function LeitfadenSeite() {
         </div>
       </Panel>
 
-      <Panel title="Märkte" subtitle="Wie ist die Lage überhaupt?">
+      <Panel title="Märkte" hint="Wie ist die Lage überhaupt?">
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <p>
             Die Rohdaten hinter den Faktoren, unaggregiert. Nützlich, wenn eine
@@ -179,7 +179,7 @@ export default function LeitfadenSeite() {
         </div>
       </Panel>
 
-      <Panel title="Was hier nicht mehr steht" subtitle="Und wo es jetzt liegt">
+      <Panel title="Was hier nicht mehr steht" hint="Und wo es jetzt liegt">
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <ul className="space-y-1.5">
             <Begriff v="Cockpit">KerimOS · /trading/cockpit</Begriff>
@@ -200,7 +200,7 @@ export default function LeitfadenSeite() {
         </div>
       </Panel>
 
-      <Panel title="Reihenfolge" subtitle="Was zuerst, was erst danach">
+      <Panel title="Reihenfolge" hint="Was zuerst, was erst danach">
         <div className="space-y-3 text-[13px] leading-relaxed text-muted">
           <ol className="space-y-2 list-decimal list-inside">
             <li>

@@ -1,4 +1,4 @@
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 import { VERDICT_LABEL, type HoldoutRow, type HoldoutVerdict } from "@/lib/ml/holdoutFormat";
 import type { HoldoutData } from "@/lib/ml/holdout";
 
@@ -138,7 +138,7 @@ export default function HoldoutSection({ data }: { data: HoldoutData }) {
   return (
     <Panel
       title="Holdout-Validierung — die zurückgehaltenen 104 Wochen"
-      subtitle={
+      hint={
         rows.length === 0
           ? "Noch nicht befragt. Ausführen: python -m ml_engine.run_holdout"
           : `${runs} Lauf${runs === 1 ? "" : "e"} · Zeitraum ${zeitraum?.holdoutStart ?? "?"} bis ${

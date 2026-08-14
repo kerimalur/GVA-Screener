@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 
 interface DataJob {
   key: string;
@@ -62,7 +62,7 @@ export default function EinstellungenPage() {
 
   return (
     <div className="max-w-[640px] mx-auto space-y-4">
-      <Panel title="Konto" subtitle="Login & Rolle">
+      <Panel title="Konto" hint="Login & Rolle">
         <div className="flex items-center gap-3">
           <div className="w-[38px] h-[38px] rounded-full shrink-0 flex items-center justify-center bg-accent-dim border border-accent/30">
             <span className="text-accent font-bold text-[14px]">{email.charAt(0).toUpperCase()}</span>
@@ -83,8 +83,8 @@ export default function EinstellungenPage() {
 
       <Panel
         title="Daten"
-        subtitle="Cron-Jobs & Frische der Quellen"
-        actions={
+        hint="Cron-Jobs & Frische der Quellen"
+        right={
           nextRun && !dataLoading ? (
             <span className="font-mono text-[10px] text-faint">
               Naechster Lauf:{" "}

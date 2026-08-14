@@ -1,4 +1,4 @@
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 import BacktestPanel from "@/components/ml/BacktestPanel";
 import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -61,7 +61,7 @@ export default async function Page() {
 
       <Panel
         title="Backtest-Bereitschaft"
-        subtitle="Ziel: Weekly-Outlook-Signale der letzten 2 Jahre gegen echte Kursverläufe testen"
+        hint="Ziel: Weekly-Outlook-Signale der letzten 2 Jahre gegen echte Kursverläufe testen"
       >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-surface2 border border-border rounded p-3">
@@ -116,7 +116,7 @@ export default async function Page() {
 
       <Panel
         title="Backtest — Weekly-Outlook-Signale"
-        subtitle="Trefferquote + Ø gerichtete Rendite nach 1–4 Wochen (Snapshots × echte Kurse, ~8 Jahre)"
+        hint="Trefferquote + Ø gerichtete Rendite nach 1–4 Wochen (Snapshots × echte Kurse, ~8 Jahre)"
       >
         {backtest ? (
           <BacktestPanel bt={backtest} />
@@ -127,7 +127,7 @@ export default async function Page() {
 
       <Panel
         title="Datenquellen"
-        subtitle="Vollständigkeit + Aktualität aller Tabellen, aus denen die Verdicts gerechnet werden"
+        hint="Vollständigkeit + Aktualität aller Tabellen, aus denen die Verdicts gerechnet werden"
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -163,7 +163,7 @@ export default async function Page() {
 
       <Panel
         title="Snapshot-Qualität"
-        subtitle="weekly_outlook_snapshots — eingefrorene Wochen-Verdicts als Backtest-Grundlage"
+        hint="weekly_outlook_snapshots — eingefrorene Wochen-Verdicts als Backtest-Grundlage"
       >
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
           <div className="bg-surface2 border border-border rounded p-3">

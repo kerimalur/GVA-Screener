@@ -1,18 +1,19 @@
-import ModeChrome from "@/components/layout/ModeChrome";
+import Chrome from "@/components/layout/Chrome";
 import Prefetcher from "@/components/layout/Prefetcher";
 
-// Shell für alle eingeloggten Seiten; /login und /auth/* bleiben ohne Chrome.
-// Seit dem Modus-Umbau ohne Sidebar: die volle Breite gehört dem Inhalt.
-export default function AppLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+/**
+ * Rahmen für alle angemeldeten Seiten; /login und /auth/* laufen ohne.
+ *
+ * Der Inhalt bekommt die volle Breite und begrenzt sich selbst — eine
+ * Matrix mit 28 Zeilen braucht mehr Platz als ein Erklärtext, und eine
+ * feste Klammer hier würde beide gleich behandeln.
+ */
+export default function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex min-h-screen flex-col">
       <Prefetcher />
-      <ModeChrome />
-      <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">{children}</main>
+      <Chrome />
+      <main className="flex-1 overflow-x-hidden px-4 pb-16 pt-4">{children}</main>
     </div>
   );
 }

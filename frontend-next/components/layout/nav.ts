@@ -1,189 +1,92 @@
 /**
- * Navigations-Architektur des Labors.
+ * Navigation des Labors — eine flache Leiste, keine Modi mehr.
  *
- * HISTORIE (13.08.2026): Diese Anwendung war zwei Jahre lang ein
- * Trading-Frontend — Scanner, Cockpit, Journal, Backtest, Makro-Terminal,
- * ML-Engine, alles in einem. Genau darin lag das Problem: Entscheiden und
- * Forschen sind zwei verschiedene Tätigkeiten mit verschiedenen Rhythmen. Wer
- * morgens einen Trade sucht, will keine Konfidenzintervalle sehen; wer eine
- * Hypothese prüft, will nicht von einem blinkenden Kurs abgelenkt werden.
+ * HISTORIE. Erst gab es eine Sidebar mit ~20 Einträgen. Die wurde durch fünf
+ * „Modi" ersetzt, weil zwanzig gleichzeitig sichtbare Ziele keine Navigation
+ * sind, sondern eine Entscheidung, die man bei jedem Seitenaufruf neu treffen
+ * muss. Dann zog alles Handeln nach KerimOS um, und es blieben drei Modi mit
+ * je vier Tabs — für zwölf Seiten zwei Ebenen. Das war eine Ebene zu viel:
+ * Man klickte in „Faktoren", um dann noch einmal zu wählen.
  *
- * Deshalb ist alles Entscheiden nach KerimOS gewandert (Cockpit, Ranking,
- * Radar, Heatmap, Journal, Backtest — siehe ../../TRADING-UMBAU.md), und was
- * hier bleibt, ist ausschliesslich **Labor**: Machine Learning, quantitative
- * Auswertung und Fundamentaldaten.
+ * Nach dem Zuschnitt vom 14.08.2026 sind es sechs Seiten. Sechs Ziele passen
+ * in eine Zeile und brauchen keine Zwischenebene. Was selten gebraucht wird
+ * (Datenlage, Leitfaden, Einstellungen), hängt am Menü rechts.
  *
- * Die drei Modi folgen der Frage, die man gerade hat:
+ * Der Aufbau folgt der Reihenfolge der Arbeit:
  *
- *   Modelle   — taugt das Modell etwas?      (Suche, Holdout, Baseline)
- *   Faktoren  — welcher Faktor trägt?        (Einzelfaktor gegen Markt)
- *   Märkte    — wie ist die Lage überhaupt?  (Makro, Zinsen, COT, Termine)
- *
- * Gesperrte Routen (`lib/nav/hidden.ts`) werden hier herausgefiltert. Seit dem
- * Umbau ist die Liste leer — was früher gesperrt war (Saisonalität,
- * Fundamental-Track, Setup-Finder, COT, Weekly), ist genau der Inhalt, um den
- * es jetzt geht.
+ *   Übersicht   Was ist seit gestern passiert?
+ *   Markt       Wie steht es fundamental — und wo widerspricht sich das?
+ *   Strategien  Trägt eine Regel über zehn Jahre?
+ *   Engine      Was hat die nächtliche Suche gefunden?
+ *   Ranking     Wie gut lag das Modell zuletzt wirklich?
+ *   Training    Woraus besteht das Modell?
  */
-
-import { isHiddenRoute } from "@/lib/nav/hidden";
 
 export interface NavItem {
   href: string;
   label: string;
-  icon: string;
-  requiresAdmin?: boolean;
-  /**
-   * Nur die Route selbst markieren, keine Unterseiten.
-   *
-   * Nötig für Tabs, deren Pfad Präfix anderer Routen ist: "/ml" ist die
-   * Datenlage, aber "/ml/ranking" und "/ml/factor-lab" sind eigene Seiten.
-   * Ohne dieses Flag würde "/ml" jede unbekannte "/ml/…"-Route einsammeln und
-   * die Kopfzeile behauptete, man sei auf der Datenlage — auch auf einer 404.
-   */
+  /** Ein Satz für die Übersicht und den Tooltip. */
+  zweck: string;
+  /** Nur diese Route markieren, keine Unterseiten. */
   exact?: boolean;
 }
 
-export type ModeKey = "modelle" | "faktoren" | "maerkte";
+export const HOME = "/";
 
-/** Welcher Zähler auf der Modus-Kachel steht. `null` = kein Badge. */
-export type ModeBadge = "letzteNacht";
-
-export interface AppMode {
-  key: ModeKey;
-  label: string;
-  icon: string;
-  /** Einstiegsroute des Modus — Ziel der Kachel im Launcher. */
-  base: string;
-  /** Eine Zeile mit den enthaltenen Seiten (Launcher-Kachel). */
-  summary: string;
-  badge: ModeBadge | null;
-  tabs: NavItem[];
-}
-
-/** Startseite mit den Modus-Kacheln. Immer erreichbar, nie automatisch übersprungen. */
-export const LAUNCHER_HREF = "/";
-export const LAUNCHER_LABEL = "Labor";
-
-const RAW_MODES: AppMode[] = [
-  {
-    key: "modelle",
-    label: "Modelle",
-    icon: "ph-brain",
-    base: "/ml/engine-log",
-    summary: "Engine-Log · Holdout · Modell-Ranking · Training · Datenlage",
-    badge: "letzteNacht",
-    tabs: [
-      { href: "/ml/engine-log", label: "Engine-Log", icon: "ph-list-checks" },
-      { href: "/ml/ranking", label: "Modell-Ranking", icon: "ph-ranking" },
-      { href: "/ml/training", label: "Training", icon: "ph-graduation-cap" },
-      { href: "/ml/modell", label: "Anleitung", icon: "ph-book-open" },
-      { href: "/ml", label: "Datenlage", icon: "ph-database", exact: true },
-    ],
-  },
-  {
-    key: "faktoren",
-    label: "Faktoren",
-    icon: "ph-flask",
-    base: "/ml/factor-lab",
-    summary: "Factor-Lab · Fundamental-Track · Setup-Finder · Saisonalität",
-    badge: null,
-    tabs: [
-      { href: "/ml/factor-lab", label: "Factor-Lab", icon: "ph-flask" },
-      { href: "/ml/fundamental-track", label: "Fundamental-Track", icon: "ph-chart-line" },
-      { href: "/ml/setup-finder", label: "Setup-Finder", icon: "ph-magnifying-glass" },
-      { href: "/ml/season", label: "Saisonalität", icon: "ph-calendar-blank" },
-    ],
-  },
-  {
-    key: "maerkte",
-    label: "Märkte",
-    icon: "ph-globe-hemisphere-west",
-    base: "/makro/terminal",
-    summary: "Macro Terminal · Real Yield · COT · Weekly · Termine",
-    badge: null,
-    tabs: [
-      { href: "/makro/terminal", label: "Macro Terminal", icon: "ph-globe-hemisphere-west" },
-      { href: "/makro/real-yield", label: "Real Yield", icon: "ph-scales" },
-      { href: "/cot/intelligence", label: "COT", icon: "ph-users-three" },
-      { href: "/weekly", label: "Weekly", icon: "ph-binoculars" },
-      { href: "/dashboard", label: "Termine", icon: "ph-newspaper" },
-    ],
-  },
+/** Die Leiste. Reihenfolge = Reihenfolge der Arbeit, nicht Alphabet. */
+export const NAV: NavItem[] = [
+  { href: "/", label: "Übersicht", zweck: "Was seit dem letzten Blick passiert ist", exact: true },
+  { href: "/markt", label: "Markt", zweck: "Fundamentale Lage aller Währungen und Paare" },
+  { href: "/strategien", label: "Strategien", zweck: "Regeln über zehn Jahre prüfen" },
+  { href: "/ml/engine-log", label: "Engine", zweck: "Nächtliche Suche, Holdout, Baseline" },
+  { href: "/ml/ranking", label: "Ranking", zweck: "Wochenausgabe des Modells und ihre Treffer" },
+  { href: "/ml/training", label: "Training", zweck: "Woraus das Modell besteht" },
 ];
 
-/**
- * Die Modi, wie die Oberfläche sie sieht: ohne gesperrte Routen. Ein Modus,
- * dessen Seiten alle gesperrt wären, fiele komplett weg (aktuell tritt der
- * Fall nicht ein — die Regel steht trotzdem, damit eine spätere Sperre nicht
- * still einen toten Tab hinterlässt).
- */
-export const MODES: AppMode[] = RAW_MODES.map((m) => ({
-  ...m,
-  tabs: m.tabs.filter((t) => !isHiddenRoute(t.href)),
-})).filter((m) => m.tabs.length > 0);
+/** Selten gebraucht — hängt am Menü rechts, nicht in der Leiste. */
+export const MENUE: NavItem[] = [
+  { href: "/ml", label: "Datenlage", zweck: "Reicht das Material für ein Modell?", exact: true },
+  { href: "/leitfaden", label: "Leitfaden", zweck: "Wozu das Labor da ist" },
+  { href: "/einstellungen", label: "Einstellungen", zweck: "Konto und Zugang" },
+];
 
-export function modeByKey(key: string): AppMode | null {
-  return MODES.find((m) => m.key === key) ?? null;
+const ALLE = [...NAV, ...MENUE];
+
+function passt(item: NavItem, pfad: string): boolean {
+  return item.exact ? pfad === item.href : pfad === item.href || pfad.startsWith(item.href + "/");
 }
 
 /**
- * Route → Tab. Es gewinnt der LÄNGSTE passende Tab-Pfad, sonst würde „/ml"
- * (Datenlage) bei „/ml/ranking" mitleuchten und den falschen Tab markieren.
+ * Aktiver Eintrag. Der längste Treffer gewinnt — sonst würde „/ml" bei
+ * „/ml/ranking" mitleuchten. „/" und „/ml" tragen deshalb zusätzlich
+ * `exact`, damit sie unbekannte Unterpfade nicht einsammeln und die
+ * Kopfzeile auf einer 404 nicht behauptet, man sei irgendwo.
  */
-function matchTab(pathname: string): { mode: AppMode; tab: NavItem } | null {
-  let treffer: { mode: AppMode; tab: NavItem } | null = null;
-  for (const mode of MODES) {
-    for (const tab of mode.tabs) {
-      const passt = tab.exact
-        ? pathname === tab.href
-        : pathname === tab.href || pathname.startsWith(tab.href + "/");
-      if (passt) {
-        if (!treffer || tab.href.length > treffer.tab.href.length) {
-          treffer = { mode, tab };
-        }
-      }
-    }
-  }
-  return treffer;
+export function aktiverPfad(pfad: string): string | null {
+  return (
+    ALLE.filter((i) => passt(i, pfad))
+      .map((i) => i.href)
+      .sort((a, b) => b.length - a.length)[0] ?? null
+  );
+}
+
+export function navItem(pfad: string): NavItem | null {
+  const treffer = aktiverPfad(pfad);
+  return ALLE.find((i) => i.href === treffer) ?? null;
 }
 
 /**
- * Modus zu einer Route. Damit rendert auch der direkte Aufruf einer Unterseite
- * (z.B. `/makro/real-yield` aus einem Lesezeichen) den richtigen Modus mit
- * korrekt markiertem Tab. `null` = kein Modus (Launcher oder unbekannte Route).
+ * Seitentitel für die Kopfzeile. Nur wo das Nav-Label zu knapp wäre oder
+ * die Route gar keinen Eintrag hat.
  */
-export function modeForPath(pathname: string): AppMode | null {
-  if (pathname === LAUNCHER_HREF) return null;
-  return matchTab(pathname)?.mode ?? null;
-}
-
-/** Aktiver Tab innerhalb des Modus — `null`, wenn die Route zu keinem gehört. */
-export function activeTabHref(pathname: string): string | null {
-  if (pathname === LAUNCHER_HREF) return null;
-  return matchTab(pathname)?.tab.href ?? null;
-}
-
-/**
- * Seitentitel für die Kopfzeile. Modus-Name und Tab-Label ergeben ihn
- * normalerweise selbst; hier stehen nur die Fälle, in denen der Tab-Name zu
- * knapp wäre, plus die Routen ohne eigenen Tab.
- */
-export const PAGE_TITLES: Record<string, string> = {
-  "/ml": "Datenlage — reicht das Material für ein Modell?",
-  "/ml/engine-log": "Engine-Log — Suche, Holdout und Baseline",
-  "/ml/ranking": "Modell-Ranking — Wochenausgabe der Engine",
-  "/ml/training": "Training — Modell und Vorhersagen",
-  "/ml/modell": "Modell — Anleitung und Annahmen",
-  "/ml/factor-lab": "Factor-Lab — welcher Faktor trifft?",
-  "/ml/fundamental-track": "Fundamental-Track — Q-Score gegen Markt",
-  "/ml/setup-finder": "Setup-Finder — Ranking gegen Outlook-Konfluenz",
-  "/ml/season": "Saisonalität — Feature-Explorer",
-  "/makro/terminal": "Macro Terminal — G8 Currency Bias",
-  "/makro/terminal/vergleich": "Macro Terminal — Währungsvergleich",
-  "/makro/real-yield": "Real Yield — Zins minus Inflation",
-  "/cot/intelligence": "COT — institutionelle Positionierung",
-  "/weekly": "Weekly — Wochenlage je Paar",
-  "/dashboard": "Termine — Wirtschaftskalender",
+export const TITEL: Record<string, string> = {
+  "/": "Übersicht",
+  "/markt": "Markt — fundamentale Lage",
+  "/strategien": "Strategien — Regeln über zehn Jahre",
+  "/ml/engine-log": "Engine — Suche, Holdout, Baseline",
+  "/ml/ranking": "Ranking — Wochenausgabe und Treffer",
+  "/ml/training": "Training — Aufbau des Modells",
+  "/ml": "Datenlage",
   "/leitfaden": "Leitfaden",
   "/einstellungen": "Einstellungen",
 };

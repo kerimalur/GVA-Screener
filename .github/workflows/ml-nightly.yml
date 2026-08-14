@@ -1,25 +1,25 @@
-name: ML Weekly Search
+name: ML Nightly Search
 
-# Von täglich (02:00 UTC) auf wöchentlich gedrosselt am 2026-07-25.
+# Am 2026-08-14 von woechentlich zurueck auf taeglich.
 #
-# Grund ist NICHT, dass der Job kaputt wäre — er läuft sauber durch. Der
-# Random-Search ist im aktuellen Suchraum auskonvergiert: über sechs Nächte und
-# rund 14.000 Experimente hat sich das Ergebnis nicht mehr bewegt
-# (logreg · 4W · rates+scores, hall_score 0.517). Zwei strukturelle Gründe:
-#   1. run_experiments._search_panel() schneidet die letzten 104 Wochen ab
-#      (Holdout-Disziplin) — neue Marktdaten erreichen die Suche zwei Jahre
-#      lang gar nicht, das Suchpanel ist über Nächte hinweg identisch.
-#   2. Das gewinnende Modell ist logreg und damit deterministisch: gleiche
-#      Config + gleiches Panel = bitgenau dieselbe Zahl, egal welcher Seed.
+# Gedrosselt wurde am 25.07., weil die Suche ueber sechs Naechte und ~14.000
+# Experimente auf demselben Ergebnis stand. Der Grund war aber nicht die
+# Frequenz, sondern der Suchraum: Kern = {logreg} x {4W} x Teilmengen von
+# {rates, scores} - drei Feature-Kombinationen bei einem deterministischen
+# Modell. Das laesst sich in einer Nacht erschoepfen; jede weitere fand
+# garantiert dasselbe.
 #
-# Sobald der Suchraum erweitert wird (weitere Features, Horizonte,
-# Modellfamilien), kann die Frequenz wieder hoch. workflow_dispatch bleibt,
-# manuelle Läufe sind jederzeit möglich. Die Konvergenz-Erkennung in
-# run_experiments._is_stagnant() meldet so einen Zustand künftig selbst
-# (Flag `stagnant` in ml_engine_nights, sichtbar im Engine-Log).
+# Der Raum ist jetzt erweitert (siehe ml_engine/search.py, Abschnitt
+# "ERWEITERUNG 2026-08-14"): beide Algorithmen, zwei Horizonte, vier
+# Feature-Gruppen, 40 Prozent Exploration. Damit lohnt sich taegliches Laufen
+# wieder - es gibt etwas zu finden.
+#
+# Die Konvergenz-Erkennung (`stagnant`, STAGNATION_NIGHTS) bleibt der
+# Waechter: Steht best_hall wieder fuenf Naechte still, meldet das Log es,
+# und dann ist erneut der Raum dran und nicht die Frequenz.
 on:
   schedule:
-    - cron: "0 2 * * 0"    # sonntags 02:00 UTC
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 jobs:

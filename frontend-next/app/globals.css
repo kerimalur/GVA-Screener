@@ -1,56 +1,95 @@
 @import "tailwindcss";
 
 @theme {
-  /* === FX Terminal Design Tokens — warmes Anthrazit (Kerims Vorgabe):
-     Hintergrund #221f19, Karten HELLER (#2c2820), Kopfzeile am dunkelsten
-     (#151310). Kontrast entsteht durch aufgehellte Karten auf dunkler Fläche —
-     umgekehrt zur früheren Grau-Welt.
-     Akzent ist ein warmes Orange; kein Blau. Grün/Rot bleiben die einzigen
-     semantischen Farben, Zahlen laufen in Mono.
-     Diese Datei ist die Single Source — Farben NICHT in Komponenten
+  /* ===================================================================
+     GVA LABOR — Design-Tokens
+     ===================================================================
+
+     Vorher: warmes Anthrazit mit Orange-Akzent, aufgehellte Karten auf
+     dunklem Grund. Das war ein Trading-Terminal — es sollte wach machen.
+
+     Jetzt: ein Messgerät. Der Grund ist fast schwarz mit kühlem Stich,
+     Flächen sind eine Spur heller statt kontrastreich abgesetzt, und die
+     Trennung entsteht durch Haarlinien, nicht durch Helligkeitssprünge.
+     Zahlen tragen die Seite, nicht Farbe.
+
+     Drei Regeln, die das Ganze zusammenhalten:
+
+     1. FARBE IST INFORMATION. Grün und Rot bedeuten Richtung, Bernstein
+        bedeutet "veraltet", Indigo ist der Akzent der Oberfläche selbst.
+        Nichts wird eingefärbt, weil es hübscher aussieht.
+     2. DER AKZENT KOLLIDIERT NICHT MIT SEMANTIK. Indigo liegt weit weg
+        von Grün und Rot — ein aktiver Tab lässt sich nie mit einem
+        Long-Signal verwechseln. Genau daran krankte das Orange: es war
+        vom Warn-Gelb kaum zu unterscheiden.
+     3. STRUKTUR STATT SCHATTEN. Keine Schlagschatten, keine Verläufe auf
+        Flächen. Ordnung kommt aus Linien, Abständen und Ausrichtung.
+
+     Diese Datei ist die einzige Quelle. Farben NICHT in Komponenten
      hartkodieren. Einzige gespiegelte Stelle: components/charts/chartTheme.ts
-     (Recharts braucht konkrete SVG-Farbstrings). === */
-  --color-bg:       #221f19;
-  --color-sidebar:  #151310;
-  --color-surface:  #2c2820;
-  /* vertieft: verschachtelte Boxen, Pills, Lane-Flächen */
-  --color-surface2: #1a1714;
-  --color-border:   rgba(255,255,255,0.12);
-  --color-border2:  rgba(255,255,255,0.20);
-  /* Hover/aktive Flächen in der Navigation: warme Aufhellung */
-  --color-active:   #332e25;
+     (Recharts braucht konkrete SVG-Farbstrings).
+     =================================================================== */
 
-  --color-text:     #ece7da;
-  --color-muted:    #a89f8b;
-  --color-faint:    #87806f;
+  /* --- Flächen ---------------------------------------------------- */
+  /* Kühles Fast-Schwarz. Nicht #000: reines Schwarz frisst feine
+     Linien und lässt Weiss flimmern. */
+  --color-bg:        #0a0c10;
+  /* Kopfzeile und Seitenränder — noch eine Spur tiefer als der Grund,
+     damit der Inhalt vorne liegt statt umgekehrt. */
+  --color-chrome:    #07090c;
+  /* Panel: der Standardträger für Inhalt. */
+  --color-surface:   #101319;
+  /* Vertieft: Zeilen, Zellen, Chips innerhalb eines Panels. */
+  --color-surface2:  #0d1015;
+  /* Angehoben: Overlays, Menüs, das Aktive. */
+  --color-raised:    #161a22;
 
-  --color-accent:        #e08a3c;
-  --color-accent-dim:    rgba(224,138,60,0.14);
-  --color-up:            #4fd88a;
-  --color-up-dim:        rgba(79,216,138,0.12);
-  --color-down:          #f0665c;
-  --color-down-dim:      rgba(240,102,92,0.12);
-  /* bewusst gelber als der Akzent — sonst sind Warnung und Akzent nicht
-     unterscheidbar (beides Orange). */
-  --color-warn:          #d9b23c;
-  --color-warn-dim:      rgba(217,178,60,0.12);
-  --color-neutral:       #87806f;
-  --color-neutral-dim:   rgba(135,128,111,0.20);
+  /* --- Linien ------------------------------------------------------ */
+  /* Haarlinie. Bewusst schwach: sie soll ordnen, nicht rahmen. */
+  --color-line:      rgba(148,163,196,0.13);
+  --color-line2:     rgba(148,163,196,0.24);
+  /* Raster im Hintergrund von Tabellen und Diagrammen. */
+  --color-grid:      rgba(148,163,196,0.07);
 
-  /* Regime-Tags: farbiger Text + Rand (Outline-Chips) */
-  --color-regime-goldilocks:       #4fd88a;
-  --color-regime-goldilocks-dim:   rgba(79,216,138,0.12);
-  --color-regime-stagflation:      #f0665c;
-  --color-regime-stagflation-dim:  rgba(240,102,92,0.12);
-  --color-regime-reflation:        #c9bfa8;
-  --color-regime-reflation-dim:    rgba(201,191,168,0.12);
-  --color-regime-overheating:      #d9b23c;
-  --color-regime-overheating-dim:  rgba(217,178,60,0.12);
-  --color-regime-disinflation:     #7ccf9e;
-  --color-regime-disinflation-dim: rgba(124,207,158,0.12);
+  /* --- Schrift ----------------------------------------------------- */
+  --color-text:      #e8ecf4;
+  --color-muted:     #9aa4bb;
+  --color-faint:     #616c85;
+  /* Text auf gefüllten Akzentflächen. */
+  --color-on-accent: #060810;
 
-  --radius-card: 14px;
-  --radius-tag: 5px;
+  /* --- Akzent: Indigo ---------------------------------------------- */
+  --color-accent:      #6e7bff;
+  --color-accent-soft: #98a2ff;
+  --color-accent-dim:  rgba(110,123,255,0.14);
+  --color-accent-line: rgba(110,123,255,0.38);
+
+  /* --- Semantik ---------------------------------------------------- */
+  --color-up:        #2fd98b;
+  --color-up-dim:    rgba(47,217,139,0.13);
+  --color-down:      #ff5c6c;
+  --color-down-dim:  rgba(255,92,108,0.13);
+  /* Bernstein heisst hier IMMER "alt oder unsicher", nie "Achtung Gefahr". */
+  --color-stale:     #ffb547;
+  --color-stale-dim: rgba(255,181,71,0.13);
+  --color-neutral:     #7e88a0;
+  --color-neutral-dim: rgba(126,136,160,0.16);
+
+  /* --- Fundamentale Regime ----------------------------------------- */
+  /* Outline-Chips: farbiger Text auf schwacher Fläche, kein Vollton —
+     Regime sind Einordnung, keine Handlungsaufforderung. */
+  --color-regime-goldilocks:   #2fd98b;
+  --color-regime-reflation:    #6e7bff;
+  --color-regime-stagflation:  #ff5c6c;
+  --color-regime-overheating:  #ffb547;
+  --color-regime-disinflation: #58c7d8;
+
+  /* --- Form -------------------------------------------------------- */
+  /* Klein. Grosse Radien wirken weich und verspielt; hier soll es nach
+     Instrument aussehen, nicht nach App-Store-Kachel. */
+  --radius-panel: 10px;
+  --radius-cell:  6px;
+  --radius-chip:  4px;
 
   --font-sans: var(--font-space-grotesk), 'Space Grotesk', -apple-system, sans-serif;
   --font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
@@ -64,44 +103,84 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
-  font-feature-settings: "tnum";
+  /* Tabellenziffern überall: Zahlen in Spalten müssen untereinander
+     stehen, sonst tanzt jede Tabelle beim Aktualisieren. */
+  font-feature-settings: "tnum", "cv02", "cv03";
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Mobile-Sicherheitsnetz: Bilder sprengen schmale Viewports nicht. Grids/Panels
-   werden pro Komponente responsiv gemacht; die Seiten-Klammer (main) trägt
-   bereits overflow-x-hidden gegen horizontales Scrollen. */
-img {
-  max-width: 100%;
-  height: auto;
+img { max-width: 100%; height: auto; }
+
+/* ===================================================================
+   Wiederkehrende Bausteine
+   Als CSS-Klassen statt als React-Komponenten, weil sie in fast jeder
+   Datei gebraucht werden und ein Import-Zoo dem Lesen schadet.
+   =================================================================== */
+
+/* Label über einer Zahl oder Gruppe. */
+.lbl {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-faint);
 }
 
-/* Motion */
-@keyframes ui-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* Zahl, die zählt. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
-@keyframes ui-slide-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+
+/* Feines Raster als Hintergrund — gibt Flächen Tiefe ohne Verlauf. */
+.grid-bg {
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
-@keyframes ui-scale-in {
-  from { opacity: 0; transform: scale(0.97); }
-  to   { opacity: 1; transform: scale(1); }
+
+/* Leuchtkante am oberen Rand eines Panels — der einzige Effekt im
+   ganzen System. Sparsam einsetzen, sonst verliert er seine Wirkung. */
+.edge-lit {
+  position: relative;
 }
-.anim-fade-in  { animation: ui-fade-in 150ms ease-out both; }
-.anim-slide-up { animation: ui-slide-up 200ms ease-out both; }
-.anim-scale-in { animation: ui-scale-in 150ms ease-out both; }
+.edge-lit::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-accent-line) 20%,
+    var(--color-accent-line) 80%,
+    transparent
+  );
+}
+
+/* Bewegung: kurz und knapp. Alles über 220ms fühlt sich träge an. */
+@keyframes ui-fade   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes ui-rise   { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@keyframes ui-sweep  { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.anim-fade  { animation: ui-fade 140ms ease-out both }
+.anim-rise  { animation: ui-rise 200ms cubic-bezier(.2,.7,.3,1) both }
+.anim-sweep { animation: ui-sweep 420ms cubic-bezier(.2,.7,.3,1) both; transform-origin: left }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade, .anim-rise, .anim-sweep { animation: none }
+}
 
 :focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
-::selection {
-  background: color-mix(in srgb, var(--color-accent) 25%, transparent);
-}
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent) }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+::-webkit-scrollbar { width: 7px; height: 7px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background: var(--color-line2); border-radius: 4px }
+::-webkit-scrollbar-thumb:hover { background: var(--color-faint) }

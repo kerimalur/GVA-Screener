@@ -1,14 +1,40 @@
 """Random-Search-Space. Bewusst v1: kein Optuna, erst Random ausreizen.
 
-Seit 2026-07-19 zweigeteilt (Spec: docs/superpowers/specs/
+Zweigeteilt seit 2026-07-19 (Spec: docs/superpowers/specs/
 2026-07-19-ml-engine-stabilisierung-design.md):
-  - KERN-Raum (Default-Anteil 1 − ML_EXPLORE_FRAC): vorab festgelegte, zuletzt
-    konsistent gewinnende Familie — logreg · 4W · Teilmengen von {rates, scores}.
-  - EXPLORATION (ML_EXPLORE_FRAC, Default 0.2): der volle bisherige Raum,
-    damit neue Faktoren (z.B. Real Yield) entdeckbar bleiben.
-Das verengt nur, WO gesucht wird (weniger Auswahl-Rauschen) — es verbessert
-das Signal selbst nicht. Grenzen per Env steuerbar, jede Config traegt
-"space": "core"|"explore" als Metadatum.
+  - KERN-Raum (Anteil 1 − ML_EXPLORE_FRAC): die Familie, die zuletzt
+    konsistent gewonnen hat.
+  - EXPLORATION (ML_EXPLORE_FRAC): der volle Raum, damit neue Faktoren
+    entdeckbar bleiben.
+Jede Config traegt "space": "core"|"explore" als Metadatum.
+
+=================== ERWEITERUNG 2026-08-14 ===================
+
+WARUM. Die Suche stand ueber sechs Naechte und ~14.000 Experimente auf
+demselben Ergebnis. Das war kein Fehler, sondern Arithmetik:
+
+  Kern-Raum = {logreg} x {4W} x Teilmengen von {rates, scores}
+            = 1 x 1 x 3 = DREI Feature-Kombinationen.
+
+logreg ist bei gegebenem C deterministisch. Vier Fuenftel aller Ziehungen
+landeten also in einem Raum mit drei echten Freiheitsgraden — dieselbe Nacht,
+tausendfach wiederholt. Mehr Laeufe haetten daran nichts geaendert; sie
+haetten dieselbe Zahl nur oefter gefunden.
+
+WAS SICH AENDERT.
+  * Kern umfasst beide Algorithmen und die Horizonte 2 und 4 statt nur 4.
+    lgbm ist nicht deterministisch — allein das bringt echte Streuung.
+  * Kern-Feature-Gruppen von {rates, scores} auf {rates, scores, season,
+    cot_tff} erweitert: 15 statt 3 Teilmengen.
+  * Explorationsanteil von 20 auf 40 Prozent. Ein auskonvergierter Kern
+    verdient weniger Ziehungen, nicht mehr.
+  * C-Bereich fuer logreg von 10^[-2,2] auf 10^[-3,3] gespreizt.
+
+WAS SICH NICHT AENDERT. Die Holdout-Disziplin (`HOLDOUT_WEEKS` in
+run_experiments.py), die Bewertung, die Baselines. Ein groesserer Suchraum
+findet mehr Kandidaten UND mehr Zufallstreffer — die Trennung leistet
+weiterhin allein der Holdout. Das Erweitern des Raums macht die Suche
+lebendig, nicht ehrlicher; `selection_gap` wird dadurch eher groesser.
 """
 from __future__ import annotations
 
@@ -23,10 +49,10 @@ HORIZONS = [1, 2, 4]
 # Kern-Defaults — festgelegt 2026-07-19 aus den Nacht-Siegern 13.–19.07.
 # (4/7 logreg·4W·[rates,scores], 6/7 Horizont 4). Nicht nachtraeglich anpassen,
 # ohne es in der Spec zu dokumentieren.
-CORE_ALGOS_DEFAULT = "logreg"
-CORE_HORIZONS_DEFAULT = "4"
-CORE_FEATURE_GROUPS_DEFAULT = "rates,scores"
-EXPLORE_FRAC_DEFAULT = 0.2
+CORE_ALGOS_DEFAULT = "logreg,lgbm"
+CORE_HORIZONS_DEFAULT = "2,4"
+CORE_FEATURE_GROUPS_DEFAULT = "rates,scores,season,cot_tff"
+EXPLORE_FRAC_DEFAULT = 0.4
 
 
 def _csv_env(name: str, default: str) -> list[str]:
@@ -34,17 +60,37 @@ def _csv_env(name: str, default: str) -> list[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _defaults() -> dict:
+    """Die dokumentierten Defaults, bereits validiert."""
+    return {
+        "algos": [a for a in CORE_ALGOS_DEFAULT.split(",") if a in ("lgbm", "logreg")],
+        "horizons": [int(h) for h in CORE_HORIZONS_DEFAULT.split(",") if int(h) in HORIZONS],
+        "groups": [g for g in CORE_FEATURE_GROUPS_DEFAULT.split(",") if g in FEATURE_GROUPS],
+    }
+
+
 def core_space() -> dict:
-    """Aktueller Kern-Suchraum aus der Env (validiert gegen die echten Gruppen)."""
+    """Aktueller Kern-Suchraum aus der Env (validiert gegen die echten Gruppen).
+
+    Bei unbrauchbarer Env wird auf die DOKUMENTIERTEN Defaults zurueckgefallen,
+    nicht auf einen engeren Notraum.
+
+    Frueher stand hier `algos or ["logreg"]` — ein Tippfehler in
+    ML_CORE_ALGOS liess den Kern also still auf genau die Ein-Modell-Variante
+    zusammenfallen, die im Juli 2026 die Suche zum Stillstand gebracht hat.
+    Ein Fallback, der schlechter ist als der Default, ist kein Fallback,
+    sondern eine Falle: Er greift lautlos und sieht im Log wie Absicht aus.
+    """
+    d = _defaults()
     algos = [a for a in _csv_env("ML_CORE_ALGOS", CORE_ALGOS_DEFAULT) if a in ("lgbm", "logreg")]
     horizons = [int(h) for h in _csv_env("ML_CORE_HORIZONS", CORE_HORIZONS_DEFAULT)
                 if h.isdigit() and int(h) in HORIZONS]
     groups = [g for g in _csv_env("ML_CORE_FEATURE_GROUPS", CORE_FEATURE_GROUPS_DEFAULT)
               if g in FEATURE_GROUPS]
     return {
-        "algos": algos or ["logreg"],
-        "horizons": horizons or [4],
-        "groups": groups or ["rates", "scores"],
+        "algos": algos or d["algos"],
+        "horizons": horizons or d["horizons"],
+        "groups": groups or d["groups"],
     }
 
 
@@ -67,7 +113,10 @@ def _params_for(algo: str, rng: np.random.Generator) -> dict:
             "bagging_fraction": float(np.round(rng.uniform(0.5, 1.0), 2)),
             "bagging_freq": 1,
         }
-    return {"C": float(np.round(10 ** rng.uniform(-2, 2), 4))}
+    # Weiter gespreizt als frueher (war -2..2): Am Rand des alten Bereichs
+    # lag der Sieger auffaellig oft, was fast immer heisst, dass das Optimum
+    # ausserhalb liegt.
+    return {"C": float(np.round(10 ** rng.uniform(-3, 3), 4))}
 
 
 def random_config(rng: np.random.Generator, core: bool | None = None) -> dict:

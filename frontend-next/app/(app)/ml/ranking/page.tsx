@@ -1,7 +1,8 @@
 import { Suspense } from "react";
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 import { loadRankingData, type PairIdea, type PairIdeas, type RankingRow } from "@/lib/ml/ranking";
 import RankingPerformance from "@/components/ml/RankingPerformance";
+import PerformancePanel from "@/components/ml/PerformancePanel";
 import { loadPerfCandles } from "@/lib/ml/perfCandles";
 
 /** Lädt die Kerzen der Kandidaten-Pairs (Render) vor und rendert das Panel.
@@ -248,10 +249,21 @@ export default async function Page() {
   ].filter((p, i, arr) => arr.findIndex((x) => x.pair === p.pair) === i);
 
   return (
-    <div className="space-y-5 max-w-[1200px] mx-auto">
+    <div className="anim-fade space-y-4 max-w-[1200px] mx-auto">
+      {/* Erst die Bilanz, dann die Prognose.
+          Wer die Wochenausgabe liest, ohne zu wissen, wie oft sie zuletzt
+          stimmte, liest ein Horoskop. Das Panel haengt an einer eigenen
+          async-Grenze, damit die Abfrage der Historie die Seite nicht
+          aufhaelt. */}
+      <Suspense fallback={<Panel title="Wie gut lag das Ranking?">
+        <div className="h-24 animate-pulse rounded-[var(--radius-cell)] bg-surface2" />
+      </Panel>}>
+        <PerformancePanel />
+      </Suspense>
+
       <Panel
         title={`Pairs der Woche — ${d.weekStart ?? "?"}`}
-        subtitle="Automatisch aus Stärke-Quintil Q5 (long) × Q1 (short) abgeleitet — Kandidaten, kein validiertes Signal. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
+        hint="Automatisch aus Stärke-Quintil Q5 (long) × Q1 (short) abgeleitet — Kandidaten, kein validiertes Signal. GVA-Setup in dieser Richtung = fundamentaler Rückenwind; Gegenrichtung bleibt valide, nur ohne Bonus."
       >
         <div className="p-5">
           {d.pairIdeas.best.length || d.pairIdeas.groups.length ? (
@@ -264,7 +276,7 @@ export default async function Page() {
 
       <Panel
         title="Performance seit Signal"
-        subtitle="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
+        hint="Kursverlauf je Kandidaten-Pair ab der Woche, seit der die Konstellation unverändert steht — nicht ab der Zielwoche der Prognose. Umschaltbar Daily/Weekly und Kerze/Linie. Quelle: OANDA."
       >
         <div className="p-5">
           <Suspense
@@ -281,7 +293,7 @@ export default async function Page() {
 
       <Panel
         title={`Währungs-Ranking — Woche ${d.weekStart ?? "?"}${updated ? ` · zuletzt aktualisiert ${updated}` : ""}`}
-        subtitle={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, Stärke-Quintil stark long → stark short. Nur Q5/Q1 gelten als Kandidaten (Extrem-Regel); „handelbar" erst, wenn der Paper-Track die Trefferquote signifikant >50 % belegt.`}
+        hint={`Champion-Modell, Horizont ${d.horizon ?? "–"}W, Stärke-Quintil stark long → stark short. Nur Q5/Q1 gelten als Kandidaten (Extrem-Regel); „handelbar" erst, wenn der Paper-Track die Trefferquote signifikant >50 % belegt.`}
       >
         {d.champion.length > 0 ? (
           <div className="p-5 space-y-4">
@@ -297,7 +309,7 @@ export default async function Page() {
 
       <Panel
         title="Paper-Track — echte Forward-Trefferquote"
-        subtitle="Oberste Instanz, nicht der Backtest. Champion muss die Baseline (Zins+Saison) schlagen."
+        hint="Oberste Instanz, nicht der Backtest. Champion muss die Baseline (Zins+Saison) schlagen."
       >
         <div className="grid grid-cols-2 gap-4 p-5 text-sm">
           <div>
@@ -311,7 +323,7 @@ export default async function Page() {
         </div>
       </Panel>
 
-      <Panel title="Engine-Status" subtitle="Nächtliche Experiment-Suche auf GitHub Actions.">
+      <Panel title="Engine-Status" hint="Nächtliche Experiment-Suche auf GitHub Actions.">
         <div className="p-5">
           <div className="grid grid-cols-3 gap-4 text-sm mb-4">
             <div>

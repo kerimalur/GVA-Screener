@@ -1,4 +1,4 @@
-import Panel from "@/components/layout/Panel";
+import { Panel } from "@/components/ui";
 import TimeSeriesChart from "@/components/charts/TimeSeriesChart";
 import { loadEngineLog, type EngineNight } from "@/lib/ml/engineLog";
 import { loadHoldout } from "@/lib/ml/holdout";
@@ -94,7 +94,7 @@ export default async function Page() {
       <StagnationHinweis nights={nights} />
       <Panel
         title="Verlauf — Score & Trefferquote pro Nacht"
-        subtitle={`${nights.length} Nächte · ${totalExperiments} Experimente gesamt · Score = Ø-Trefferquote − σ · stabile Linie wechselt nur mit Marge über mehrere Nächte`}
+        hint={`${nights.length} Nächte · ${totalExperiments} Experimente gesamt · Score = Ø-Trefferquote − σ · stabile Linie wechselt nur mit Marge über mehrere Nächte`}
       >
         {chart.length === 0 ? (
           <p className="text-sm text-muted">Noch keine Experimente. Läuft der Nightly-Workflow?</p>
@@ -120,7 +120,7 @@ export default async function Page() {
 
       <HoldoutSection data={holdout} />
 
-      <Panel title="Nacht für Nacht" subtitle="Was die wöchentliche Experiment-Suche getan hat.">
+      <Panel title="Nacht für Nacht" hint="Was die wöchentliche Experiment-Suche getan hat.">
         {nights.length === 0 ? (
           <p className="text-sm text-muted">Noch keine Läufe.</p>
         ) : (
@@ -208,7 +208,7 @@ export default async function Page() {
       </Panel>
 
       {nights.some((n) => n.failures.length > 0) && (
-        <Panel title="Fehlgeschlagene Runs" subtitle="Damit ein stiller Crash nicht unbemerkt bleibt.">
+        <Panel title="Fehlgeschlagene Runs" hint="Damit ein stiller Crash nicht unbemerkt bleibt.">
           <div className="space-y-3">
             {nights
               .filter((n) => n.failures.length > 0)
