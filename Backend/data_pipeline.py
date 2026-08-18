@@ -216,6 +216,30 @@ def resample_weekly_bars(df_daily: pd.DataFrame) -> pd.DataFrame:
     return df_w.sort_index().dropna()
 
 
+def resample_monthly_bars(df_daily: pd.DataFrame) -> pd.DataFrame:
+    """Monatskerzen wie TradingView: Kalendermonat.
+
+    Gleiche Index-Konvention wie resample_3d_bars/resample_weekly_bars — der
+    Index ist der ERSTE Handelstag des Monats, nicht das Perioden-Ende. Sonst
+    laege das Entstehungsdatum einer Monats-GVA hinter ihrem eigenen Treffer.
+
+    Die 5000 Tageskerzen von OANDA reichen fuer rund 230 Monatskerzen (~19
+    Jahre). Das genuegt fuer die GVA-Erkennung, ist aber der Grund, warum
+    Monats-GVAs selten sind: mit min_gap = 1 muss zwischen bildender Kerze und
+    Treffer ein GANZER Monat liegen.
+    """
+    if df_daily.empty:
+        return df_daily
+    df = df_daily.sort_index().copy()
+    df['month_id'] = df.index.to_period('M')
+    grp = df.groupby('month_id')
+    df_m = grp.agg({
+        'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum',
+    })
+    df_m.index = grp.apply(lambda x: x.index.min())
+    return df_m.sort_index().dropna()
+
+
 def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     df = fetch_daily_oanda(instrument, count)
     if df.empty:

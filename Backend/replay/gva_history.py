@@ -15,6 +15,7 @@ import pandas as pd
 
 from analyzer import (
     GVA_ATR_LENGTH,
+    GVA_MIN_GAP,
     GVA_SIZE_FACTOR,
     GVA_TOL_BASIS,
     GVA_TOL_PCT,
@@ -47,12 +48,18 @@ def collect_hits(
     touch_tol_atr: float = GVA_TOUCH_TOL_ATR,
     touch_wick: bool = GVA_TOUCH_WICK,
     atr_length: int = GVA_ATR_LENGTH,
+    min_gap: int = GVA_MIN_GAP,
 ) -> list[dict]:
     """Portierte analyze_gva_zones-Loop, die jeden Hit sammelt.
 
     Reihenfolge je Kerze wie im Original: erst Hits gegen aktive Linien
     prüfen, dann berührte Linien entfernen, dann neue Linien bilden.
     Jede Linie wird genau einmal gehittet (danach entfernt).
+
+    `min_gap` ist der Nachbar-Filter aus analyzer.py: kommt der erste Treffer
+    weniger als `min_gap + 1` Kerzen nach der Entstehung, wird die GVA
+    verworfen statt gemeldet. Muss hier identisch sein wie im Live-Scanner —
+    sonst zeigt der Replay Treffer, die kein Alert je ausgelöst hätte.
 
     size_factor/tol_pct sind im Replay stimmbar (Default = Live-Scanner-Werte),
     damit Kerim die GVA-Erkennung gegen TradingView kalibrieren kann.
@@ -89,8 +96,11 @@ def collect_hits(
 
         touch_hi, touch_lo = _touch_bounds(curr, touch_wick)
 
+        # Nachbar-Filter, identisch zu analyzer.analyze_gva_zones: zu frueh
+        # getroffene GVAs werden verworfen (kein Hit) und fallen unten
+        # trotzdem aus der Liste — keine zweite Chance.
         for x in active_shorts:
-            if touch_hi >= x["level"] - touch_tol:
+            if touch_hi >= x["level"] - touch_tol and i - x["idx"] >= min_gap + 1:
                 hits.append(
                     {
                         "direction": "SHORT",
@@ -102,7 +112,7 @@ def collect_hits(
                     }
                 )
         for x in active_longs:
-            if touch_lo <= x["level"] + touch_tol:
+            if touch_lo <= x["level"] + touch_tol and i - x["idx"] >= min_gap + 1:
                 hits.append(
                     {
                         "direction": "LONG",
@@ -122,12 +132,12 @@ def collect_hits(
         if prev_bull and curr_bear and valid_size and top_match:
             active_shorts.append(
                 {"level": max(curr["open"], curr["close"]), "date": curr_time,
-                 "signal_high": curr["high"], "signal_low": curr["low"]}
+                 "signal_high": curr["high"], "signal_low": curr["low"], "idx": i}
             )
         if prev_bear and curr_bull and valid_size and bot_match:
             active_longs.append(
                 {"level": min(curr["open"], curr["close"]), "date": curr_time,
-                 "signal_high": curr["high"], "signal_low": curr["low"]}
+                 "signal_high": curr["high"], "signal_low": curr["low"], "idx": i}
             )
 
     return hits

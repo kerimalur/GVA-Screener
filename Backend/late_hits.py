@@ -70,8 +70,11 @@ def find_late_hits(
         return []
 
     consumed = consumed or {}
-    # Ein 3D-Block spannt bis zu 6 Kalendertage, eine Wochenkerze bis zu 7.
-    block_days = 7 if str(tf).upper() == "W" else 6
+    # Ein 3D-Block spannt bis zu 6 Kalendertage, eine Wochenkerze bis zu 7,
+    # eine Monatskerze bis zu 31. Der Wert steuert, wie weit refine_hit_day
+    # innerhalb des Blocks nach dem tagesgenauen Treffer sucht — zu klein und
+    # der Treffertag waere systematisch zu frueh.
+    block_days = {"W": 7, "M": 31}.get(str(tf).upper(), 6)
     # refine_hit_day sucht innerhalb des Blocks (Blockstart bis +block_days) und
     # liefert nie ein frueheres Datum. Alles, was selbst im spaetesten Fall vor
     # dem Fenster laege, wird ohne pandas-Slice verworfen — sonst wuerde die

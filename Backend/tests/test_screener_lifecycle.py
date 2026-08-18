@@ -154,15 +154,25 @@ def test_reconcile_loest_extern_geschlossene_signale(monkeypatch):
 # --- Arbeitspaket B: Nachtrag am laufenden Screener ---------------------------
 
 def _late_frames():
+    """GVA-SHORT auf 1.01 (gebildet am 06.07.) mit spaeterem Treffer.
+
+    Block 2 (09.07.) ist bewusst ruhig: er bleibt unter 1.01 und bildet keine
+    neue GVA. Seit 2026-08-17 verlangt der Nachbar-Filter
+    (analyzer.GVA_MIN_GAP = 1), dass zwischen bildender Kerze und Treffer eine
+    ganze Kerze KOMPLETT liegt — ohne diesen Block waere die GVA verworfen und
+    es gaebe weder Signal noch Alert. Getroffen wird erst in Block 3 (14.07.),
+    tagesgenau am 15.07.
+    """
     df_3d = pd.DataFrame(
         {
-            "open":  [1.0000, 1.0100, 0.9950],
-            "high":  [1.0110, 1.0105, 1.0150],
-            "low":   [0.9990, 0.9940, 0.9940],
-            "close": [1.0100, 0.9950, 0.9960],
-            "volume": [1, 1, 1],
+            "open":  [1.0000, 1.0100, 0.9960, 0.9950],
+            "high":  [1.0110, 1.0105, 1.0000, 1.0150],
+            "low":   [0.9990, 0.9940, 0.9940, 0.9940],
+            "close": [1.0100, 0.9950, 0.9980, 0.9960],
+            "volume": [1, 1, 1, 1],
         },
-        index=pd.to_datetime(["2026-07-01", "2026-07-06", "2026-07-09"]),
+        index=pd.to_datetime(
+            ["2026-07-01", "2026-07-06", "2026-07-09", "2026-07-14"]),
     )
     daily = pd.DataFrame(
         {
@@ -172,7 +182,7 @@ def _late_frames():
             "close": [0.9990, 1.0100, 1.0090],
             "volume": [1, 1, 1],
         },
-        index=pd.to_datetime(["2026-07-09", "2026-07-10", "2026-07-13"]),
+        index=pd.to_datetime(["2026-07-14", "2026-07-15", "2026-07-16"]),
     )
     return df_3d, daily
 

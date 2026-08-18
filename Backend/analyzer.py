@@ -12,8 +12,17 @@ import pandas as pd
 # Nicht portiert (bewusst): die State Machine des Pine (BoS, Fib-Entry-Box,
 # Doppel-Hit-Regel, Konsolidierungs-/Trend-Filter). Der Screener meldet
 # weiterhin die ERSTE Beruehrung.
-GVA_TOL_PCT = 0.15      # Pine: gva_toleranz_pct = 15.0
-GVA_SIZE_FACTOR = 1.4   # Body B min. 40% groesser (Pine: gva_kerze2_groesser_pct=40)
+#
+# Nachbar-Filter (2026-08-17, Kerims Regel): Ein Treffer zaehlt erst, wenn
+# zwischen der bildenden Kerze und der Treffer-Kerze mindestens GVA_MIN_GAP
+# ganze Kerzen des Timeframes KOMPLETT liegen. Kommt der ERSTE Treffer
+# frueher, gehoert er noch zur selben Bewegung: dann wird die GVA komplett
+# VERWORFEN und bekommt keine zweite Chance — genau wie im Pine
+# (GVA-Linien-Pur.pine, f_zuFrueh/f_dropLine). Ohne diese Regel meldete der
+# Screener Linien, die schon von der Folgekerze eingesammelt wurden.
+GVA_TOL_PCT = 0.30      # Pine: tol_pct = 30.0  (Boden/Top-Toleranz)
+GVA_SIZE_FACTOR = 1.25  # Body B min. 25% groesser (Pine: k2_pct = 25)
+GVA_MIN_GAP = 1         # Pine: flt_gap = 1 (Kerzen komplett dazwischen)
 
 # Pine: tol_basis — "body" = % vom Body der 1. Kerze, "atr" = % vom HTF-ATR
 GVA_TOL_BASIS = "body"
@@ -52,6 +61,7 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str,
                       touch_tol_atr: float = GVA_TOUCH_TOL_ATR,
                       touch_wick: bool = GVA_TOUCH_WICK,
                       atr_length: int = GVA_ATR_LENGTH,
+                      min_gap: int = GVA_MIN_GAP,
                       tf: str = "3D"):
     if df.empty or len(df) < 2:
         return None, None, None, None, None, None, [], []
@@ -91,35 +101,45 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str,
 
         touch_hi, touch_lo = _touch_bounds(curr, touch_wick)
 
+        # Nachbar-Filter: `i - idx` ist der Kerzen-Abstand zwischen Entstehung
+        # und Treffer. Bei min_gap = 1 muss er mindestens 2 betragen, damit
+        # eine ganze Kerze KOMPLETT dazwischen liegt.
         for x in active_shorts:
             if touch_hi >= x['level'] - touch_tol:
-                last_touched = {
-                    "type": "SHORT",
-                    "level": x['level'],
-                    "date": x['date'].strftime('%d.%m.%Y'),
-                    "touched_date": curr_time.strftime('%d.%m.%Y'),
-                    "tf": tf,
-                }
+                if i - x['idx'] >= min_gap + 1:
+                    last_touched = {
+                        "type": "SHORT",
+                        "level": x['level'],
+                        "date": x['date'].strftime('%d.%m.%Y'),
+                        "touched_date": curr_time.strftime('%d.%m.%Y'),
+                        "tf": tf,
+                    }
+                # sonst: zu frueh -> die GVA wird verworfen, KEIN Treffer.
+                # Sie verschwindet unten trotzdem aus active_shorts: eine
+                # verworfene Linie darf nicht spaeter noch einmal antreten.
 
         for x in active_longs:
             if touch_lo <= x['level'] + touch_tol:
-                last_touched = {
-                    "type": "LONG",
-                    "level": x['level'],
-                    "date": x['date'].strftime('%d.%m.%Y'),
-                    "touched_date": curr_time.strftime('%d.%m.%Y'),
-                    "tf": tf,
-                }
+                if i - x['idx'] >= min_gap + 1:
+                    last_touched = {
+                        "type": "LONG",
+                        "level": x['level'],
+                        "date": x['date'].strftime('%d.%m.%Y'),
+                        "touched_date": curr_time.strftime('%d.%m.%Y'),
+                        "tf": tf,
+                    }
 
         active_shorts = [x for x in active_shorts if touch_hi < x['level'] - touch_tol]
         active_longs = [x for x in active_longs if touch_lo > x['level'] + touch_tol]
 
         # Level = Body-Top/Boden der Signal-Kerze B (bei Bull/Bear = deren Open)
         if prev_bull and curr_bear and valid_size and top_match:
-            active_shorts.append({'level': max(curr['open'], curr['close']), 'date': curr_time})
+            active_shorts.append({'level': max(curr['open'], curr['close']),
+                                  'date': curr_time, 'idx': i})
 
         if prev_bear and curr_bull and valid_size and bot_match:
-            active_longs.append({'level': min(curr['open'], curr['close']), 'date': curr_time})
+            active_longs.append({'level': min(curr['open'], curr['close']),
+                                 'date': curr_time, 'idx': i})
 
     current_price = df.iloc[-1]['close']
 
