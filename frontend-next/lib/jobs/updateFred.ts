@@ -11,11 +11,36 @@ import { chunkUpsert } from "./util";
  * is_stale = Fetch fehlgeschlagen ODER letzter Wert älter als die
  * Kadenz-Schwelle (staleAllowanceDays) — Quartalsserien gelten damit
  * innerhalb ihres Release-Zyklus als aktuell.
+ *
+ * ── Warum dieser Job laut ist (17.08.2026) ───────────────────────────────
+ * Vom 1. Juli bis zum 17. August 2026 stand die ganze FRED-Kette still —
+ * 47 Tage, in denen jede Nacht `status: "ok"` protokolliert wurde. Der Grund
+ * war nicht der Ausfall, sondern die Bewertung des Ausfalls: geworfen wurde
+ * nur, wenn **alle** Serien fehlschlugen. Fehlte der Schlüssel, gab
+ * `fetchSeries` für jede Serie brav `null` zurück, `is_stale` wanderte in
+ * eine Tabelle, die niemand ansieht, und der Job galt als erfolgreich.
+ *
+ * Seither gilt: fehlender Schlüssel = sofortiger Abbruch mit Klartext, und
+ * ein Viertel tote Serien = Fehler, kein „ok". Ein Job, der einen Ausfall
+ * überlebt, ohne ihn zu melden, ist schlimmer als einer, der abstürzt.
  */
+
+/** Ab welchem Anteil toter Serien der Lauf als Fehler gilt. */
+export const FRED_FEHLER_ANTEIL = 0.25;
+
 export async function updateFred(
   db: SupabaseClient,
   opts: { only?: string[] } = {},
 ): Promise<Record<string, unknown>> {
+  if (!process.env.FRED_API_KEY) {
+    throw new Error(
+      "FRED_API_KEY fehlt in der Env — ohne Schlüssel liefert die FRED-API " +
+        "nichts, und der Lauf würde stillschweigend nichts schreiben. " +
+        "Key kostenlos unter fred.stlouisfed.org/docs/api/api_key.html, " +
+        "danach in Vercel als FRED_API_KEY setzen und neu deployen.",
+    );
+  }
+
   const catalog = FRED_CATALOG.filter(
     (s) => s.source !== "bis" && (!opts.only || opts.only.includes(s.id)),
   );
@@ -43,7 +68,10 @@ export async function updateFred(
           { series_id: series.id, last_fetched: now, is_stale: true },
           { onConflict: "series_id" },
         );
-        return { stale: true };
+        // `stumm` = die Anfrage selbst kam ohne Daten zurück (Schlüssel,
+        // Netz, tote Serien-ID). Das ist etwas anderes als eine Serie, die
+        // antwortet und nur alt ist — und nur das Erste ist ein Kettenfehler.
+        return { written: 0, stale: true, stumm: true };
       }
 
       const lastDate = lastDates[i];
@@ -77,26 +105,49 @@ export async function updateFred(
         },
         { onConflict: "series_id" },
       );
-      return { written, stale };
+      return { written, stale, stumm: false };
     }),
   );
 
   let totalRows = 0;
   let staleCount = 0;
+  let stummCount = 0;
   const errors: string[] = [];
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.status === "fulfilled") {
       if (r.value.stale) staleCount += 1;
+      if (r.value.stumm) stummCount += 1;
       totalRows += r.value.written ?? 0;
     } else {
       errors.push(`${catalog[i].id}: ${r.reason instanceof Error ? r.reason.message : r.reason}`);
     }
   }
 
-  if (errors.length === catalog.length) {
-    throw new Error(`alle Serien fehlgeschlagen: ${errors[0]}`);
+  // Gezählt wird, was auf einen **Kettenfehler** hindeutet: geworfene
+  // Ausnahmen und stumme Antworten. Serien, die antworten und nur alt sind
+  // (eingestellte OECD-Feeds), stehen bewusst NICHT darin — die sind seit
+  // Jahren tot und dürfen den Lauf nicht dauerhaft rot färben. Sie tauchen
+  // als `stale` in der Datenlage auf, wo sie hingehören.
+  const kaputt = errors.length + stummCount;
+  const grenze = Math.max(1, Math.ceil(catalog.length * FRED_FEHLER_ANTEIL));
+
+  if (kaputt >= grenze) {
+    const beispiel = errors[0]
+      ?? `${stummCount} Serien antworteten ohne Daten (kein Fehler geworfen)`;
+    throw new Error(
+      `${kaputt} von ${catalog.length} FRED-Serien liefern nichts (Grenze ${grenze}): ${beispiel}. ` +
+        "Häufigste Ursache: FRED_API_KEY fehlt, ist abgelaufen oder wurde nach " +
+        "dem letzten Deploy nicht übernommen.",
+    );
   }
-  return { series: catalog.length, rows: totalRows, stale: staleCount, errors };
+
+  return {
+    series: catalog.length,
+    rows: totalRows,
+    stale: staleCount,
+    stumm: stummCount,
+    errors,
+  };
 }

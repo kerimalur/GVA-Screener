@@ -19,25 +19,51 @@ const AREAS_KEY = Object.values(BIS_AREA_BY_CCY).join("+");
 
 export const bisCpiId = (ccy: string) => `BIS_CPI_YOY_${ccy}`;
 export const bisPolicyId = (ccy: string) => `BIS_CBPOL_${ccy}`;
+/**
+ * Tagesgenaue Leitzinsreihe — die eigentliche Zahl, die eine Notenbank
+ * beschlossen hat, am Tag ihrer Gültigkeit.
+ *
+ * Warum zusätzlich zur Monatsreihe und nicht statt ihr: Die Monatsreihe hat
+ * Datumsstempel auf dem Monatsersten. Beide in eine Serie zu schreiben ergäbe
+ * eine Reihe, in der derselbe Tag zweimal vorkommt, einmal als Monatsmittel
+ * und einmal als Tagesstand. Getrennte IDs kosten ein paar Zeilen und ersparen
+ * eine Klasse von Fehlern, die niemand mehr findet.
+ *
+ * Der Grund für die Tagesreihe überhaupt: Die bisher benutzten OECD-Serien
+ * (`IRSTCI01*`, `IR3TIB01*`) sind monatlich, hinken zwei bis drei Monate
+ * hinterher und messen beim CHF und NZD gar nicht den Leitzins, sondern den
+ * 3-Monats-Interbankensatz.
+ */
+export const bisPolicyDailyId = (ccy: string) => `BIS_CBPOL_D_${ccy}`;
 
-const FLOWS = [
+interface BisFlussDef {
+  flow: string;
+  key: string;
+  idFor: (ccy: string) => string;
+  /** Monatsserien brauchen 'YYYY-MM', Tagesserien 'YYYY-MM-DD'. */
+  taeglich?: boolean;
+}
+
+const FLOWS: BisFlussDef[] = [
   // 771 = year-on-year changes, in per cent
   { flow: "WS_LONG_CPI", key: `M.${AREAS_KEY}.771`, idFor: bisCpiId },
   { flow: "WS_CBPOL", key: `M.${AREAS_KEY}`, idFor: bisPolicyId },
-] as const;
+  { flow: "WS_CBPOL", key: `D.${AREAS_KEY}`, idFor: bisPolicyDailyId, taeglich: true },
+];
 
 export async function updateBis(db: SupabaseClient): Promise<Record<string, unknown>> {
   // Rollierendes 4-Jahres-Fenster: deckt Revisionen ab und heilt Lücken selbst.
   const start = new Date();
   start.setFullYear(start.getFullYear() - 4);
   const startPeriod = start.toISOString().slice(0, 7);
+  const startTag = start.toISOString().slice(0, 10);
   const now = new Date().toISOString();
 
   let totalRows = 0;
   let staleFlows = 0;
 
   for (const f of FLOWS) {
-    const byArea = await fetchBisFlow(f.flow, f.key, startPeriod);
+    const byArea = await fetchBisFlow(f.flow, f.key, f.taeglich ? startTag : startPeriod);
 
     if (!byArea) {
       staleFlows += 1;
@@ -59,11 +85,16 @@ export async function updateBis(db: SupabaseClient): Promise<Record<string, unkn
       if (!ccy || obs.length === 0) continue;
       const id = f.idFor(ccy);
       for (const o of obs) rows.push({ series_id: id, date: o.date, value: o.value });
+      // Eine Antwort ist noch keine frische Zahl: BIS liefert eine
+      // eingestellte Reihe weiterhin aus, nur eben ohne neue Werte. Deshalb
+      // wird hier das Alter des jüngsten Werts geprüft, nicht der HTTP-Status.
+      const letztes = obs[obs.length - 1].date;
+      const alterTage = (Date.now() - Date.parse(`${letztes}T00:00:00Z`)) / 86_400_000;
       metas.push({
         series_id: id,
-        last_date: obs[obs.length - 1].date,
+        last_date: letztes,
         last_fetched: now,
-        is_stale: false,
+        is_stale: alterTage > (f.taeglich ? 14 : 100),
       });
     }
     totalRows += await chunkUpsert(db, "fred_series", rows, "series_id,date");

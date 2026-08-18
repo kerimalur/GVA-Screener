@@ -3,7 +3,72 @@
 > Notiz für Geräte-/Session-Wechsel. Der Chat-Verlauf ist NICHT im Repo —
 > diese Datei ersetzt ihn als Kontext. Bei neuer Session: "lies STATUS.md".
 
-Stand: 2026-08-13
+Stand: 2026-08-17
+
+## Datenschicht: FRED-Ausfall sichtbar gemacht, Leitzins und Zinserwartung neu (2026-08-17)
+
+**Anlass.** Ein Audit der laufenden Systeme (nicht des Codes) hat gezeigt: Die
+FRED-Kette stand seit dem **1. Juli 2026 still — 47 Tage**, und der Cron meldete
+jede Nacht `status: "ok"`. Betroffen waren rund 90 Serien: VIX, DGS10, ECBDFR,
+alle DEX*-FX-Kurse. Der Beweis, dass es nicht an FRED lag: `VIXCLS` steht bei
+FRED selbst auf dem 13.08.2026, in der Datenbank auf dem 01.07.2026.
+
+**Warum es unbemerkt blieb.** `lib/sources/fred.ts` gibt `null` zurück, wenn
+`FRED_API_KEY` fehlt oder ungültig ist. `updateFred` schrieb daraufhin
+`is_stale = true` und warf nur, wenn **alle** Serien fehlschlugen — was nie
+passierte, weil die BIS-Serien im selben Katalog über einen anderen Job laufen.
+Teil-Erfolg, Status „ok", Stille. Der Ausfall war die eine Hälfte des Problems,
+die stille Bewertung des Ausfalls die andere und schlimmere.
+
+### Was geändert wurde
+
+| Datei | Änderung |
+|---|---|
+| `lib/jobs/updateFred.ts` | Fehlender `FRED_API_KEY` → **sofortiger Abbruch** mit Klartext statt stiller Nulllieferung. Neuer Zähler `stumm` (Antwort ohne Daten) getrennt von `stale` (Antwort mit alten Daten). Ab **25 %** stummen oder geworfenen Serien wirft der Job. Dauerhaft tote OECD-Feeds zählen bewusst **nicht** mit — sonst wäre der Lauf für immer rot und niemand schaut mehr hin. |
+| `lib/sources/bis.ts` | `bisPeriodeAlsDatum()`: nimmt jetzt auch Tagesperioden (`YYYY-MM-DD`) an, nicht nur Monate. |
+| `lib/jobs/updateBis.ts` | Dritter Flow: **`WS_CBPOL` mit Frequenz `D`** → `BIS_CBPOL_D_<CCY>`, der echte Notenbanksatz tagesgenau für alle acht Währungen. `is_stale` wird jetzt am Alter des jüngsten Werts gemessen, nicht am HTTP-Status — eine eingestellte Reihe antwortet weiterhin, nur ohne neue Werte. |
+| `lib/sources/yields.ts` | **Neu.** 2-Jahres-Staatsanleihenrenditen je Währung, ein Adapter pro Quelle: US-Schatzamt (CSV je Jahr), EZB-Datenportal (SDMX), Finanzministerium Japan (JGB-CSV), Bank of Canada (Valet-API), RBA (Tabelle F2). Alle amtlich, kostenlos, ohne Schlüssel. Jeder Adapter darf einzeln ausfallen. |
+| `lib/jobs/updateYields.ts` | **Neu.** Schreibt die Renditen als `Y2_<CCY>` in `fred_series`, Frische in `fred_series_meta` — dieselbe Stale-Logik wie alles andere. Wirft nur, wenn **keine einzige** Quelle antwortet: dann ist nicht eine Behörde offline, sondern der Netzweg des Deployments kaputt. |
+| `app/api/data/freshness/route.ts` | **Neu, ohne Anmeldung.** Jede Serie und jede Tabelle mit letztem Wert, Alter, erlaubtem Alter und Ampel; Kernserien werden zusätzlich gegen die Rohdaten gegengeprüft (`fred_series_meta` ist eine Behauptung, `max(date)` eine Messung). `ok: false` plus eine Klartextliste, sobald etwas Kernrelevantes rot ist. |
+| `app/api/cron/fundamentals/route.ts` | `cron:yields` eingehängt. |
+
+**Geprüft:** `npx tsc --noEmit` sauber.
+
+### Warum 2-Jahres-Renditen und nicht nur der Leitzins
+
+Der Leitzins sagt, wo wir stehen. FX handelt, wo der Markt die Notenbank
+erwartet — und das steht in der 2-Jahres-Rendite. Sie reagiert am selben Tag
+auf eine Inflationszahl; der Leitzins erst Wochen später, in den bisher
+benutzten OECD-Serien sogar erst Monate später.
+
+Fünf von acht Währungen haben einen Adapter (USD, EUR, JPY, CAD, AUD). Für
+GBP, CHF und NZD gibt es **bewusst keinen Notbehelf**: eine 2-Jahres-Rendite
+gegen eine 10-jährige oder gegen einen Leitzins zu stellen wäre eine Zahl, die
+nichts bedeutet. Der Faktor sagt für diese Paare „keine Aussage", bis eine
+Quelle da ist.
+
+### Der alte Leitzins war bei sechs von acht Währungen keiner
+
+`daten.ts` in KerimOS liest den Leitzins bis heute aus `IRSTCI01*` und
+`IR3TIB01*`. Das sind Tagesgeld- und 3-Monats-Interbankensätze der OECD,
+monatlich, jüngster Wert **1. Mai 2026** — und beim CHF zeigt die Reihe
+−0,04 %, was mit dem SNB-Leitzins nichts zu tun hat. Nur USD (`FEDFUNDS`) und
+EUR (`ECBDFR`) sind echte Notenbanksätze.
+
+**Die Umstellung von KerimOS auf `BIS_CBPOL_D_*` steht noch aus** — bewusst.
+Die Serie existiert in der Datenbank erst, nachdem `cron:bis` einmal mit dem
+neuen Flow gelaufen ist. Vorher umzustellen hiesse, eine falsche Anzeige gegen
+eine leere zu tauschen.
+
+### Reihenfolge für den nächsten Schritt
+
+1. `FRED_API_KEY` in Vercel setzen, neu deployen, `fundamentals`-Cron einmal
+   von Hand starten.
+2. `https://gva-screener.vercel.app/api/data/freshness` ansehen — dort steht,
+   welche der fünf 2J-Adapter durchkommen und ob FRED wieder schreibt.
+3. Erst dann in KerimOS: `LEITZINS_SERIE` auf `BIS_CBPOL_D_*`, neuer Faktor
+   Zinserwartung aus `Y2_*`, COT nach Gruppen (Banken/Fonds/Real Money),
+   Währungs-Score und Terminal-Ansicht.
 
 ## Backtest komplett entfernt — Screener wird Labor (2026-08-13)
 

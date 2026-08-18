@@ -1,6 +1,19 @@
 export interface BisObservation {
-  date: string; // 'YYYY-MM-01' (Monatsserien)
+  /** 'YYYY-MM-01' bei Monatsserien, 'YYYY-MM-DD' bei Tagesserien. */
+  date: string;
   value: number;
+}
+
+/**
+ * BIS-Periode → ISO-Datum. 'YYYY-MM' wird auf den Monatsersten gelegt,
+ * 'YYYY-MM-DD' bleibt wie es ist. Null bei allem anderen (Quartale, Jahre) —
+ * die werden hier nicht gebraucht und sollen nicht still falsch landen.
+ */
+export function bisPeriodeAlsDatum(periode: string | undefined): string | null {
+  if (!periode) return null;
+  if (/^\d{4}-\d{2}$/.test(periode)) return `${periode}-01`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(periode)) return periode;
+  return null;
 }
 
 /**
@@ -14,7 +27,7 @@ export interface BisObservation {
 export async function fetchBisFlow(
   flow: string, // z.B. 'WS_LONG_CPI' | 'WS_CBPOL'
   key: string, // z.B. 'M.US+XM+GB.771' | 'M.US+XM+GB'
-  startPeriod: string, // 'YYYY-MM'
+  startPeriod: string, // 'YYYY-MM' (Monatsserie) oder 'YYYY-MM-DD' (Tagesserie)
   timeoutMs = 30000,
 ): Promise<Map<string, BisObservation[]> | null> {
   const controller = new AbortController();
@@ -47,10 +60,11 @@ export async function fetchBisFlow(
     const area = cols[iArea]?.trim();
     const period = cols[iPeriod]?.trim();
     const value = parseFloat(cols[iValue] ?? "");
-    // Monats-Perioden 'YYYY-MM'; 'NaN'-Werte (BIS-Datenlücken) überspringen
-    if (!area || !/^\d{4}-\d{2}$/.test(period ?? "") || !Number.isFinite(value)) continue;
+    // Monats- ODER Tagesperiode; 'NaN'-Werte (BIS-Datenlücken) überspringen
+    const datum = bisPeriodeAlsDatum(period);
+    if (!area || !datum || !Number.isFinite(value)) continue;
     const arr = out.get(area) ?? [];
-    arr.push({ date: `${period}-01`, value });
+    arr.push({ date: datum, value });
     out.set(area, arr);
   }
   if (out.size === 0) return null;
