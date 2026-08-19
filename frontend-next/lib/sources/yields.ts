@@ -167,39 +167,79 @@ async function eur(abDatum: string): Promise<YieldObservation[] | null> {
 
 /* ------------------------------------------------------------- JPY */
 
+const MOF_HISTORIE =
+  "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv";
+const MOF_AKTUELL =
+  "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv";
+
 /**
- * Finanzministerium Japan, JGB-Kurve als CSV.
- * Geprüft 17.08.2026 — Stand 2026-08-13.
+ * Die Kopfzeile suchen statt sie anzunehmen.
  *
- * Achtung, bewusst in Kauf genommen: Die Datei deckt nur das laufende
- * japanische Geschäftsjahr ab (April bis März). Für die Ansicht „Jetzt" und
- * die letzten Monate reicht das; ein Rückblick auf einen Trade aus dem
- * Vorjahr bekommt für JPY „keine Aussage" statt einer erfundenen Zahl.
+ * Beide MoF-Dateien beginnen mit einer Titelzeile
+ * (`Interest Rate (August 2026),,,,,(Unit : %)`); die Kopfzeile mit den
+ * Laufzeiten steht erst darunter. Zeile 0 blind als Kopf zu lesen war der
+ * Grund, warum `Y2_JPY` am 18.08.2026 leer blieb: kein "2Y" gefunden,
+ * Adapter gibt auf — korrekt, aber aus dem falschen Grund. Gesucht wird in
+ * den ersten zehn Zeilen, damit auch eine zusaetzliche Leer- oder
+ * Hinweiszeile den Parser nicht wieder umwirft.
  */
-async function jpy(): Promise<YieldObservation[] | null> {
-  const text = await holeText(
-    "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv",
-  );
+export function mofKopf(zeilen: string[]): { zeile: number; spalte: number } | null {
+  for (let i = 0; i < Math.min(zeilen.length, 10); i++) {
+    const f = csvFelder(zeilen[i]);
+    const spalte = f.findIndex((h) => h.replace(/\s/g, "").toUpperCase() === "2Y");
+    if (spalte > 0) return { zeile: i, spalte };
+  }
+  return null;
+}
+
+/** Eine MoF-CSV parsen: Datum in Spalte 0, Rendite in der 2Y-Spalte. */
+async function mofCsv(
+  url: string, abDatum: string,
+): Promise<YieldObservation[] | null> {
+  const text = await holeText(url);
   if (!text) return null;
 
   const zeilen = text.trim().split(/\r?\n/);
-  if (zeilen.length < 2) return null;
-  const kopf = csvFelder(zeilen[0]);
-  const iDatum = 0; // erste Spalte heisst je nach Jahrgang "Date" oder ist leer
-  const iZwei = kopf.findIndex((h) => h.replace(/\s/g, "").toUpperCase() === "2Y");
-  if (iZwei < 0) return null;
+  const kopf = mofKopf(zeilen);
+  if (!kopf) {
+    console.error(`[yields] ${url}: keine Kopfzeile mit "2Y" gefunden`);
+    return null;
+  }
 
   const out: YieldObservation[] = [];
-  for (const z of zeilen.slice(1)) {
+  for (const z of zeilen.slice(kopf.zeile + 1)) {
     const f = csvFelder(z);
-    // YYYY/M/D → ISO
-    const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(f[iDatum] ?? "");
-    const wert = zahl(f[iZwei]);
+    // YYYY/M/D -> ISO. Fehlende Notierungen stehen als "-" und werden zu null.
+    const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(f[0] ?? "");
+    const wert = zahl(f[kopf.spalte]);
     if (!m || wert === null) continue;
-    const mm = m[2].padStart(2, "0");
-    const dd = m[3].padStart(2, "0");
-    out.push({ date: `${m[1]}-${mm}-${dd}`, value: wert });
+    const datum = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    if (datum < abDatum) continue;
+    out.push({ date: datum, value: wert });
   }
+  return out;
+}
+
+/**
+ * Finanzministerium Japan, JGB-Kurve.
+ * Geprueft 18.08.2026 — Historie zurueck bis 1974.
+ *
+ * Zwei Dateien, weil MoF sie so anbietet: `jgbcme_all.csv` traegt die
+ * Historie, `jgbcme.csv` nur den laufenden Monat — dafuer frueher aktuell.
+ * Zusammengefuehrt ueber das Datum, bei Dopplungen gewinnt der laufende
+ * Monat. Faellt eine der beiden aus, reicht die andere.
+ */
+async function jpy(abDatum: string): Promise<YieldObservation[] | null> {
+  const [historie, aktuell] = await Promise.all([
+    mofCsv(MOF_HISTORIE, abDatum),
+    mofCsv(MOF_AKTUELL, abDatum),
+  ]);
+  if (!historie && !aktuell) return null;
+
+  const nachDatum = new Map<string, number>();
+  for (const o of historie ?? []) nachDatum.set(o.date, o.value);
+  for (const o of aktuell ?? []) nachDatum.set(o.date, o.value);
+  const out = [...nachDatum].map(([date, value]) => ({ date, value }));
   return out.length > 0 ? sortiere(out) : null;
 }
 
@@ -299,7 +339,7 @@ export async function fetch2yYield(
   switch (ccy) {
     case "USD": return usd(Number(abDatum.slice(0, 4)));
     case "EUR": return eur(abDatum);
-    case "JPY": return jpy();
+    case "JPY": return jpy(abDatum);
     case "CAD": return cad(abDatum);
     case "AUD": return aud();
     default: return null;
