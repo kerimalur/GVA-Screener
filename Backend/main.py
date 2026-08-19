@@ -175,6 +175,26 @@ def send_telegram_alert(text: str):
     except Exception as e:
         print(f"Telegram-Fehler: {e}")
 
+def _merke_alert(cache_key: str, level: float | None):
+    """Alert-Sperre setzen (level) oder loesen (None) — und ausserhalb des
+    Prozesses festhalten.
+
+    Der Grund steht in lifecycle_state.ALERT_CACHE_KEY: Render Free startet
+    mehrmals taeglich neu, und ohne zweites Gedaechtnis meldet dieselbe Linie
+    beim naechsten Antippen erneut. Der Schreibvorgang laeuft in einem Thread —
+    ein Telegram-Alert darf nie auf Supabase warten.
+    """
+    if level is None:
+        ALERT_CACHE.pop(cache_key, None)
+    else:
+        ALERT_CACHE[cache_key] = level
+    threading.Thread(
+        target=supabase_signals.set_state_value,
+        args=(lifecycle_state.ALERT_CACHE_KEY, dict(ALERT_CACHE)),
+        daemon=True,
+    ).start()
+
+
 def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True) -> dict:
     """Bewertet EIN Paar gegen die naechsten Lines mit dem gegebenen Preis.
     Sticky-HIT: einmal getroffen bleibt das Paar HIT bis der User 'Fertig' drueckt."""
@@ -247,7 +267,7 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                     supabase_signals.record_hit_async(
                         pair, side, level, snapshot, line_formed_date=date
                     )
-                    ALERT_CACHE[cache_key] = level
+                    _merke_alert(cache_key, level)
                 save_state()
             near = side
         elif distance_pips is not None and distance_pips <= 100.0:
@@ -400,7 +420,7 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None, df_w=None,
             # sonst liefe die 7-Tage-Ablaufregel ab dem falschen Datum.
             "hit_at": f"{hit['hit_date']}T12:00:00+00:00",
         }
-        ALERT_CACHE[cache_key] = level
+        _merke_alert(cache_key, level)
 
     save_state()
     send_telegram_alert(late_hits.alert_text(pair, hit) + cockpit_deep_link(pair))
@@ -670,7 +690,7 @@ def mark(req: MarkRequest):
             verbraucht = _mit_ueberrannten(req.pair, side, level)
             CONSUMED.setdefault(req.pair, {}).setdefault(side, set()).update(verbraucht)
             TRIGGERED.pop(req.pair, None)
-            ALERT_CACHE.pop(f"{req.pair}_{side}", None)
+            _merke_alert(f"{req.pair}_{side}", None)
             if len(verbraucht) > 1:
                 print(f"mark: {req.pair} {side} — {len(verbraucht)} Linien verbraucht "
                       f"(getroffen {level}, ueberrannt {sorted(verbraucht - {level})})")

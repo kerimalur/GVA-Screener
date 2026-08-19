@@ -39,6 +39,16 @@ import supabase_signals
 # Linie ist nicht "erledigt", nur nicht mehr aktuell genug fuers Live-Board.
 HIT_EXPIRY_DAYS = 7
 
+# Schluessel in `screener_state`, unter dem die Alert-Sperre ausserhalb des
+# Prozesses liegt. Zweites Gedaechtnis neben der `signals`-Tabelle: Render Free
+# schlaeft nach 15 Minuten ein und hat kein persistentes Dateisystem, der
+# Prozess startet also mehrmals taeglich bei null. Haengt die Sperre an einem
+# einzigen fire-and-forget-Insert und der geht verloren, meldet dieselbe Linie
+# beim naechsten Antippen erneut — genau der Fall, den Kerim am 19.08.2026 bei
+# EURCHF hatte: Alert, Neustart, eine Stunde spaeter dieselbe Linie, zweiter
+# Alert.
+ALERT_CACHE_KEY = "alert_cache"
+
 
 def _ist_abgelaufen(hit_at) -> bool:
     """True, wenn `hit_at` laenger als HIT_EXPIRY_DAYS zurückliegt.
@@ -169,6 +179,20 @@ def merge_consumed(target: dict, extra: dict) -> None:
             )
 
 
+def persistierter_alert_cache() -> dict:
+    """Alert-Sperre aus `screener_state`. Leer, wenn nichts/kaputt."""
+    roh = supabase_signals.get_state_value(ALERT_CACHE_KEY)
+    if not isinstance(roh, dict):
+        return {}
+    out: dict[str, float] = {}
+    for k, v in roh.items():
+        try:
+            out[str(k)] = float(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def load_lifecycle(state_file: str) -> tuple[dict, dict, dict, str]:
     """Zustand beim Start aufbauen.
 
@@ -186,6 +210,14 @@ def load_lifecycle(state_file: str) -> tuple[dict, dict, dict, str]:
 
     triggered, consumed, alert_cache = state_from_rows(rows)
     merge_consumed(consumed, file_consumed)
+
+    # Zweites Gedaechtnis dazu, ohne das erste zu ueberschreiben: was aus den
+    # Signal-Zeilen rekonstruiert wurde, hat Vorrang; die persistierte Sperre
+    # fuellt nur die Luecken. Eine veraltete Sperre kann keinen berechtigten
+    # Alert unterdruecken — sie blockiert genau EIN Level je Paar und Seite,
+    # und ein verbrauchtes Level waehlt `select_lines` ohnehin nicht mehr aus.
+    for schluessel, level in persistierter_alert_cache().items():
+        alert_cache.setdefault(schluessel, level)
 
     # Migration state.json -> Supabase: Ein Paar, das die Datei als offenen HIT
     # kennt, Supabase aber nicht, ist unklar (Signal-Insert war damals nicht

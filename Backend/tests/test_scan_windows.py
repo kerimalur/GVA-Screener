@@ -27,8 +27,11 @@ def clean(monkeypatch):
     monkeypatch.setattr(main, "reconcile_state", lambda: None)
     monkeypatch.setattr(main.supabase_signals, "build_snapshot", lambda *a, **k: None)
     monkeypatch.setattr(main.supabase_signals, "record_hit_async", lambda *a, **k: None)
+    # `**_` ist Absicht: der echte Aufruf uebergibt tf="3D"/"W"/"M". Eine
+    # Attrappe mit fester Signatur laesst compute_zones fuer JEDES Paar mit
+    # TypeError abbrechen — dann misst der Test nur noch sich selbst.
     monkeypatch.setattr(main, "analyze_gva_zones",
-                        lambda df, pair: (None, None, None, None, 1.0, None, [], []))
+                        lambda df, pair, **_: (None, None, None, None, 1.0, None, [], []))
     yield
 
 
@@ -157,7 +160,7 @@ def test_fehler_im_nachtrag_haelt_das_fenster_ebenfalls_offen(monkeypatch):
         late_hits.LAST_SCAN_BY_PAIR_KEY: {p: "2026-07-19T00:00:00+00:00" for p in main.PAIRS},
     }).install(monkeypatch)
 
-    def kaputter_nachtrag(pair, df_3d, daily, since_day):
+    def kaputter_nachtrag(pair, df_3d, daily, since_day, *_):
         if pair == "EURUSD":
             raise RuntimeError("OANDA-Historie unvollstaendig")
 
@@ -183,7 +186,8 @@ def test_offenes_fenster_wird_beim_naechsten_erfolg_ausgewertet(monkeypatch):
     monkeypatch.setattr(main, "fetch_daily_oanda", lambda pair, count=5000: _daily())
     monkeypatch.setattr(main, "resample_3d_bars", lambda daily: daily)
     monkeypatch.setattr(main, "_handle_late_hits",
-                        lambda pair, df_3d, daily, since_day: gesehen.__setitem__(pair, since_day))
+                        lambda pair, df_3d, daily, since_day, *_:
+                            gesehen.__setitem__(pair, since_day))
     monkeypatch.setattr(main.time, "sleep", lambda s: None)
     main.compute_zones()
 

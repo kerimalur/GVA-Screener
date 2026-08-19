@@ -7,7 +7,21 @@ import json
 
 import pytest
 
+from datetime import datetime, timedelta, timezone
+
 import lifecycle_state
+
+
+def _vor(tage: float) -> str:
+    """Zeitstempel vor N Tagen — bewusst relativ, nicht fest.
+
+    Die Vorlagen standen frueher auf festen Julidaten. Seit der Regel
+    "HIT laeuft nach 7 Tagen ab" (lifecycle_state.HIT_EXPIRY_DAYS) galten sie
+    ab Ende Juli als abgelaufen, und fuenf Tests wurden rot, ohne dass sich am
+    Code etwas geaendert haette — gemerkt hat es einen Monat lang niemand.
+    Ein Test mit festem Datum misst irgendwann den Kalender statt den Code.
+    """
+    return (datetime.now(timezone.utc) - timedelta(days=tage)).isoformat()
 
 
 def _row(pair, side, level, status, hit_at, late=False):
@@ -26,17 +40,22 @@ def _row(pair, side, level, status, hit_at, late=False):
 
 def test_status_mapping_triggered_und_consumed():
     rows = [
-        _row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z"),
-        _row("GBPUSD", "LONG", 1.25, "watchlist", "2026-07-19T10:00:00Z"),
-        _row("AUDUSD", "SHORT", 0.66, "journaled", "2026-07-18T10:00:00Z"),
-        _row("NZDUSD", "LONG", 0.58, "dismissed", "2026-07-17T10:00:00Z"),
+        _row("EURUSD", "SHORT", 1.1, "new", _vor(1)),
+        _row("GBPUSD", "LONG", 1.25, "watchlist", _vor(2)),
+        _row("AUDUSD", "SHORT", 0.66, "journaled", _vor(3)),
+        _row("NZDUSD", "LONG", 0.58, "dismissed", _vor(4)),
     ]
     triggered, consumed, cache = lifecycle_state.state_from_rows(rows)
 
-    assert triggered["EURUSD"] == {
+    # hit_at wandert seit der Ablaufregel mit durch — deshalb Feld fuer Feld
+    # statt Gleichheit des ganzen Dicts: sonst bricht der Test bei jedem
+    # zusaetzlichen Feld, ohne dass fachlich etwas falsch waere.
+    eintrag = triggered["EURUSD"]
+    assert {k: eintrag[k] for k in ("side", "level", "date", "pending", "detected_late")} == {
         "side": "SHORT", "level": 1.1, "date": None,
         "pending": False, "detected_late": False,
     }
+    assert eintrag["hit_at"] == rows[0]["hit_at"]
     assert triggered["GBPUSD"]["pending"] is True
     assert "AUDUSD" not in triggered and "NZDUSD" not in triggered
     assert consumed["AUDUSD"]["SHORT"] == {0.66}
@@ -47,8 +66,8 @@ def test_status_mapping_triggered_und_consumed():
 
 def test_juengste_offene_zeile_gewinnt():
     rows = [  # bereits nach hit_at absteigend sortiert (wie die Query)
-        _row("EURUSD", "SHORT", 1.12, "new", "2026-07-20T10:00:00Z"),
-        _row("EURUSD", "SHORT", 1.10, "new", "2026-07-01T10:00:00Z"),
+        _row("EURUSD", "SHORT", 1.12, "new", _vor(1)),
+        _row("EURUSD", "SHORT", 1.10, "new", _vor(5)),
     ]
     triggered, _, _ = lifecycle_state.state_from_rows(rows)
     assert triggered["EURUSD"]["level"] == 1.12
@@ -57,8 +76,8 @@ def test_juengste_offene_zeile_gewinnt():
 def test_consumed_linie_wird_nie_triggered():
     """Widersprüchliche Historie: dieselbe Linie 'new' UND später consumed."""
     rows = [
-        _row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z"),
-        _row("EURUSD", "SHORT", 1.1, "journaled", "2026-07-19T10:00:00Z"),
+        _row("EURUSD", "SHORT", 1.1, "new", _vor(1)),
+        _row("EURUSD", "SHORT", 1.1, "journaled", _vor(2)),
     ]
     triggered, consumed, _ = lifecycle_state.state_from_rows(rows)
     assert "EURUSD" not in triggered
@@ -66,7 +85,7 @@ def test_consumed_linie_wird_nie_triggered():
 
 
 def test_detected_late_wird_durchgereicht():
-    rows = [_row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z", late=True)]
+    rows = [_row("EURUSD", "SHORT", 1.1, "new", _vor(1), late=True)]
     triggered, _, _ = lifecycle_state.state_from_rows(rows)
     assert triggered["EURUSD"]["detected_late"] is True
 
@@ -131,7 +150,7 @@ def test_load_supabase_gewinnt_und_vereinigt_consumed(monkeypatch, tmp_path):
     lifecycle_state.write_cache_file(path, {}, {"EURUSD": {"SHORT": {1.05}}})
     monkeypatch.setattr(
         lifecycle_state.supabase_signals, "fetch_lifecycle_rows",
-        lambda: [_row("EURUSD", "SHORT", 1.1, "journaled", "2026-07-20T10:00:00Z")],
+        lambda: [_row("EURUSD", "SHORT", 1.1, "journaled", _vor(1))],
     )
     triggered, consumed, _, source = lifecycle_state.load_lifecycle(path)
     assert source == "supabase"
@@ -156,7 +175,7 @@ def test_migration_unklarer_trigger_gilt_als_consumed(monkeypatch, tmp_path):
 
 
 def test_geloeschte_cache_datei_verhaelt_sich_identisch(monkeypatch, no_file):
-    rows = [_row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z")]
+    rows = [_row("EURUSD", "SHORT", 1.1, "new", _vor(1))]
     monkeypatch.setattr(lifecycle_state.supabase_signals, "fetch_lifecycle_rows", lambda: rows)
     triggered, consumed, cache, source = lifecycle_state.load_lifecycle(no_file)
     assert source == "supabase"
@@ -171,7 +190,7 @@ def test_reconcile_loest_sticky_hit_nach_externem_status():
     triggered = {"EURUSD": {"side": "SHORT", "level": 1.1, "date": None, "pending": False}}
     consumed: dict = {}
     cache = {"EURUSD_SHORT": 1.1}
-    rows = [_row("EURUSD", "SHORT", 1.1, "journaled", "2026-07-20T10:00:00Z")]
+    rows = [_row("EURUSD", "SHORT", 1.1, "journaled", _vor(1))]
 
     changed = lifecycle_state.reconcile(triggered, consumed, cache, rows)
     assert changed is True
@@ -192,7 +211,7 @@ def test_reconcile_belebt_keine_alten_trigger():
     vorbelegen, keinen Trigger erfinden."""
     triggered: dict = {}
     cache: dict = {}
-    rows = [_row("EURUSD", "SHORT", 1.1, "new", "2026-07-20T10:00:00Z")]
+    rows = [_row("EURUSD", "SHORT", 1.1, "new", _vor(1))]
     lifecycle_state.reconcile(triggered, {}, cache, rows)
     assert triggered == {}
     assert cache == {"EURUSD_SHORT": 1.1}

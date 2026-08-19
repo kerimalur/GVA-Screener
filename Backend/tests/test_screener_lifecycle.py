@@ -87,6 +87,10 @@ def test_ueberrannte_linien_werden_mitverbraucht(clean_state):
     dieselbe Bewegung. Eine Linie, auf deren anderer Seite der Preis schon
     steht, kann keinen frischen Einstieg liefern.
     """
+    # Erst ein Tick UNTER den Linien: ohne Vorpreis erkennt evaluate_pair nur
+    # die exakte Beruehrung (+/- 0.1 Pip), keine Kreuzung. Genau so kommt es
+    # auch live an — der Sprung passiert zwischen zwei Ticks.
+    assert _eval(1.0950)["status"] != "HIT"
     res = _eval(1.1060)          # ueberschiesst BEIDE Shorts (1.1000 / 1.1050)
     assert res["status"] == "HIT"
     assert main.TRIGGERED["EURUSD"]["level"] == 1.1
@@ -118,6 +122,7 @@ def test_noch_nicht_erreichte_linie_bleibt_erhalten(clean_state):
 
 def test_ohne_bekannten_preis_nur_die_getroffene_linie(clean_state):
     """Kein Preis bekannt -> lieber ein Alert zu viel als eine stille Loeschung."""
+    _eval(1.0950)                # Vortick, sonst wird der Sprung nicht erkannt
     _eval(1.1060)
     main.PREV_PRICE.clear()
     main.ZONES["EURUSD"]["daily_close"] = None

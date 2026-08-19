@@ -10,7 +10,14 @@ Punkt 5: `line_formed_date` ueberlebt jetzt den Neustart. Zwei Schreibformate
 """
 import pytest
 
+from datetime import datetime, timedelta, timezone
+
 import lifecycle_state
+
+
+def _vor(tage: float) -> str:
+    """Siehe test_lifecycle_state._vor — feste Daten laufen ab."""
+    return (datetime.now(timezone.utc) - timedelta(days=tage)).isoformat()
 import supabase_signals
 
 
@@ -130,7 +137,7 @@ def test_lifecycle_rows_setzt_offene_zeilen_nach_vorne(monkeypatch, konfiguriert
     """state_from_rows waehlt pro Paar die ERSTE offene Zeile — die Reihenfolge
     offen-vor-consumed muss deshalb erhalten bleiben."""
     offen = [{"pair": "EURUSD", "line_type": "short", "line_level": 1.1,
-              "status": "new", "hit_at": "2026-07-20T10:00:00Z"}]
+              "status": "new", "hit_at": _vor(1)}]
     verbraucht = [_consumed_row(0)]
     monkeypatch.setattr(supabase_signals, "fetch_open_signal_rows", lambda: offen)
     monkeypatch.setattr(supabase_signals, "fetch_consumed_rows", lambda: verbraucht)
@@ -192,7 +199,7 @@ def test_insert_schreibt_normalisiertes_bildungsdatum(monkeypatch, konfiguriert)
 def test_bildungsdatum_ueberlebt_den_neustart():
     rows = [{
         "pair": "EURUSD", "line_type": "short", "line_level": 1.1,
-        "status": "new", "hit_at": "2026-07-20T10:00:00Z",
+        "status": "new", "hit_at": _vor(1),
         "line_formed_date": "2026-07-01",
     }]
     triggered, _, _ = lifecycle_state.state_from_rows(rows)
@@ -202,7 +209,7 @@ def test_bildungsdatum_ueberlebt_den_neustart():
 def test_altzeile_ohne_bildungsdatum_bleibt_gueltig():
     rows = [{
         "pair": "EURUSD", "line_type": "short", "line_level": 1.1,
-        "status": "new", "hit_at": "2026-07-20T10:00:00Z",
+        "status": "new", "hit_at": _vor(1),
     }]
     triggered, _, _ = lifecycle_state.state_from_rows(rows)
     assert triggered["EURUSD"]["date"] is None   # Platzhalter, kein Fehler
