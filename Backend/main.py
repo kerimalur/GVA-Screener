@@ -603,6 +603,42 @@ class MarkRequest(BaseModel):
     action: str  # "pending" oder "done"
 
 
+def _mit_ueberrannten(pair: str, side: str, level: float) -> set[float]:
+    """Die getroffene Linie PLUS alle gleichseitigen, die der Preis in derselben
+    Bewegung schon hinter sich gelassen hat.
+
+    Warum es das braucht (19.08.2026): `select_lines` nimmt immer die
+    naechstgelegene offene Linie. Schiesst der Preis in einem Zug ueber mehrere
+    gestapelte Linien, wird nach jedem "Fertig" die naechste aktiv — und liegt
+    dann sofort wieder hinter dem Preis. Ergebnis war eine Kette von
+    Telegram-Alerts fuer ein und dieselbe Bewegung.
+
+    Eine Linie, auf deren anderer Seite der Preis bereits steht, kann keinen
+    frischen Einstieg mehr liefern. Sie gehoert mitverbraucht, nicht gemeldet.
+
+    Ohne bekannten Preis wird NUR die getroffene Linie verbraucht — lieber ein
+    Alert zu viel als eine Linie, die stillschweigend verschwindet.
+    """
+    verbraucht = {level}
+    preis = PREV_PRICE.get(pair)
+    if preis is None:
+        preis = (ZONES.get(pair) or {}).get("daily_close")
+    if preis is None:
+        return verbraucht
+
+    schluessel = "shorts" if side == "SHORT" else "longs"
+    for ln in (ZONES.get(pair) or {}).get(schluessel, []):
+        try:
+            lvl = round(float(ln["level"]), 5)
+        except (TypeError, ValueError, KeyError):
+            continue
+        # SHORT-Linien liegen ueber dem Preis, LONG-Linien darunter.
+        # Ueberrannt ist, was der Preis bereits passiert hat.
+        if (side == "SHORT" and lvl <= preis) or (side == "LONG" and lvl >= preis):
+            verbraucht.add(lvl)
+    return verbraucht
+
+
 @app.post("/api/mark")
 def mark(req: MarkRequest):
     """User-Aktion auf ein getroffenes (HIT) Paar.
@@ -631,9 +667,13 @@ def mark(req: MarkRequest):
             # Line ist verbraucht (nur 1x nutzbar) -> blacklisten, HIT loeschen,
             # Alert-Dedup loeschen -> naechste Line wird automatisch gewaehlt.
             level = round(trig["level"], 5)
-            CONSUMED.setdefault(req.pair, {}).setdefault(side, set()).add(level)
+            verbraucht = _mit_ueberrannten(req.pair, side, level)
+            CONSUMED.setdefault(req.pair, {}).setdefault(side, set()).update(verbraucht)
             TRIGGERED.pop(req.pair, None)
             ALERT_CACHE.pop(f"{req.pair}_{side}", None)
+            if len(verbraucht) > 1:
+                print(f"mark: {req.pair} {side} — {len(verbraucht)} Linien verbraucht "
+                      f"(getroffen {level}, ueberrannt {sorted(verbraucht - {level})})")
             # 'dismissed' (nicht 'journaled'): der Backend-Weg bedeutet nur
             # "Linie verbraucht". Ein echter Journal-Trade kommt aus dem Cockpit.
             db_status = "dismissed"

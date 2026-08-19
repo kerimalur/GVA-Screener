@@ -79,6 +79,52 @@ def test_hit_genommen_naechste_linie_alarmiert_wieder(clean_state):
     assert len(clean_state["sent"]) == 2
 
 
+def test_ueberrannte_linien_werden_mitverbraucht(clean_state):
+    """Ein Zug ueber mehrere gestapelte Linien = EIN Alert, nicht drei.
+
+    Der Ausloeser war Telegram: schoss der Preis in einem Zug ueber mehrere
+    Linien, meldete jedes "Fertig" sofort die naechste — Kette von Alerts fuer
+    dieselbe Bewegung. Eine Linie, auf deren anderer Seite der Preis schon
+    steht, kann keinen frischen Einstieg liefern.
+    """
+    res = _eval(1.1060)          # ueberschiesst BEIDE Shorts (1.1000 / 1.1050)
+    assert res["status"] == "HIT"
+    assert main.TRIGGERED["EURUSD"]["level"] == 1.1
+    assert len(clean_state["sent"]) == 1
+
+    main.mark(main.MarkRequest(pair="EURUSD", action="done"))
+    assert main.CONSUMED["EURUSD"]["SHORT"] == {1.1, 1.105}
+
+    # Keine Linie rueckt nach, kein zweiter Alert.
+    short, _ = main.select_lines("EURUSD")
+    assert short is None
+    assert _eval(1.1060)["status"] != "HIT"
+    assert len(clean_state["sent"]) == 1
+
+
+def test_noch_nicht_erreichte_linie_bleibt_erhalten(clean_state):
+    """Gegenprobe: nur was der Preis passiert hat, wird mitverbraucht.
+
+    Ohne diese Grenze waere aus der Alarm-Beruhigung ein stiller Verlust von
+    Linien geworden — schlimmer als das urspruengliche Problem.
+    """
+    _eval(1.1000)                 # trifft nur die erste Linie
+    main.mark(main.MarkRequest(pair="EURUSD", action="done"))
+    assert main.CONSUMED["EURUSD"]["SHORT"] == {1.1}
+
+    short, _ = main.select_lines("EURUSD")
+    assert short["level"] == 1.1050
+
+
+def test_ohne_bekannten_preis_nur_die_getroffene_linie(clean_state):
+    """Kein Preis bekannt -> lieber ein Alert zu viel als eine stille Loeschung."""
+    _eval(1.1060)
+    main.PREV_PRICE.clear()
+    main.ZONES["EURUSD"]["daily_close"] = None
+    main.mark(main.MarkRequest(pair="EURUSD", action="done"))
+    assert main.CONSUMED["EURUSD"]["SHORT"] == {1.1}
+
+
 def test_verwerfen_wirkt_wie_genommen_auf_den_backend_zustand():
     _eval(1.1000)
     main.mark(main.MarkRequest(pair="EURUSD", action="done"))
