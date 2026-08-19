@@ -7,3 +7,4 @@ numpy
 lightgbm
 scikit-learn
 joblib
+Pillow

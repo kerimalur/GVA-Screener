@@ -16,6 +16,7 @@ import macro
 import supabase_signals
 import lifecycle_state
 import late_hits
+import alert_extras
 
 load_dotenv()
 
@@ -61,6 +62,14 @@ PREV_PRICE = {}
 # GVA-Zonen pro Paar: ALLE noch nicht getroffenen Lines (nach Naehe sortiert).
 # pair -> {"shorts": [{level,date}], "longs": [...], "daily_close", "last_touched"}
 ZONES = {}
+
+# Kerzen je Paar und Timeframe — nur fuer das Chartbild im Alert.
+# Bewusst NICHT in ZONES: ZONES geht als JSON ans Frontend, ein DataFrame
+# darin wuerde die API beim ersten Serialisieren zerlegen. Gehalten werden
+# 60 Kerzen je Timeframe, das sind ueber alle 28 Paare ein paar hundert
+# Kilobyte — und der Alert braucht dann keinen zweiten OANDA-Abruf, der ihn
+# um Sekunden verzoegern wuerde.
+BARS = {}
 
 # Sticky-HIT: sobald eine Line beruehrt wurde, bleibt das Paar HIT bis der
 # User "Fertig" drueckt. pair -> {"side": "SHORT"/"LONG", "level": float,
@@ -175,6 +184,55 @@ def send_telegram_alert(text: str):
     except Exception as e:
         print(f"Telegram-Fehler: {e}")
 
+def send_telegram_photo(png: bytes, caption: str) -> bool:
+    """Bild mit Bildunterschrift schicken. True nur bei echtem Erfolg.
+
+    Der Rueckgabewert ist wichtig: der Aufrufer schickt bei False denselben
+    Text als normale Nachricht nach. Ein Alert darf nie daran scheitern, dass
+    ein Chartbild nicht durchging.
+
+    Telegram begrenzt die Bildunterschrift auf 1024 Zeichen — laenger wird die
+    Anfrage komplett abgelehnt, nicht etwa gekuerzt.
+    """
+    token = os.getenv('TELEGRAM_BOT_TOKEN')
+    chat_id = os.getenv('TELEGRAM_CHAT_ID')
+    if not token or not chat_id or not png:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        antwort = requests.post(
+            url,
+            data={"chat_id": chat_id, "caption": caption[:1024], "parse_mode": "Markdown"},
+            files={"photo": ("gva.png", png, "image/png")},
+            timeout=15,
+        )
+        return antwort.ok
+    except Exception as e:
+        print(f"Telegram-Foto-Fehler: {e}")
+        return False
+
+
+def alert_mit_chart(pair: str, text: str, side: str, level: float,
+                    tf: str = "3D", formed_date: str | None = None,
+                    preis: float | None = None):
+    """Ein Alert: mit Chartbild, wenn es klappt — sonst als reiner Text.
+
+    Genau eine Nachricht in beiden Faellen. Erst das Bild zu schicken und dann
+    den Text waere doppelt und wuerde Kerims Regel verletzen, dass es je
+    Linie eine Meldung gibt.
+    """
+    voll = text + alert_extras.fundamental_block(pair, MACRO_CACHE["currencies"]) \
+        + cockpit_deep_link(pair)
+    kerzen = (BARS.get(pair) or {}).get(str(tf).upper() if tf else "3D")
+    png = alert_extras.baue_chart(
+        pair, kerzen, level, side, tf=tf or "3D",
+        formed_date=formed_date, preis=preis,
+    )
+    if png and send_telegram_photo(png, voll):
+        return
+    send_telegram_alert(voll)
+
+
 def _merke_alert(cache_key: str, level: float | None):
     """Alert-Sperre setzen (level) oder loesen (None) — und ausserhalb des
     Prozesses festhalten.
@@ -260,7 +318,8 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
                 cache_key = f"{pair}_{side}"
                 if ALERT_CACHE.get(cache_key) != level:
                     msg = f"🚨 *GVA LINE HIT!* 🚨\n\n*Pair:* {pair}\n*Typ:* {side} LINE ({tf})\n*Live-Preis:* {round(price, 5)}\n*Line Level:* {round(level, 5)}\n*Formiert am:* {date}"
-                    send_telegram_alert(msg + cockpit_deep_link(pair))
+                    alert_mit_chart(pair, msg, side, level, tf=tf,
+                                    formed_date=date, preis=price)
                     # Additiv: HIT auch als Signal in Supabase ablegen (Journal-Inbox).
                     # Fire-and-forget im eigenen Thread, no-op ohne Konfiguration.
                     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
@@ -423,7 +482,10 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None, df_w=None,
         _merke_alert(cache_key, level)
 
     save_state()
-    send_telegram_alert(late_hits.alert_text(pair, hit) + cockpit_deep_link(pair))
+    alert_mit_chart(
+        pair, late_hits.alert_text(pair, hit), side, level,
+        tf=hit.get("tf", "3D"), formed_date=hit.get("line_formed_date"),
+    )
     snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
     supabase_signals.record_hit_async(
         pair, side, level, snapshot,
@@ -486,6 +548,12 @@ def compute_zones():
 
             # Juengster Touch ueber alle drei Timeframes (Datum 'DD.MM.YYYY')
             last_touched = _newest_touch(touched_3d, *touched_htf)
+
+            BARS[pair] = {
+                "3D": df_3d.tail(60),
+                "W": df_w.tail(60) if not df_w.empty else None,
+                "M": df_m.tail(60) if not df_m.empty else None,
+            }
 
             ZONES[pair] = {
                 "shorts": all_shorts,
