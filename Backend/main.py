@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from data_pipeline import fetch_daily_oanda, resample_3d_bars, resample_weekly_bars, resample_monthly_bars, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
+from data_pipeline import fetch_daily_oanda, resample_3d_bars, resample_weekly_bars, resample_monthly_bars, nur_geschlossene, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
 from analyzer import analyze_gva_zones
 import macro
 import supabase_signals
@@ -516,7 +516,12 @@ def compute_zones():
                 failed.append(pair)
                 print(f"Zonen: keine Tageskerzen fuer {pair} — Nachtrag-Fenster bleibt offen")
                 continue
-            df_3d = resample_3d_bars(daily)
+            # Nur GESCHLOSSENE Kerzen in die GVA-Erkennung. Die laufende
+            # Kerze bewegt sich noch, und mit ihr wuerde das Level der GVA
+            # wandern — eine Linie, die der eigene Live-Preis im selben
+            # Moment beruehrt. Siehe data_pipeline.nur_geschlossene.
+            df_3d_voll = resample_3d_bars(daily)
+            df_3d = nur_geschlossene(df_3d_voll, daily, "3D")
             if df_3d.empty:
                 failed.append(pair)
                 print(f"Zonen: keine 3D-Kerzen fuer {pair} — Nachtrag-Fenster bleibt offen")
@@ -526,9 +531,11 @@ def compute_zones():
             # 30% Toleranz, Faktor 1.25, mindestens 1 Kerze komplett zwischen
             # Entstehung und Treffer). GVAs entstehen auf DREI Timeframes —
             # 3D, Woche und Monat; jede Linie traegt ihr "tf"-Tag mit.
-            df_w = resample_weekly_bars(daily)
-            df_m = resample_monthly_bars(daily)
-            _, _, _, _, price, touched_3d, shorts_3d, longs_3d = analyze_gva_zones(
+            df_w_voll = resample_weekly_bars(daily)
+            df_m_voll = resample_monthly_bars(daily)
+            df_w = nur_geschlossene(df_w_voll, daily, "W")
+            df_m = nur_geschlossene(df_m_voll, daily, "M")
+            *_, touched_3d, shorts_3d, longs_3d = analyze_gva_zones(
                 df_3d, pair, tf="3D")
 
             touched_htf, shorts_htf, longs_htf = [], [], []
@@ -549,17 +556,24 @@ def compute_zones():
             # Juengster Touch ueber alle drei Timeframes (Datum 'DD.MM.YYYY')
             last_touched = _newest_touch(touched_3d, *touched_htf)
 
+            # Fuers Chartbild bewusst die VOLLEN Frames inklusive laufender
+            # Kerze: die Linie kommt aus geschlossenen Kerzen, aber Kerim will
+            # auf dem Bild sehen, wo der Kurs GERADE steht.
             BARS[pair] = {
-                "3D": df_3d.tail(60),
-                "W": df_w.tail(60) if not df_w.empty else None,
-                "M": df_m.tail(60) if not df_m.empty else None,
+                "3D": df_3d_voll.tail(60),
+                "W": df_w_voll.tail(60) if not df_w_voll.empty else None,
+                "M": df_m_voll.tail(60) if not df_m_voll.empty else None,
             }
 
             ZONES[pair] = {
                 "shorts": all_shorts,
                 "longs": all_longs,
                 "last_touched": last_touched,
-                "daily_close": price,  # Fallback-Preis bis Live-Tick kommt
+                # Fallback-Preis bis der Live-Tick kommt: der letzte
+                # TAGESschluss, nicht der Schluss des letzten 3D-Blocks.
+                # Seit nur_geschlossene den laufenden Block abschneidet, waere
+                # `price` sonst bis zu eine Woche alt.
+                "daily_close": float(daily["close"].iloc[-1]),
             }
 
             # Erst NACH dem Nachtrag als erfolgreich zaehlen — wirft der

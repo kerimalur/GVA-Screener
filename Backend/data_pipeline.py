@@ -240,6 +240,60 @@ def resample_monthly_bars(df_daily: pd.DataFrame) -> pd.DataFrame:
     return df_m.sort_index().dropna()
 
 
+def periodenende(start, tf: str = "3D", anchor: pd.Timestamp = GVA_3D_ANCHOR) -> pd.Timestamp:
+    """Letzter Kalendertag der Periode, die am `start` beginnt.
+
+    Fuer 3D wird ueber den Anker gerechnet und nicht "+2 Tage": ein Block
+    spannt drei WOCHENTAGS-Slots, und ueber ein Wochenende sind das fuenf
+    Kalendertage.
+    """
+    t = str(tf).upper()
+    start = pd.Timestamp(start).normalize()
+    if t == "W":
+        return start.to_period("W-FRI").end_time.normalize()
+    if t == "M":
+        return start.to_period("M").end_time.normalize()
+    slot = int(gva_3d_block_ids(pd.DatetimeIndex([start]), anchor)[0]) * 3
+    ende = np.busday_offset(
+        np.datetime64(pd.Timestamp(anchor).date()), slot + 2, roll="forward")
+    return pd.Timestamp(ende)
+
+
+def nur_geschlossene(df_blocks: pd.DataFrame, df_daily: pd.DataFrame,
+                     tf: str = "3D", anchor: pd.Timestamp = GVA_3D_ANCHOR) -> pd.DataFrame:
+    """Die laufende, noch nicht geschlossene Kerze abschneiden.
+
+    Warum das sein muss — der Fall vom 19.08.2026, AUDCAD:
+
+    Eine GVA entsteht aus zwei Kerzen, und ihr Level ist der Body-Rand der
+    ZWEITEN. Solange diese zweite Kerze noch laeuft, wandert ihr Body mit
+    jedem Tick. Der Screener hat daraus eine Linie gebaut, sie sofort
+    veroeffentlicht — und der Live-Preis, der diese Kerze gerade formt, hat sie
+    im selben Moment "beruehrt". Ergebnis: ein Alert fuer ein Setup, das es
+    noch gar nicht gibt und das bis zum Wochenschluss noch verschwinden kann.
+
+    Der Nachbar-Filter (analyzer.GVA_MIN_GAP) hilft dagegen nicht: er zaehlt
+    Kerzen INNERHALB der Historie, waehrend der Live-Alert den Kurs direkt
+    gegen das Level haelt. Beide Regeln sind noetig, sie beantworten
+    verschiedene Fragen.
+
+    Geschnitten wird nur, wenn die Periode nachweislich noch offen ist —
+    gemessen am letzten Tageskurs, nicht an der Uhr des Servers. Damit
+    verhaelt sich die Funktion im Replay identisch wie im Livebetrieb, und ein
+    Feiertag am Periodenende verzoegert eine GVA hoechstens bis zur naechsten
+    Kerze, statt sie zu verlieren.
+    """
+    if df_blocks is None or df_blocks.empty:
+        return df_blocks
+    if df_daily is None or df_daily.empty:
+        return df_blocks
+    letzter_tag = pd.Timestamp(df_daily.index.max()).normalize()
+    start = pd.Timestamp(df_blocks.index[-1]).normalize()
+    if letzter_tag >= periodenende(start, tf, anchor):
+        return df_blocks
+    return df_blocks.iloc[:-1]
+
+
 def fetch_and_resample_3d(instrument: str, count: int = 5000) -> pd.DataFrame:
     df = fetch_daily_oanda(instrument, count)
     if df.empty:
