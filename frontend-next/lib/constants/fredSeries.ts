@@ -30,6 +30,17 @@ export interface FredSeriesDef {
   cadence?: FredCadence;
   /** "bis" = Serie wird von updateBis gepflegt — updateFred fetcht sie NICHT bei FRED */
   source?: "fred" | "bis";
+  /**
+   * Gesetzt, wenn FRED die Serie eingestellt hat — der Text sagt, wann und warum.
+   *
+   * Solche Serien werden NICHT mehr abgefragt: FRED antwortet mit "The series
+   * does not exist", das kostet je Lauf eine Anfrage und schreibt eine
+   * Fehlerzeile ins Log, die niemand mehr liest. Die Definition bleibt aber
+   * stehen — die bereits geschriebenen Werte liegen weiter in `fred_series`,
+   * und ein Rückblick auf 2021 braucht sie. Ohne Label wüsste dort niemand
+   * mehr, was die Zahlen bedeuten.
+   */
+  eingestellt?: string;
 }
 
 /**
@@ -99,7 +110,7 @@ export const FRED_CATALOG: FredSeriesDef[] = [
 
   // — Arbeitslosenquote —
   { id: "UNRATE", ccy: "USD", category: "unemployment", label: "US Arbeitslosenquote" },
-  { id: "LRHUTTTTEZM156S", ccy: "EUR", category: "unemployment", label: "Eurozone Arbeitslosenquote" },
+  { id: "LRHUTTTTEZM156S", ccy: "EUR", category: "unemployment", label: "Eurozone Arbeitslosenquote" , eingestellt: "OECD-Arbeitsmarktfeed 2024 eingestellt" },
   { id: "LRHUTTTTGBM156S", ccy: "GBP", category: "unemployment", label: "UK Arbeitslosenquote" },
   { id: "LRHUTTTTJPM156S", ccy: "JPY", category: "unemployment", label: "Japan Arbeitslosenquote" },
   // Monatsserie tot (404) -> Quartalsserie (Audit 2026-07); EZ-Serie stale, keine Alternative
@@ -111,26 +122,26 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   // — BIP (real, Wachstum bzw. Niveau; best effort, stale-tolerant) —
   { id: "A191RL1Q225SBEA", ccy: "USD", category: "gdp", label: "US BIP-Wachstum (QoQ ann.)" },
   { id: "CLVMNACSCAB1GQEA19", ccy: "EUR", category: "gdp", label: "Eurozone reales BIP", isIndex: true },
-  { id: "CLVMNACSCAB1GQUK", ccy: "GBP", category: "gdp", label: "UK reales BIP", isIndex: true },
+  { id: "CLVMNACSCAB1GQUK", ccy: "GBP", category: "gdp", label: "UK reales BIP", isIndex: true , eingestellt: "Eurostat-Altbestand, seit 2024 ohne Werte" },
   { id: "JPNRGDPEXP", ccy: "JPY", category: "gdp", label: "Japan reales BIP", isIndex: true },
   { id: "CLVMNACSCAB1GQCH", ccy: "CHF", category: "gdp", label: "Schweiz reales BIP", isIndex: true },
-  { id: "AUSGDPRQDSMEI", ccy: "AUD", category: "gdp", label: "Australien reales BIP", isIndex: true },
-  { id: "NZLGDPRQDSMEI", ccy: "NZD", category: "gdp", label: "Neuseeland reales BIP", isIndex: true },
+  { id: "AUSGDPRQDSMEI", ccy: "AUD", category: "gdp", label: "Australien reales BIP", isIndex: true , eingestellt: "OECD-BIP-Feed 2024 eingestellt" },
+  { id: "NZLGDPRQDSMEI", ccy: "NZD", category: "gdp", label: "Neuseeland reales BIP", isIndex: true , eingestellt: "OECD-BIP-Feed 2024 eingestellt" },
   { id: "NGDPRSAXDCCAQ", ccy: "CAD", category: "gdp", label: "Kanada reales BIP", isIndex: true },
 
   // — OECD CLI (PMI-Proxy) —
-  { id: "USALOLITONOSTSAM", ccy: "USD", category: "cli", label: "US Leading Indicator (CLI)" },
-  { id: "EA19LOLITONOSTSAM", ccy: "EUR", category: "cli", label: "Eurozone CLI" },
-  { id: "GBRLOLITONOSTSAM", ccy: "GBP", category: "cli", label: "UK CLI" },
-  { id: "JPNLOLITONOSTSAM", ccy: "JPY", category: "cli", label: "Japan CLI" },
-  { id: "CHELOLITONOSTSAM", ccy: "CHF", category: "cli", label: "Schweiz CLI" },
-  { id: "AUSLOLITONOSTSAM", ccy: "AUD", category: "cli", label: "Australien CLI" },
-  { id: "CANLOLITONOSTSAM", ccy: "CAD", category: "cli", label: "Kanada CLI" },
+  { id: "USALOLITONOSTSAM", ccy: "USD", category: "cli", label: "US Leading Indicator (CLI)" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "EA19LOLITONOSTSAM", ccy: "EUR", category: "cli", label: "Eurozone CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "GBRLOLITONOSTSAM", ccy: "GBP", category: "cli", label: "UK CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "JPNLOLITONOSTSAM", ccy: "JPY", category: "cli", label: "Japan CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "CHELOLITONOSTSAM", ccy: "CHF", category: "cli", label: "Schweiz CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "AUSLOLITONOSTSAM", ccy: "AUD", category: "cli", label: "Australien CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
+  { id: "CANLOLITONOSTSAM", ccy: "CAD", category: "cli", label: "Kanada CLI" , eingestellt: "OECD hat den CLI-Feed 2024 eingestellt" },
   // NZ: kein OECD-CLI verfügbar
 
   // — Handelsbilanz (US sicher; Rest OECD, stale-tolerant) —
   { id: "BOPGSTB", ccy: "USD", category: "trade", label: "US Handelsbilanz" },
-  { id: "XTNTVA01EZM667S", ccy: "EUR", category: "trade", label: "Eurozone Handelsbilanz" },
+  { id: "XTNTVA01EZM667S", ccy: "EUR", category: "trade", label: "Eurozone Handelsbilanz" , eingestellt: "OECD-Handelsfeed 2024 eingestellt" },
   { id: "XTNTVA01GBM667S", ccy: "GBP", category: "trade", label: "UK Handelsbilanz" },
   { id: "XTNTVA01JPM667S", ccy: "JPY", category: "trade", label: "Japan Handelsbilanz" },
   { id: "XTNTVA01CHM667S", ccy: "CHF", category: "trade", label: "Schweiz Handelsbilanz" },
@@ -142,7 +153,7 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "T10Y2Y", ccy: "USD", category: "yield_curve", label: "US 10-2Y Spread", cadence: "daily" },
 
   // — PMI (nur USA; Rest nutzt OECD CLI + BCI als Doppel-Proxy) —
-  { id: "NAPM", ccy: "USD", category: "pmi", label: "ISM Manufacturing PMI" },
+  { id: "NAPM", ccy: "USD", category: "pmi", label: "ISM Manufacturing PMI" , eingestellt: "ISM erlaubt FRED die Verbreitung nicht mehr" },
 
   // — Business Confidence Index / BCI (7 von 8 — CHF fehlt auf FRED) —
   // OECD Business Tendency Surveys (Manufacturing), Percent Balance, SB.
@@ -160,18 +171,18 @@ export const FRED_CATALOG: FredSeriesDef[] = [
   { id: "CSCICP02GBM460S", ccy: "GBP", category: "sentiment", label: "Consumer Confidence GBP" },
   { id: "CSCICP02JPM460S", ccy: "JPY", category: "sentiment", label: "Consumer Confidence JPY" },
   { id: "CSCICP02AUM460S", ccy: "AUD", category: "sentiment", label: "Consumer Confidence AUD" },
-  { id: "LOCOCIORNZQ665S", ccy: "NZD", category: "sentiment", label: "Consumer Confidence NZD (Q)" },
+  { id: "LOCOCIORNZQ665S", ccy: "NZD", category: "sentiment", label: "Consumer Confidence NZD (Q)" , eingestellt: "OECD-Feed 2024 eingestellt" },
   { id: "CSCICP02CHQ460S", ccy: "CHF", category: "sentiment", label: "Consumer Confidence CHF (Q)" },
 
   // — Retail Sales (Volume Index, alle 8) —
   { id: "RSXFS", ccy: "USD", category: "retail_sales", label: "US Retail Sales ex Food Services" },
-  { id: "SLRTTO01EZM659S", ccy: "EUR", category: "retail_sales", label: "Retail Trade Volume EUR" },
-  { id: "SLRTTO01GBM659S", ccy: "GBP", category: "retail_sales", label: "Retail Trade Volume GBP" },
-  { id: "SLRTTO01JPM659S", ccy: "JPY", category: "retail_sales", label: "Retail Trade Volume JPY" },
-  { id: "SLRTTO01AUM659S", ccy: "AUD", category: "retail_sales", label: "Retail Trade Volume AUD" },
-  { id: "SLRTTO01NZM659S", ccy: "NZD", category: "retail_sales", label: "Retail Trade Volume NZD" },
-  { id: "SLRTTO01CAM659S", ccy: "CAD", category: "retail_sales", label: "Retail Trade Volume CAD" },
-  { id: "SLRTTO01CHM659S", ccy: "CHF", category: "retail_sales", label: "Retail Trade Volume CHF" },
+  { id: "SLRTTO01EZM659S", ccy: "EUR", category: "retail_sales", label: "Retail Trade Volume EUR" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01GBM659S", ccy: "GBP", category: "retail_sales", label: "Retail Trade Volume GBP" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01JPM659S", ccy: "JPY", category: "retail_sales", label: "Retail Trade Volume JPY" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01AUM659S", ccy: "AUD", category: "retail_sales", label: "Retail Trade Volume AUD" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01NZM659S", ccy: "NZD", category: "retail_sales", label: "Retail Trade Volume NZD" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01CAM659S", ccy: "CAD", category: "retail_sales", label: "Retail Trade Volume CAD" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
+  { id: "SLRTTO01CHM659S", ccy: "CHF", category: "retail_sales", label: "Retail Trade Volume CHF" , eingestellt: "OECD-Retail-Feed 2024 eingestellt" },
 
   // — Zentralbank-Bilanzsummen (Fed/EZB/BoJ decken >80% globaler ZB-Liquidität) —
   { id: "WALCL", ccy: "USD", category: "balance_sheet", label: "Fed Total Assets", cadence: "weekly" },

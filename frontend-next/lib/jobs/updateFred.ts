@@ -41,9 +41,16 @@ export async function updateFred(
     );
   }
 
+  // Eingestellte Serien fliegen hier raus, nicht erst beim Fehlschlag: FRED
+  // antwortet auf sie mit "The series does not exist", und 21 solcher Zeilen
+  // je Lauf machen aus dem Log eine Tapete, in der ein echter Ausfall
+  // untergeht. Ihre Definition bleibt im Katalog stehen — die alten Werte
+  // liegen weiter in der Datenbank und werden im Rückblick gebraucht.
   const catalog = FRED_CATALOG.filter(
-    (s) => s.source !== "bis" && (!opts.only || opts.only.includes(s.id)),
+    (s) => s.source !== "bis" && !s.eingestellt
+      && (!opts.only || opts.only.includes(s.id)),
   );
+  const eingestellt = FRED_CATALOG.filter((s) => s.eingestellt).length;
 
   // Letztes bekanntes Datum je Serie (parallel)
   const lastDates = await Promise.all(
@@ -145,6 +152,7 @@ export async function updateFred(
 
   return {
     series: catalog.length,
+    eingestellt,
     rows: totalRows,
     stale: staleCount,
     stumm: stummCount,

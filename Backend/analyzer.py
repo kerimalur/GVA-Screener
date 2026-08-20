@@ -159,15 +159,38 @@ def analyze_gva_zones(df: pd.DataFrame, instrument: str,
     # ALLE noch nicht getroffenen Lines, sortiert nach Naehe:
     # Shorts aufsteigend (niedrigste = naechste ueber Preis),
     # Longs absteigend (hoechste = naechste unter Preis).
-    all_shorts = sorted(
-        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y'), "tf": tf}
-         for x in active_shorts],
-        key=lambda x: x['level']
-    )
-    all_longs = sorted(
-        [{"level": x['level'], "date": x['date'].strftime('%d.%m.%Y'), "tf": tf}
-         for x in active_longs],
-        key=lambda x: -x['level']
-    )
+    #
+    # Jede Linie traegt ihre REIFE mit — und das ist der Grund, warum es dieses
+    # Feld ueberhaupt gibt:
+    #
+    # Der Nachbar-Filter oben prueft den Abstand nur INNERHALB der Historie.
+    # Der Live-Alert dagegen haelt den Kurs direkt gegen das Level und weiss
+    # gar nicht, wie alt die Linie ist. Eine GVA, die sich auf der zuletzt
+    # geschlossenen Kerze gebildet hat, konnte deshalb sofort im naechsten
+    # Moment "getroffen" werden — ohne dass eine ganze Kerze dazwischen lag.
+    # Genau so kam am 20.08.2026 der Monats-Alert auf GBPJPY zustande, obwohl
+    # der August noch laeuft.
+    #
+    # `letzter` ist der Index der letzten GESCHLOSSENEN Kerze (df ist bereits
+    # ueber data_pipeline.nur_geschlossene gekuerzt). Die laufende Kerze traegt
+    # also die Nummer letzter + 1. Ein Treffer in ihr zaehlt nach derselben
+    # Regel wie oben (Abstand >= min_gap + 1) genau dann, wenn seit der
+    # bildenden Kerze mindestens `min_gap` geschlossene Kerzen vergangen sind.
+    letzter = len(df) - 1
+
+    def _linie(x):
+        vergangen = letzter - x['idx']
+        return {
+            "level": x['level'],
+            "date": x['date'].strftime('%d.%m.%Y'),
+            "tf": tf,
+            # Wie viele geschlossene Kerzen seit der bildenden vergangen sind.
+            "bars_seit": vergangen,
+            # Darf diese Linie einen Live-Alert ausloesen?
+            "reif": vergangen >= min_gap,
+        }
+
+    all_shorts = sorted([_linie(x) for x in active_shorts], key=lambda x: x['level'])
+    all_longs = sorted([_linie(x) for x in active_longs], key=lambda x: -x['level'])
 
     return closest_short, short_date, closest_long, long_date, current_price, last_touched, all_shorts, all_longs

@@ -21,7 +21,17 @@ export const dynamic = "force-dynamic";
  * Ohne Anmeldung erreichbar, damit ein Monitor draufschauen kann.
  */
 
-type Zustand = "gruen" | "gelb" | "rot";
+type Zustand = "gruen" | "gelb" | "rot" | "eingestellt";
+
+/**
+ * "eingestellt" ist bewusst KEIN Rot.
+ *
+ * Diese Serien sind nicht kaputt, sie existieren nicht mehr — FRED hat die
+ * OECD-Feeds 2024 abgeschaltet. Als Rot geführt stünden hier dauerhaft 21
+ * Alarme, die niemand abstellen kann, und ein Warnzeichen, das immer leuchtet,
+ * bringt einem nur bei, es zu übersehen. Sie bleiben sichtbar, aber in einer
+ * eigenen Spalte.
+ */
 
 interface SerienZeile {
   id: string;
@@ -33,6 +43,8 @@ interface SerienZeile {
   lastDate: string | null;
   alterTage: number | null;
   erlaubtTage: number;
+  /** Grund, falls FRED die Serie abgeschaltet hat. Sonst null. */
+  eingestellt: string | null;
   zustand: Zustand;
   /** true = diese Serie trägt ein Urteil im Terminal. */
   kern: boolean;
@@ -151,7 +163,8 @@ export async function GET() {
       lastDate,
       alterTage: alter,
       erlaubtTage: erlaubt,
-      zustand: bewerte(alter, erlaubt),
+      zustand: def.eingestellt ? "eingestellt" : bewerte(alter, erlaubt),
+      eingestellt: def.eingestellt ?? null,
       kern,
     };
   });
@@ -249,6 +262,7 @@ export async function GET() {
     gelb: serien.filter((s) => s.zustand === "gelb").length,
     rot: serien.filter((s) => s.zustand === "rot").length,
     kernRot: serien.filter((s) => s.zustand === "rot" && s.kern).length,
+    eingestellt: serien.filter((s) => s.zustand === "eingestellt").length,
   };
 
   return NextResponse.json({

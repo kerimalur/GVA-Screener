@@ -261,9 +261,19 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
     long_lvl = long["level"] if long else None
     short_date = short["date"] if short else None
     long_date = long["date"] if long else None
-    # Timeframe der Linie (3D oder W) — Altbestand ohne Tag gilt als 3D.
+    # Timeframe der Linie (3D, W oder M) — Altbestand ohne Tag gilt als 3D.
     short_tf = short.get("tf", "3D") if short else None
     long_tf = long.get("tf", "3D") if long else None
+
+    # Reife: darf diese Linie ueberhaupt schon einen Alert ausloesen? Gesetzt
+    # wird sie in analyzer.analyze_gva_zones; der Standard True gilt nur fuer
+    # Zonen, die vor dem Deploy dieser Regel im Speicher lagen — die sind nach
+    # dem naechsten Neustart ohnehin weg. Lieber ein Alert zu viel als ein
+    # stiller Screener, falls das Feld einmal fehlt.
+    short_reif = bool(short.get("reif", True)) if short else False
+    long_reif = bool(long.get("reif", True)) if long else False
+    short_bars = short.get("bars_seit", "?") if short else "?"
+    long_bars = long.get("bars_seit", "?") if long else "?"
 
     pip_size = 0.01 if "JPY" in pair else 0.0001
 
@@ -300,7 +310,25 @@ def evaluate_pair(pair: str, price: float, zone: dict, fire_alerts: bool = True)
         short_hit = line_touched(short_lvl)
         long_hit = line_touched(long_lvl)
 
-        if short_hit or long_hit:
+        if (short_hit or long_hit) and not (short_reif if short_hit else long_reif):
+            # Beruehrt, aber die bildende Kerze liegt zu nah. Die GVA wird
+            # verworfen wie im Pine (f_dropLine) und im Replay — nicht
+            # vertagt, sonst waere der Filter nur eine Verzoegerung. Der
+            # naechste Zonen-Lauf sieht denselben Treffer in der Historie und
+            # nimmt die Linie von sich aus heraus; persistiert werden muss
+            # hier also nichts.
+            seite = "SHORT" if short_hit else "LONG"
+            lvl = short_lvl if short_hit else long_lvl
+            print(
+                f"{pair}: {seite}-Linie {round(lvl, 5)} "
+                f"({short_tf if short_hit else long_tf}) beruehrt, aber erst "
+                f"{short_bars if short_hit else long_bars} geschlossene Kerze(n) "
+                f"seit der Bildung — verworfen, kein Alert."
+            )
+            status = "PREPARE" if distance_pips is not None and distance_pips <= 100.0 else "NEUTRAL"
+            near = seite if status == "PREPARE" else None
+
+        elif short_hit or long_hit:
             status = "HIT"
             side = "SHORT" if short_hit else "LONG"
             level = short_lvl if short_hit else long_lvl
