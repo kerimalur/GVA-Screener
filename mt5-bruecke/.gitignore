@@ -1,2 +1,4 @@
 .env
 __pycache__/
+lauf.log
+lauf.log.alt

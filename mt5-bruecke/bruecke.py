@@ -39,6 +39,28 @@ TAKT_SEKUNDEN = 30
 # ist und ein zu kurzes Fenster nach einem Wochenende Trades verschluckt.
 HISTORIE_TAGE = 30
 TABELLE = "trades"
+# Laeuft die Bruecke versteckt (ohne Fenster), ist das hier die einzige Spur.
+# Deshalb geht jede Meldung IMMER auch in die Datei, nicht nur dann.
+LOGDATEI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lauf.log")
+# Ab dieser Groesse wird einmal umbenannt statt endlos angehaengt. Ein Log,
+# das die Platte fuellt, ist ein Fehler mit Ansage.
+LOG_MAX_BYTES = 2_000_000
+
+
+def melde(text: str) -> None:
+    zeit = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    zeile_ = f"{zeit}  {text}"
+    print(zeile_, flush=True)
+    try:
+        if os.path.exists(LOGDATEI) and os.path.getsize(LOGDATEI) > LOG_MAX_BYTES:
+            alt_ = LOGDATEI + ".alt"
+            if os.path.exists(alt_):
+                os.remove(alt_)
+            os.rename(LOGDATEI, alt_)
+        with open(LOGDATEI, "a", encoding="utf-8") as f:
+            f.write(zeile_ + "\n")
+    except OSError:
+        pass  # Ein kaputtes Log darf den Lauf nicht beenden
 
 
 def _fehlt(name: str) -> str:
@@ -252,20 +274,23 @@ def main() -> None:
 
     konto = mt5.account_info()
     if konto:
-        print(f"Verbunden: {konto.login} bei {konto.server}, "
+        melde(f"Verbunden: {konto.login} bei {konto.server}, "
               f"{konto.balance:.2f} {konto.currency}")
+    else:
+        melde("Verbunden, aber account_info() ist leer — ist ein Konto angemeldet?")
 
     try:
         while True:
             try:
                 for m in durchgang(mt5, db, user_id, args.trocken):
-                    print(f"{datetime.now():%H:%M:%S}  {m}")
+                    melde(m)
             except Exception as e:  # ein Fehler darf den Dauerlauf nicht beenden
-                print(f"{datetime.now():%H:%M:%S}  Fehler: {e}")
+                melde(f"Fehler: {e}")
             if args.einmal:
                 break
             time.sleep(TAKT_SEKUNDEN)
     finally:
+        melde("Bruecke beendet.")
         mt5.shutdown()
 
 

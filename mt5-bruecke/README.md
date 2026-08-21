@@ -43,6 +43,35 @@ python bruecke.py                      # Dauerlauf, alle 30 s
 wurden und mit welchem R — falsch gruppiert sieht man dort sofort, und es steht
 noch nichts in der Datenbank.
 
+## Muss ein Fenster offen bleiben?
+
+Nein. Drei Stufen, in dieser Reihenfolge einführen:
+
+1. **PowerShell offen** (`python bruecke.py`) — für die ersten Tage. Man sieht
+   jede Zeile sofort und kann mit Strg+C abbrechen.
+2. **Ohne Fenster:** Doppelklick auf `starte-versteckt.vbs`. Startet dieselbe
+   Brücke mit `pythonw.exe`, also ohne Konsole. Beenden über Task-Manager →
+   Details → `pythonw.exe`.
+3. **Autostart:** Win+R, `shell:startup`, eine Verknüpfung auf
+   `starte-versteckt.vbs` dort hineinlegen. Läuft dann ab jeder Anmeldung.
+
+Stufe 2 und 3 erst, wenn Stufe 1 ein paar Tage sauber lief — sonst sucht man
+einen Fehler in einem Programm, das man nicht sieht.
+
+**Jede Meldung geht immer auch in `lauf.log`**, im selben Ordner. Das ist bei
+Stufe 2 und 3 die einzige Spur, deshalb schreibt die Brücke sie auch dann, wenn
+ein Fenster da ist. Ab 2 MB wird einmal nach `lauf.log.alt` umbenannt statt
+endlos angehängt.
+
+**Was trotzdem laufen muss: das MT5-Terminal.** Ohne das gibt es nichts zu
+lesen — die Brücke redet mit dem Terminal, nicht mit Vantage. Der Rechner muss
+also ohnehin an und angemeldet sein; die Brücke ist nur das kleinere der beiden
+Programme.
+
+Läuft sie eine Weile nicht, geht nichts verloren: beim nächsten Start holt sie
+aus der Historie nach, was abgeschlossen wurde. Nur das **R** fehlt für Trades,
+deren ursprünglichen Stop sie nie gesehen hat — siehe unten.
+
 ## Die Falle, die eingebaut ist
 
 Zieht Kerim die zweite Position auf Break-even, meldet MT5 dort den **neuen**
