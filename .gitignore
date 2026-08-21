@@ -11,3 +11,5 @@ Backend/macro_features/cache/
 # Beim Umbau vom 14.08.2026 ausgeraeumte Dateien (siehe TRADING-UMBAU.md).
 # Liegen nur zum Nachschauen da und gehoeren nicht ins Repo.
 _to_delete/
+
+.env*

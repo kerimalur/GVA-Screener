@@ -21,15 +21,29 @@ async function lastReportDate(
 /**
  * Legacy + TFF inkrementell je Contract ab letztem report_date (voll beim
  * ersten Lauf). TFF nur für Financial Futures (FX, DXY, BTC, SPX).
+ *
+ * `voll: true` ignoriert das letzte Datum und holt die ganze Historie ab 2006
+ * neu. Nötig, wenn dem Zeilenbestand eine SPALTE fehlt statt Zeilen: der
+ * inkrementelle Lauf fasst alte Zeilen nie wieder an, also bleiben Spalten,
+ * die später dazukamen, dort für immer NULL. Genau das war am 20.08.2026 mit
+ * `comm_long` und `nonrept_long` der Fall — Monty stand leer da, obwohl der
+ * Zeilenzähler grün war.
+ *
+ * Der Lauf ist ein Upsert, also gefahrlos wiederholbar; er dauert nur
+ * deutlich länger und sollte nicht am Cron hängen.
  */
-export async function updateCot(db: SupabaseClient): Promise<Record<string, unknown>> {
+export async function updateCot(
+  db: SupabaseClient, opts: { voll?: boolean } = {},
+): Promise<Record<string, unknown>> {
   let totalRows = 0;
   let tffRows = 0;
   const errors: string[] = [];
 
   for (const contract of CFTC_CONTRACTS) {
     try {
-      const since = await lastReportDate(db, "cot_reports", contract.code);
+      const since = opts.voll
+        ? undefined
+        : await lastReportDate(db, "cot_reports", contract.code);
       const rows = await fetchCot(contract.code, { since });
       totalRows += await chunkUpsert(
         db,
@@ -44,7 +58,9 @@ export async function updateCot(db: SupabaseClient): Promise<Record<string, unkn
 
   for (const contract of TFF_CONTRACTS) {
     try {
-      const since = await lastReportDate(db, "cot_tff_reports", contract.code);
+      const since = opts.voll
+        ? undefined
+        : await lastReportDate(db, "cot_tff_reports", contract.code);
       const rows = await fetchCotTff(contract.code, { since });
       tffRows += await chunkUpsert(
         db,

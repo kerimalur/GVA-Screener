@@ -35,6 +35,20 @@ export async function GET(req: NextRequest) {
   const db = createServiceClient();
   const started = Date.now();
 
+  // ?cot=voll -> einmaliger Vollabzug. Holt ALLE Reports neu, nicht nur die seit
+  // dem letzten report_date. Noetig, weil comm_long/nonrept_long erst spaeter in
+  // das Mapping kamen und in allen Altzeilen sonst fuer immer NULL bleiben.
+  // Laeuft allein, damit die 300s nicht mit den anderen Jobs geteilt werden.
+  if (req.nextUrl.searchParams.get("cot") === "voll") {
+    const voll = await runJob(db, "cron:cot-voll", () => updateCot(db, { voll: true }));
+    return NextResponse.json({
+      ok: voll.status !== "error",
+      modus: "cot-voll",
+      elapsedSec: Math.round((Date.now() - started) / 1000),
+      results: [voll],
+    });
+  }
+
   const jobDefs: Array<[string, () => Promise<Record<string, unknown>>]> = [
     ["cron:fred",      () => updateFred(db)],
     ["cron:bis",       () => updateBis(db)],
