@@ -47,16 +47,19 @@ noch nichts in der Datenbank.
 
 Nein. Drei Stufen, in dieser Reihenfolge einführen:
 
-1. **PowerShell offen** (`python bruecke.py`) — für die ersten Tage. Man sieht
-   jede Zeile sofort und kann mit Strg+C abbrechen.
-2. **Ohne Fenster:** Doppelklick auf `starte-versteckt.vbs`. Startet dieselbe
-   Brücke mit `pythonw.exe`, also ohne Konsole. Beenden über Task-Manager →
-   Details → `pythonw.exe`.
-3. **Autostart:** Win+R, `shell:startup`, eine Verknüpfung auf
-   `starte-versteckt.vbs` dort hineinlegen. Läuft dann ab jeder Anmeldung.
+1. **PowerShell offen** (`python bruecke.py`) — nur zum Ausprobieren.
+2. **Ohne Fenster:** Doppelklick auf `starte-versteckt.vbs`. Dieselbe Brücke
+   mit `pythonw.exe`, also ohne Konsole. Beenden über Task-Manager → Details →
+   `pythonw.exe`.
+3. **Autostart, der Normalzustand:** Doppelklick auf `einrichten-autostart.bat`.
+   Legt eine Verknüpfung in den Autostart-Ordner; ab der nächsten Anmeldung
+   läuft die Brücke von selbst, unsichtbar. Rückgängig: Win+R, `shell:startup`,
+   `GVA MT5-Bruecke.lnk` löschen.
 
-Stufe 2 und 3 erst, wenn Stufe 1 ein paar Tage sauber lief — sonst sucht man
-einen Fehler in einem Programm, das man nicht sieht.
+**MT5 muss mitstarten**, sonst hat die Brücke nichts zu lesen. In MT5 unter
+Extras → Optionen → Server „Kontoinformationen speichern" ankreuzen und eine
+Verknüpfung auf MetaTrader 5 ebenfalls nach `shell:startup` legen. Dann hängt
+die ganze Kette an der Windows-Anmeldung und an sonst nichts.
 
 **Jede Meldung geht immer auch in `lauf.log`**, im selben Ordner. Das ist bei
 Stufe 2 und 3 die einzige Spur, deshalb schreibt die Brücke sie auch dann, wenn
@@ -68,9 +71,24 @@ lesen — die Brücke redet mit dem Terminal, nicht mit Vantage. Der Rechner mus
 also ohnehin an und angemeldet sein; die Brücke ist nur das kleinere der beiden
 Programme.
 
-Läuft sie eine Weile nicht, geht nichts verloren: beim nächsten Start holt sie
-aus der Historie nach, was abgeschlossen wurde. Nur das **R** fehlt für Trades,
-deren ursprünglichen Stop sie nie gesehen hat — siehe unten.
+## Rechner eine Woche aus — was passiert dann?
+
+Beim nächsten Start liest die Brücke **beides**: die offenen Positionen und die
+Historie der letzten 30 Tage (`hole_geschlossene`). Drei Fälle:
+
+| Was in der Zwischenzeit passierte | Kommt ins Journal | R |
+|---|---|---|
+| Trade eröffnet, läuft noch | ja | ungenau, wenn ein Stop inzwischen nachgezogen wurde |
+| Trade eröffnet **und** geschlossen | ja, aus der Historie | nur wenn der Stop beim Einstieg gesetzt war |
+| erste Position raus, zweite läuft noch | ja, als **ein** Setup | wie oben |
+
+Der Stop kommt bei rekonstruierten Trades aus dem **Eröffnungsauftrag**. War er
+dort gesetzt, stimmt das R. Hat Kerim ihn erst danach gesetzt oder nachgezogen,
+lässt sich der ursprüngliche Wert nicht mehr rekonstruieren — dann steht
+`r_multiple = 0`, also „nicht messbar". Keine geratene 1.
+
+Deshalb bleibt der Dauerlauf der bessere Weg: nur wer von Anfang an mitliest,
+sieht den echten Stop.
 
 ## Die Falle, die eingebaut ist
 

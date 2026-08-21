@@ -147,6 +147,64 @@ def wert_je_punkt(mt5, position: Position, roh_symbol: str) -> float:
     return abs(float(gewinn))
 
 
+def hole_geschlossene(mt5, tage: int = HISTORIE_TAGE
+                     ) -> tuple[list[Position], dict[int, str]]:
+    """Positionen aus der Historie rekonstruieren, die die Bruecke nie offen sah.
+
+    Der Fall, fuer den es das gibt: Rechner eine Woche aus, Kerim handelt, macht
+    den Trade zu — und startet die Bruecke erst danach. `positions_get()` gibt
+    dann nichts her, die Position existiert nicht mehr. Ohne diese Funktion
+    faende der Trade nie den Weg ins Journal, und zwar lautlos.
+
+    Der Stop kommt aus dem EROEFFNUNGS-AUFTRAG. Hat Kerim ihn erst nach dem
+    Einstieg gesetzt oder nachgezogen, steht dort 0 — dann ersatzweise der
+    aelteste Auftrag dieser Position mit einem Stop. Laesst sich gar keiner
+    finden, bleibt er None und das R wird 0: "nicht messbar" statt geraten.
+    """
+    von = datetime.now() - timedelta(days=tage)
+    bis = datetime.now() + timedelta(days=1)
+    deals = mt5.history_deals_get(von, bis) or []
+
+    offene = {int(p.ticket) for p in (mt5.positions_get() or [])}
+    positionen: list[Position] = []
+    roh_namen: dict[int, str] = {}
+
+    nach_position: dict[int, list] = {}
+    for d in deals:
+        pid = int(getattr(d, "position_id", 0))
+        if pid and pid not in offene:
+            nach_position.setdefault(pid, []).append(d)
+
+    for pid, ds in nach_position.items():
+        rein = [d for d in ds if d.entry == mt5.DEAL_ENTRY_IN]
+        raus = [d for d in ds if d.entry == mt5.DEAL_ENTRY_OUT]
+        if not rein or not raus:
+            continue  # angefangen oder beendet ausserhalb des Fensters
+
+        e = min(rein, key=lambda d: d.time)
+        roh_namen[pid] = str(e.symbol)
+
+        stop = ziel = None
+        for o in sorted(mt5.history_orders_get(position=pid) or [],
+                        key=lambda o: o.time_setup):
+            if stop is None and getattr(o, "sl", 0):
+                stop = float(o.sl)
+            if ziel is None and getattr(o, "tp", 0):
+                ziel = float(o.tp)
+
+        positionen.append(Position(
+            ticket=pid,
+            symbol=normalisiere_symbol(str(e.symbol)),
+            seite="long" if e.type == mt5.DEAL_TYPE_BUY else "short",
+            volumen=float(sum(d.volume for d in rein)),
+            eroeffnet=datetime.fromtimestamp(e.time, tz=timezone.utc).replace(tzinfo=None),
+            einstieg=float(e.price),
+            stop=stop, ziel=ziel,
+        ))
+
+    return positionen, roh_namen
+
+
 def hole_abschluesse(mt5, tickets: list[int]) -> list[Abschluss]:
     """Netto-Ergebnis je geschlossener Position: Gewinn + Kommission + Swap.
 
@@ -225,7 +283,22 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
         merker.setdefault(p.ticket, p.stop)
         p.stop = merker[p.ticket]
 
-    setups: dict[str, Setup] = {schluessel(s): s for s in gruppiere(positionen)}
+    # Was zwischendurch lief und schon zu ist, aus der Historie dazuholen.
+    # Wichtig auch fuer den halben Fall: die erste Position ging waehrend eines
+    # Neustarts raus, die zweite laeuft noch. Ohne die Historie fehlte die
+    # erste Haelfte des Setups und der Trade waere falsch gerechnet.
+    geschlossen, roh_alt = hole_geschlossene(mt5)
+    namen.update(roh_alt)
+    for p in geschlossen:
+        # Ein bereits gesehener Stop schlaegt den aus der Historie: er stammt
+        # aus der Zeit VOR dem Nachziehen.
+        p.stop = merker.get(p.ticket, p.stop)
+        merker.setdefault(p.ticket, p.stop)
+
+    offene_tickets = {p.ticket for p in positionen}
+    alle = positionen + [p for p in geschlossen if p.ticket not in offene_tickets]
+
+    setups: dict[str, Setup] = {schluessel(s): s for s in gruppiere(alle)}
 
     # Setups, deren Positionen alle verschwunden sind: aus dem Gedaechtnis
     # rekonstruieren, sonst fehlt der Abschluss.
@@ -240,8 +313,7 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
             p.ticket: wert_je_punkt(mt5, p, namen.get(p.ticket, p.symbol))
             for p in s.positionen
         }
-        offene = {p.ticket for p in positionen}
-        zu = [t for t in s.tickets if t not in offene]
+        zu = [t for t in s.tickets if t not in offene_tickets]
         z = zeile(s, hole_abschluesse(mt5, zu), user_id, werte)
         m = schreibe(db, z, trocken)
         if m:
