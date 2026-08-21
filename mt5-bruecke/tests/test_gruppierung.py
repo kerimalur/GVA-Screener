@@ -11,7 +11,7 @@ import pytest
 
 from gruppierung import (
     Abschluss, Position, bewerte, gruppiere, mittel_gewichtet,
-    r_wert, risiko, schluessel, zeile,
+    normalisiere_symbol, r_wert, risiko, schluessel, zeile,
 )
 
 T0 = datetime(2026, 8, 21, 9, 30)
@@ -222,3 +222,32 @@ def test_schluessel_und_tickets_stehen_in_der_zeile():
     z = zeile(s, [], USER, WERT)
     assert z["mt5_setup_key"] == "EURUSD-long-20260821T0930"
     assert z["mt5_tickets"] == [1, 2]
+
+
+# --- Broker-Zusatz -------------------------------------------------------
+# Vantage meldet "EURCHF+". Das Journal, der Screener und die Confluence
+# kennen nur "EURCHF". Mit dem Zusatz waere der Trade in der Datenbank, aber
+# fuer jeden Filter unsichtbar — schlimmer als zu fehlen.
+
+@pytest.mark.parametrize("roh,erwartet", [
+    ("EURCHF+", "EURCHF"),      # Vantage, der echte Fall vom 21.08.2026
+    ("EURUSD", "EURUSD"),       # ohne Zusatz unveraendert
+    ("XAUUSD.r", "XAUUSD"),     # Punkt-Zusatz
+    ("EURUSDm", "EURUSD"),      # Kleinbuchstabe als Zusatz
+    ("GBPJPY#", "GBPJPY"),      # Raute
+    ("USDCAD-ECN", "USDCAD"),   # Bindestrich
+    ("EURUSD_raw", "EURUSD"),   # Unterstrich
+    ("AUDNZD2", "AUDNZD"),      # Ziffer
+    ("EURUSDPRO", "EURUSD"),    # GROSSbuchstaben-Zusatz: erste sechs gelten
+    ("US500", "US"),            # kein FX — der Lauf bleibt, wie er ist
+    (" EURCHF+ ", "EURCHF"),    # Leerzeichen
+])
+def test_broker_zusatz_faellt_weg(roh, erwartet):
+    assert normalisiere_symbol(roh) == erwartet
+
+
+def test_zusatz_wird_nicht_blind_auf_sechs_gekuerzt():
+    # "BTCUSD" waere sechs Zeichen, aber "BTC" ist keine der Waehrungen in der
+    # Liste — gekuerzt wird nur, wenn beide Haelften bekannt sind. Sonst
+    # verstuemmelte die Regel Namen, die sie gar nicht kennt.
+    assert normalisiere_symbol("BTCUSDX") == "BTCUSDX"

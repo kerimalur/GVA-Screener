@@ -30,7 +30,9 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
-from gruppierung import Abschluss, Position, Setup, gruppiere, schluessel, zeile
+from gruppierung import (
+    Abschluss, Position, Setup, gruppiere, normalisiere_symbol, schluessel, zeile,
+)
 
 TAKT_SEKUNDEN = 30
 # Wie weit zurueck die Historie geholt wird. Grosszuegig, weil der Abruf billig
@@ -81,11 +83,20 @@ def _mt5():
     return mt5
 
 
-def hole_positionen(mt5) -> list[Position]:
+def hole_positionen(mt5) -> tuple[list[Position], dict[int, str]]:
+    """Positionen plus die Broker-Namen je Ticket.
+
+    Zwei Namen, weil beide gebraucht werden: der normalisierte fuers Journal,
+    der echte fuer jeden weiteren MT5-Aufruf.
+    """
     roh = mt5.positions_get() or []
+    namen = {int(p.ticket): str(p.symbol) for p in roh}
     return [
         Position(
-            ticket=int(p.ticket), symbol=str(p.symbol),
+            # Broker-Zusatz weg: Vantage meldet "EURCHF+", das Journal kennt
+            # nur "EURCHF". Mit dem Zusatz waere der Trade zwar da, aber fuer
+            # jeden Filter und jede Auswertung unsichtbar.
+            ticket=int(p.ticket), symbol=normalisiere_symbol(str(p.symbol)),
             seite="long" if p.type == mt5.POSITION_TYPE_BUY else "short",
             volumen=float(p.volume),
             eroeffnet=datetime.fromtimestamp(p.time, tz=timezone.utc).replace(tzinfo=None),
@@ -94,10 +105,10 @@ def hole_positionen(mt5) -> list[Position]:
             ziel=float(p.tp) if p.tp else None,
         )
         for p in roh
-    ]
+    ], namen
 
 
-def wert_je_punkt(mt5, position: Position) -> float:
+def wert_je_punkt(mt5, position: Position, roh_symbol: str) -> float:
     """Was eine Preisbewegung von 1.0 bei diesem Volumen in Kontowaehrung wert ist.
 
     Ueber `order_calc_profit` statt ueber Kontraktgroesse und Tickwert von Hand:
@@ -106,7 +117,9 @@ def wert_je_punkt(mt5, position: Position) -> float:
     """
     art = mt5.ORDER_TYPE_BUY if position.seite == "long" else mt5.ORDER_TYPE_SELL
     p = position.einstieg
-    gewinn = mt5.order_calc_profit(art, position.symbol, position.volumen, p, p + 1.0)
+    # ACHTUNG: hier der ECHTE Broker-Name ("EURCHF+"). Das Terminal kennt
+    # "EURCHF" nicht und lieferte None — daraus wuerde Risiko 0 und R 0.
+    gewinn = mt5.order_calc_profit(art, roh_symbol, position.volumen, p, p + 1.0)
     if gewinn is None:
         return 0.0
     return abs(float(gewinn))
@@ -184,7 +197,8 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
     Break-even, meldet MT5 dort den NEUEN Stop. Wer damit rechnet, bekommt
     Risiko 0 und ein unendliches R. Also gilt der zuerst gesehene Stop.
     """
-    positionen = hole_positionen(mt5)
+    positionen, roh_namen = hole_positionen(mt5)
+    namen.update(roh_namen)
     for p in positionen:
         merker.setdefault(p.ticket, p.stop)
         p.stop = merker[p.ticket]
@@ -200,7 +214,10 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
     meldungen: list[str] = []
     for key, s in setups.items():
         bekannt[key] = s
-        werte = {p.ticket: wert_je_punkt(mt5, p) for p in s.positionen}
+        werte = {
+            p.ticket: wert_je_punkt(mt5, p, namen.get(p.ticket, p.symbol))
+            for p in s.positionen
+        }
         offene = {p.ticket for p in positionen}
         zu = [t for t in s.tickets if t not in offene]
         z = zeile(s, hole_abschluesse(mt5, zu), user_id, werte)
@@ -211,11 +228,15 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
             bekannt.pop(key, None)
             for t in s.tickets:
                 merker.pop(t, None)
+                namen.pop(t, None)
     return meldungen
 
 
 merker: dict[int, float | None] = {}
 bekannt: dict[str, Setup] = {}
+# Broker-Name je Ticket. Bleibt auch stehen, wenn die Position schon zu ist —
+# `order_calc_profit` braucht ihn dann noch fuers Risiko.
+namen: dict[int, str] = {}
 
 
 def main() -> None:

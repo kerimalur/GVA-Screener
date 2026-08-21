@@ -29,6 +29,46 @@ FENSTER_MINUTEN = 5
 BE_TOLERANZ = 0.05
 
 
+# Waehrungscodes, aus denen ein FX-Paar besteht. Nur noetig, um einen
+# Grossbuchstaben-Zusatz wie "EURUSDPRO" von einem echten Namen zu trennen.
+WAEHRUNGEN = {
+    "AUD", "CAD", "CHF", "CNH", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF",
+    "JPY", "MXN", "NOK", "NZD", "PLN", "SEK", "SGD", "TRY", "USD", "ZAR",
+    "XAU", "XAG", "XPT", "XPD",
+}
+
+
+def normalisiere_symbol(roh: str) -> str:
+    """Broker-Zusatz abschneiden: "EURCHF+" -> "EURCHF".
+
+    Vantage haengt an jedes Instrument ein "+". Andere Broker nehmen ".r", "m",
+    "#" oder "_raw". Im Journal, im Screener und in der Confluence heisst das
+    Paar aber "EURCHF" — schriebe die Bruecke "EURCHF+", passte der Trade zu
+    keinem Filter, zu keinem Ranking und zu keiner Saison-Auswertung. Er waere
+    da und trotzdem unsichtbar, was schlimmer ist als zu fehlen.
+
+    Regel: der fuehrende Lauf aus GROSSbuchstaben. Das schneidet "+", ".r",
+    "m", "#", "-ECN" und Ziffern gleichermassen ab, weil keiner davon ein
+    Grossbuchstabe ist.
+
+    Ausnahme fuer den Fall, dass der Zusatz doch gross ist ("EURUSDPRO"): sind
+    es mehr als sechs Zeichen und die ersten sechs bestehen aus zwei bekannten
+    Waehrungscodes, gelten die sechs. Sonst bleibt der ganze Lauf stehen —
+    lieber ein unbekannter Name als ein falsch abgeschnittener.
+    """
+    lauf = ""
+    for z in roh.strip():
+        if "A" <= z <= "Z":
+            lauf += z
+        else:
+            break
+    if not lauf:
+        return roh.strip().upper()
+    if len(lauf) > 6 and lauf[:3] in WAEHRUNGEN and lauf[3:6] in WAEHRUNGEN:
+        return lauf[:6]
+    return lauf
+
+
 @dataclass
 class Position:
     """Eine offene Position, so wie das Terminal sie meldet."""

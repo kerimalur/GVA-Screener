@@ -54,6 +54,19 @@ täglich laufen kann: den ursprünglichen Stop sieht nur, wer früh genug hinsie
 Läuft sie doch mal nicht von Anfang an mit, steht im Journal ein R von 0 statt
 einer erfundenen Zahl. `r_multiple = 0` heisst hier „nicht messbar".
 
+## Broker-Zusatz am Symbol
+
+Vantage meldet `EURCHF+`, nicht `EURCHF`. Journal, Screener und Confluence
+kennen nur `EURCHF` — mit dem Zusatz wäre der Trade zwar in der Datenbank, aber
+für jeden Filter, jedes Ranking und jede Saison-Auswertung unsichtbar. Das ist
+schlimmer, als wenn er fehlte: man sieht die Lücke nicht.
+
+Die Brücke schneidet ihn deshalb ab (`normalisiere_symbol`): es gilt der
+führende Lauf aus Grossbuchstaben, das erwischt `+`, `.r`, `m`, `#`, `-ECN`,
+`_raw` und Ziffern gleichermassen. Nach aussen — bei jedem MT5-Aufruf — wird
+weiter der **echte** Name benutzt, sonst kennt das Terminal das Instrument
+nicht und liefert kein Risiko.
+
 ## Was die Brücke nicht weiss
 
 Deine These, den GVA-Grund, den Screenshot. Das Terminal kennt nur Preise. Der
@@ -72,5 +85,5 @@ cd "C:\Projekte\Claude Cowork\GVA-Screener\mt5-bruecke"
 python -m pytest -q
 ```
 
-28 Kontrollwerte, ohne Terminal und ohne Datenbank lauffähig — die Rechnung
+40 Kontrollwerte, ohne Terminal und ohne Datenbank lauffähig — die Rechnung
 steckt in `gruppierung.py` und ist bewusst von MT5 und Supabase getrennt.
