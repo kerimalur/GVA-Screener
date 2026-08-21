@@ -262,6 +262,13 @@ def zeile(setup: Setup, abschluesse: list[Abschluss], user_id: str,
         z.update({"result": None, "r_multiple": 0, "exit_price": None, "profit_amount": None})
         return z
 
+    # Ist das Risiko unbekannt, wird das R zu 0 — und eine 0 in der Spalte
+    # sieht aus wie ein Break-even. Das muss dranstehen, sonst verwaessert ein
+    # unmessbarer Trade stillschweigend jede Durchschnitts-Auswertung.
+    if ri is None:
+        z["comment"] = ("Urspruenglicher Stop nicht rekonstruierbar - R nicht "
+                        "gemessen. Stop beim Einstieg mit der Order setzen.")
+
     gewinn = round(sum(a.gewinn for a in abschluesse if a.ticket in setup.tickets), 2)
     austritte = [
         (nach_ticket[p.ticket].ausstieg, p.volumen) for p in setup.positionen

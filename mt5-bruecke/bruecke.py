@@ -51,7 +51,16 @@ LOG_MAX_BYTES = 2_000_000
 def melde(text: str) -> None:
     zeit = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     zeile_ = f"{zeit}  {text}"
-    print(zeile_, flush=True)
+    # Unter pythonw.exe (Start ohne Fenster) ist sys.stdout None. Ein blankes
+    # print() wirft dort AttributeError und beendet die Bruecke sofort — genau
+    # das ist am 21.08.2026 passiert: Autostart eingerichtet, Prozess sofort
+    # tot, im Log keine einzige neue Zeile. Also nur schreiben, wenn es eine
+    # Konsole gibt.
+    if sys.stdout is not None:
+        try:
+            print(zeile_, flush=True)
+        except (OSError, ValueError, AttributeError):
+            pass
     try:
         if os.path.exists(LOGDATEI) and os.path.getsize(LOGDATEI) > LOG_MAX_BYTES:
             alt_ = LOGDATEI + ".alt"
@@ -64,10 +73,21 @@ def melde(text: str) -> None:
         pass  # Ein kaputtes Log darf den Lauf nicht beenden
 
 
+def _abbruch(text: str) -> None:
+    """Beenden, aber die Begruendung vorher ins Log schreiben.
+
+    Unter pythonw gibt es kein Fenster: eine Fehlermeldung auf stderr sieht
+    niemand. Ohne diesen Umweg endet jeder Startfehler als spurloses
+    Verschwinden.
+    """
+    melde(f"ABBRUCH: {' '.join(text.split())}")
+    sys.exit(text)
+
+
 def _fehlt(name: str) -> str:
     wert = os.environ.get(name, "").strip()
     if not wert:
-        sys.exit(
+        _abbruch(
             f"\n{name} fehlt.\n"
             "Erwartet werden in der Umgebung oder in mt5-bruecke/.env:\n"
             "  TRADING_SUPABASE_URL, TRADING_SUPABASE_SERVICE_ROLE_KEY, TRADING_USER_ID\n"
@@ -95,14 +115,14 @@ def _mt5():
     try:
         import MetaTrader5 as mt5  # type: ignore
     except ImportError:
-        sys.exit(
+        _abbruch(
             "\nDas Paket MetaTrader5 fehlt oder passt nicht.\n"
             "  pip install MetaTrader5\n"
             "Es gibt es nur fuer Windows und nur fuer 64-bit-Python. Pruefen mit:\n"
             '  python -c "import platform; print(platform.architecture())"\n'
         )
     if not mt5.initialize():
-        sys.exit(f"MT5 antwortet nicht: {mt5.last_error()}. Laeuft das Terminal?")
+        _abbruch(f"MT5 antwortet nicht: {mt5.last_error()}. Laeuft das Terminal?")
     return mt5
 
 
@@ -185,6 +205,16 @@ def hole_geschlossene(mt5, tage: int = HISTORIE_TAGE
         e = min(rein, key=lambda d: d.time)
         roh_namen[pid] = str(e.symbol)
 
+        # Der Stop, in dieser Reihenfolge:
+        #
+        #   1. aus dem Eroeffnungsauftrag. Wer den Stop mit der Order setzt —
+        #      und so handelt Kerim — hat ihn hier, exakt und immer.
+        #   2. aus irgendeinem spaeteren Auftrag der Position, falls 1 leer ist.
+        #   3. aus dem STOP-LOSS-ABSCHLUSS selbst: wurde die Position vom Stop
+        #      geschlossen, IST der Ausstiegspreis der Stop. Das ist kein
+        #      Schaetzwert, sondern dieselbe Zahl von der anderen Seite — und
+        #      es rettet genau die Faelle, die fuer die Statistik am meisten
+        #      zaehlen, naemlich die Verlierer.
         stop = ziel = None
         for o in sorted(mt5.history_orders_get(position=pid) or [],
                         key=lambda o: o.time_setup):
@@ -192,6 +222,12 @@ def hole_geschlossene(mt5, tage: int = HISTORIE_TAGE
                 stop = float(o.sl)
             if ziel is None and getattr(o, "tp", 0):
                 ziel = float(o.tp)
+
+        if stop is None:
+            vom_stop = [d for d in raus
+                        if getattr(d, "reason", None) == mt5.DEAL_REASON_SL]
+            if vom_stop:
+                stop = float(min(vom_stop, key=lambda d: d.time).price)
 
         positionen.append(Position(
             ticket=pid,
@@ -242,7 +278,7 @@ def _db():
     try:
         from supabase import create_client  # type: ignore
     except ImportError:
-        sys.exit("\nDas Paket supabase fehlt:  pip install supabase\n")
+        _abbruch("\nDas Paket supabase fehlt:  pip install supabase\n")
     return create_client(_fehlt("TRADING_SUPABASE_URL"),
                          _fehlt("TRADING_SUPABASE_SERVICE_ROLE_KEY"))
 

@@ -251,3 +251,35 @@ def test_zusatz_wird_nicht_blind_auf_sechs_gekuerzt():
     # Liste — gekuerzt wird nur, wenn beide Haelften bekannt sind. Sonst
     # verstuemmelte die Regel Namen, die sie gar nicht kennt.
     assert normalisiere_symbol("BTCUSDX") == "BTCUSDX"
+
+
+# --- Unmessbares R wird kenntlich gemacht --------------------------------
+# Eine 0 in der R-Spalte sieht aus wie ein Break-even. Ohne Vermerk
+# verwaessert ein unmessbarer Trade jede Durchschnitts-Auswertung, ohne dass
+# man es der Zahl ansieht.
+
+def test_ohne_risiko_steht_ein_vermerk_im_kommentar():
+    s = gruppiere([pos(1, stop=None), pos(2, minuten=1, stop=None)])[0]
+    z = zeile(s, [
+        Abschluss(1, 100.0, 1.1050, T0 + timedelta(hours=2)),
+        Abschluss(2, 100.0, 1.1050, T0 + timedelta(hours=3)),
+    ], USER, WERT)
+    assert z["r_multiple"] == 0
+    assert "nicht gemessen" in z["comment"]
+
+
+def test_mit_risiko_kein_vermerk():
+    s = gruppiere([pos(1), pos(2, minuten=1)])[0]
+    z = zeile(s, [
+        Abschluss(1, 250.0, 1.1050, T0 + timedelta(hours=2)),
+        Abschluss(2, 500.0, 1.1100, T0 + timedelta(hours=5)),
+    ], USER, WERT)
+    assert "comment" not in z
+
+
+def test_offener_trade_bekommt_keinen_vermerk():
+    # Bei einem offenen Trade ist das R noch gar nicht faellig — ein Vermerk
+    # waere eine Warnung vor etwas, das noch passieren kann.
+    s = gruppiere([pos(1, stop=None), pos(2, minuten=1, stop=None)])[0]
+    z = zeile(s, [], USER, WERT)
+    assert "comment" not in z
