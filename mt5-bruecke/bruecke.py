@@ -25,6 +25,7 @@ Aufruf (aus mt5-bruecke heraus):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -246,6 +247,23 @@ def _db():
                          _fehlt("TRADING_SUPABASE_SERVICE_ROLE_KEY"))
 
 
+def unveraendert(z: dict) -> bool:
+    """True, wenn diese Zeile schon genau so geschrieben wurde.
+
+    Ohne das schreibt die Bruecke alle 30 Sekunden dieselben Werte in die
+    Datenbank und dieselbe Zeile ins Log. Nach einem Tag stehen dort 2800
+    identische Meldungen, und der eine Eintrag, auf den es ankommt — der
+    geschlossene Trade — geht darin unter. Ein Log, das man nicht liest, ist
+    kein Log.
+    """
+    key = z["mt5_setup_key"]
+    fingerabdruck = json.dumps(z, sort_keys=True, default=str)
+    if zuletzt.get(key) == fingerabdruck:
+        return True
+    zuletzt[key] = fingerabdruck
+    return False
+
+
 def schreibe(db, z: dict, trocken: bool) -> str:
     """Anlegen oder aktualisieren, erkannt am mt5_setup_key.
 
@@ -315,11 +333,14 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
         }
         zu = [t for t in s.tickets if t not in offene_tickets]
         z = zeile(s, hole_abschluesse(mt5, zu), user_id, werte)
+        if unveraendert(z):
+            continue
         m = schreibe(db, z, trocken)
         if m:
             meldungen.append(m)
         if z["status"] == "closed":
             bekannt.pop(key, None)
+            zuletzt.pop(key, None)
             for t in s.tickets:
                 merker.pop(t, None)
                 namen.pop(t, None)
@@ -331,6 +352,9 @@ bekannt: dict[str, Setup] = {}
 # Broker-Name je Ticket. Bleibt auch stehen, wenn die Position schon zu ist —
 # `order_calc_profit` braucht ihn dann noch fuers Risiko.
 namen: dict[int, str] = {}
+# Fingerabdruck der zuletzt geschriebenen Zeile je Setup — gegen 2800
+# identische Meldungen am Tag.
+zuletzt: dict[str, str] = {}
 
 
 def main() -> None:
@@ -351,11 +375,18 @@ def main() -> None:
     else:
         melde("Verbunden, aber account_info() ist leer — ist ein Konto angemeldet?")
 
+    letztes_lebenszeichen = time.time()
     try:
         while True:
             try:
                 for m in durchgang(mt5, db, user_id, args.trocken):
                     melde(m)
+                # Einmal pro Stunde eine Zeile, auch wenn nichts passiert ist.
+                # Ein stilles Log sieht sonst genauso aus wie ein abgestuerztes
+                # Programm — und genau das will man unterscheiden koennen.
+                if time.time() - letztes_lebenszeichen > 3600:
+                    letztes_lebenszeichen = time.time()
+                    melde(f"laeuft, {len(bekannt)} Setup(s) beobachtet")
             except Exception as e:  # ein Fehler darf den Dauerlauf nicht beenden
                 melde(f"Fehler: {e}")
             if args.einmal:
