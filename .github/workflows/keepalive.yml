@@ -3,6 +3,13 @@ name: Render Keep-Alive
 # Render Free Tier schläft nach 15 min Inaktivität (→ ~50 s Kaltstart).
 # Ping alle 10 min hält den Service wach. GH-Cron kann sich verzögern —
 # der Login-Warmup im Frontend (Prefetcher) fängt den Rest ab.
+#
+# Seit 23.08.2026 prüft der Ping nicht mehr nur, OB das Backend antwortet,
+# sondern auch, ob es noch etwas rechnet: /api/health liefert 503, sobald
+# gar keine Zonen mehr da sind, und meldet im Feld "status" einen Teilausfall
+# ("degraded") mit Begründung. Vorher stand dort hart "ok" — ein laufendes
+# Backend ohne Daten sah von aussen gesund aus, und das fiel erst auf, wenn
+# im Cockpit tagelang nichts stand.
 
 on:
   schedule:
@@ -18,13 +25,42 @@ jobs:
         id: ping
         run: |
           for i in 1 2 3; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
-              https://gva-screener.onrender.com/api/health) && \
-            [ "$code" = "200" ] && { echo "ok (Versuch $i)"; exit 0; }
+            body=$(curl -s --max-time 60 -w "\n%{http_code}" \
+              https://gva-screener.onrender.com/api/health) || body=""
+            code=$(printf '%s' "$body" | tail -n1)
+            json=$(printf '%s' "$body" | sed '$d')
+            if [ "$code" = "200" ]; then
+              status=$(printf '%s' "$json" | grep -o '"status": *"[a-z]*"' | head -1 | cut -d'"' -f4)
+              echo "ok (Versuch $i), status=$status"
+              echo "status=$status" >> "$GITHUB_OUTPUT"
+              # Begründungen für die Telegram-Meldung mitnehmen.
+              echo "gruende=$(printf '%s' "$json" | grep -o '"gruende": *\[[^]]*\]' | head -1)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "Versuch $i: HTTP ${code:-timeout} — retry in 10 s"
             sleep 10
           done
-          echo "Backend antwortet nicht (nach 3 Versuchen)"; exit 1
+          echo "Backend antwortet nicht oder meldet sich als down (nach 3 Versuchen)"; exit 1
+
+      # Teilausfall: das Backend läuft und antwortet, rechnet aber nicht mehr
+      # vollständig. Bewusst eine eigene, leisere Meldung — und bewusst nicht
+      # 503, sonst würde ein einzelnes ausgefallenes Paar alle zehn Minuten
+      # einen roten Alarm auslösen.
+      - name: Telegram-Hinweis bei Teilausfall
+        if: steps.ping.outputs.status == 'degraded'
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GRUENDE: ${{ steps.ping.outputs.gruende }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+            echo "Keine Telegram-Secrets gesetzt — Hinweis übersprungen."; exit 0
+          fi
+          curl -s --max-time 15 \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d parse_mode="Markdown" \
+            --data-urlencode text="🟡 *GVA-Backend rechnet unvollständig* — es antwortet, aber: ${GRUENDE}"
 
       # Schlägt der Ping fehl, meldet der vorhandene Bot den Ausfall. Ohne
       # gesetzte Secrets wird die Meldung übersprungen (Workflow-Ergebnis bleibt
@@ -43,4 +79,4 @@ jobs:
             "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
             -d parse_mode="Markdown" \
-            --data-urlencode text="🔴 *GVA-Backend nicht erreichbar* — /api/health antwortet nach 3 Versuchen nicht. Render evtl. down oder Kaltstart-Fehler."
+            --data-urlencode text="🔴 *GVA-Backend nicht erreichbar oder ohne Daten* — /api/health antwortet nach 3 Versuchen nicht mit 200. Render evtl. down, Kaltstart-Fehler oder keine Zonen berechnet."

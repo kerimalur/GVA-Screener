@@ -7,7 +7,7 @@ import pandas as pd
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from data_pipeline import fetch_daily_oanda, resample_3d_bars, resample_weekly_bars, resample_monthly_bars, nur_geschlossene, fetch_live_prices, simple_candles, recent_gvas, daily_for_candles
@@ -940,21 +940,81 @@ def health_ping():
     return PlainTextResponse("ok")
 
 
+# Wie alt der Preis-Cache hoechstens sein darf, bevor der Zustand als "stale"
+# gilt. Der Preis-Thread laeuft alle 30 s; zehn Minuten sind also zwanzig
+# ausgefallene Runden und keine Schwankung mehr.
+HEALTH_STALE_SEK = 600
+
+# Anteil der Paare, die Zonen haben muessen. Einzelne Paare koennen bei OANDA
+# ausfallen; faellt ein Fuenftel aus, ist etwas anderes kaputt.
+HEALTH_MIN_ANTEIL = 0.8
+
+
+def health_urteil():
+    """Der ehrliche Zustand des Backends — als (status, gruende).
+
+    Frueher stand hier hart "status": "ok", auch bei null Zonen und uraltem
+    Preis-Cache. Der Keep-Alive akzeptiert HTTP 200 und meldete deshalb nur,
+    wenn der Dienst gar nicht antwortete — ein Backend, das laeuft und nichts
+    mehr rechnet, sah von aussen gesund aus. Genau das ist der teure Fall:
+    Man merkt es erst, wenn im Cockpit tagelang nichts steht.
+
+    Vier Zustaende:
+      warmup   Noch kein vollstaendiger Zonen-Lauf. Kein Fehler, nur nicht
+               fertig — nach jedem Render-Kaltstart normal.
+      ok       Zonen da, Preise frisch, Signal-Ablage erreichbar.
+      degraded Laeuft, aber ein Teil fehlt. Sichtbar, nicht alarmierend.
+      down     Kein Zustand, mit dem das Cockpit etwas anfangen kann.
+    """
+    gruende = []
+
+    if ZONES_RUNS["completed"] == 0:
+        return "warmup", ["Kaltstart: noch kein vollstaendiger Zonen-Lauf"]
+
+    zonen, gesamt = len(ZONES), len(PAIRS)
+    if zonen == 0:
+        gruende.append("keine einzige Zone berechnet")
+    elif gesamt and zonen < gesamt * HEALTH_MIN_ANTEIL:
+        gruende.append(f"nur {zonen} von {gesamt} Paaren haben Zonen")
+
+    aktualisiert = LIVE_CACHE["updated"]
+    if aktualisiert is None:
+        gruende.append("noch kein Preis-Abruf gelungen")
+    else:
+        alter = int(time.time() - aktualisiert)
+        if alter > HEALTH_STALE_SEK:
+            gruende.append(f"Preise sind {alter // 60} Minuten alt")
+
+    signals_ok, signals_grund = supabase_signals.diagnose()
+    if not signals_ok:
+        gruende.append(f"Signal-Ablage: {signals_grund}")
+
+    if not gruende:
+        return "ok", []
+    # "down" nur, wenn gar keine Zonen da sind — alles andere ist ein Teilausfall.
+    return ("down" if zonen == 0 else "degraded"), gruende
+
+
 @app.get("/api/health")
 def health():
-    # Signal-Ablage explizit ausweisen. Faellt sie aus, kommt der Telegram-Alert
-    # trotzdem an (anderer Zugang) — Cockpit und Outlook bleiben aber leer, und
-    # das war bisher nur im Render-Log zu sehen.
+    """Detailstatus. Antwortet 503, wenn der Zustand nicht mehr benutzbar ist —
+    darauf schlaegt der Keep-Alive an und schickt den Telegram-Alarm."""
+    status, gruende = health_urteil()
     signals_ok, signals_grund = supabase_signals.diagnose()
-    return {
-        "status": "ok",
+
+    body = {
+        "status": status,
+        "gruende": gruende,
         "zones": len(ZONES),
         "pairs": len(LIVE_CACHE["data"]),
         "pairs_total": len(PAIRS),
+        "zones_runs": ZONES_RUNS["completed"],
         "triggered": len(TRIGGERED),
         "consumed": sum(len(v) for sides in CONSUMED.values() for v in sides.values()),
         "live": bool(LIVE_CACHE["live"]),
         "updated": LIVE_CACHE["updated"],
+        "alter_sekunden": (None if LIVE_CACHE["updated"] is None
+                           else int(time.time() - LIVE_CACHE["updated"])),
         "signals_ok": signals_ok,
         "signals_reason": signals_grund,
         # Zeigt, unter welcher user_id geschrieben wird und ob ueberhaupt
@@ -962,6 +1022,11 @@ def health():
         # aber gehoeren einer anderen user_id als der im Browser".
         "signals_stats": supabase_signals.stats(),
     }
+
+    # "degraded" bleibt bewusst bei 200: ein einzelnes ausgefallenes Paar soll
+    # nicht alle zehn Minuten eine Telegram-Nachricht ausloesen. Wer es genau
+    # wissen will, liest "status" und "gruende".
+    return JSONResponse(body, status_code=503 if status == "down" else 200)
 
 
 if __name__ == "__main__":
