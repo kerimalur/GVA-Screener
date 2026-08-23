@@ -479,48 +479,73 @@ def _handle_late_hits(pair: str, df_3d, daily, since_day: str | None, df_w=None,
     if not found:
         return
 
-    # Bewusst NUR der juengste Treffer des Fensters: das Sticky-Modell kennt
-    # genau einen offenen HIT je Paar. Aeltere Treffer desselben Paars im selben
-    # Fenster gehen damit endgueltig verloren — das Fenster rueckt mit dem
-    # naechsten erfolgreichen Lauf nach und holt sie nicht mehr ein. Betrifft nur
-    # den seltenen Fall mehrtaegiger Downtime mit mehreren Treffern auf einem
-    # Paar; siehe Modul-Docstring von late_hits.py.
-    hit = found[-1]
-    side, level = hit["direction"], hit["level"]
-    cache_key = f"{pair}_{side}"
+    # ALLE Treffer des Fensters werden gemeldet, nicht nur der juengste.
+    #
+    # Frueher stand hier `hit = found[-1]`, mit der Begruendung, das
+    # Sticky-Modell kenne genau einen offenen HIT je Paar. Das stimmt fuer den
+    # Screener-Zustand — aber der Alert und das Signal in Supabase haengen
+    # nicht daran. Die aelteren Treffer gingen damit endgueltig verloren: das
+    # Fenster rueckt mit dem naechsten Lauf nach und holt sie nie wieder ein.
+    # Genau der Fall, den man erst Wochen spaeter bemerkt, wenn ueberhaupt.
+    #
+    # Getrennt wird jetzt sauber:
+    #   Telegram + signals  bekommen JEDEN nicht verbrauchten Treffer.
+    #   TRIGGERED           bekommt nur den juengsten — das Sticky-Modell
+    #                       bleibt unveraendert, sonst muesste der Screener
+    #                       mehrere offene HITs je Paar verwalten.
+    gemeldet = []
+    for hit in found:
+        side, level = hit["direction"], hit["level"]
+        with _state_lock:
+            if level in CONSUMED.get(pair, {}).get(side, set()):
+                continue
+            # Der Cache-Schluessel traegt das Level mit: sonst unterdrueckt der
+            # erste gemeldete Treffer alle weiteren desselben Paares und derselben
+            # Seite — also genau das, was hier repariert wird.
+            cache_key = f"{pair}_{side}_{level}"
+            if ALERT_CACHE.get(cache_key) == level:
+                continue
+            _merke_alert(cache_key, level)
+        gemeldet.append(hit)
 
+    if not gemeldet:
+        return
+
+    for hit in gemeldet:
+        side, level = hit["direction"], hit["level"]
+        alert_mit_chart(
+            pair, late_hits.alert_text(pair, hit), side, level,
+            tf=hit.get("tf", "3D"), formed_date=hit.get("line_formed_date"),
+        )
+        snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
+        supabase_signals.record_hit_async(
+            pair, side, level, snapshot,
+            detected_late=True, line_formed_date=hit.get("line_formed_date"),
+        )
+        print(f"Nachtraeglich erkannt: {pair} {side} {hit.get('tf', '3D')} @ {level} "
+              f"(Hit-Tag {hit['hit_date']})")
+
+    if len(gemeldet) > 1:
+        print(f"{pair}: {len(gemeldet)} nachtraegliche Treffer in einem Fenster.")
+
+    # Der juengste Treffer bestimmt den Screener-Zustand — er ist der einzige,
+    # bei dem der Preis ueberhaupt noch in der Naehe sein kann.
+    letzter = gemeldet[-1]
     with _state_lock:
-        if pair in TRIGGERED:
-            return
-        if level in CONSUMED.get(pair, {}).get(side, set()):
-            return
-        if ALERT_CACHE.get(cache_key) == level:
-            return  # derselbe Hit wurde schon gemeldet
-        TRIGGERED[pair] = {
-            "side": side,
-            "level": level,
-            "date": hit.get("line_formed_date"),
-            "tf": hit.get("tf", "3D"),
-            "pending": False,
-            "detected_late": True,
-            # Tag des tatsaechlichen Treffers, nicht der Erkennungszeitpunkt -
-            # sonst liefe die 7-Tage-Ablaufregel ab dem falschen Datum.
-            "hit_at": f"{hit['hit_date']}T12:00:00+00:00",
-        }
-        _merke_alert(cache_key, level)
+        if pair not in TRIGGERED:
+            TRIGGERED[pair] = {
+                "side": letzter["direction"],
+                "level": letzter["level"],
+                "date": letzter.get("line_formed_date"),
+                "tf": letzter.get("tf", "3D"),
+                "pending": False,
+                "detected_late": True,
+                # Tag des tatsaechlichen Treffers, nicht der Erkennungszeitpunkt -
+                # sonst liefe die 7-Tage-Ablaufregel ab dem falschen Datum.
+                "hit_at": f"{letzter['hit_date']}T12:00:00+00:00",
+            }
 
     save_state()
-    alert_mit_chart(
-        pair, late_hits.alert_text(pair, hit), side, level,
-        tf=hit.get("tf", "3D"), formed_date=hit.get("line_formed_date"),
-    )
-    snapshot = supabase_signals.build_snapshot(pair, MACRO_CACHE["currencies"])
-    supabase_signals.record_hit_async(
-        pair, side, level, snapshot,
-        detected_late=True, line_formed_date=hit.get("line_formed_date"),
-    )
-    print(f"Nachtraeglich erkannt: {pair} {side} {hit.get('tf', '3D')} @ {level} "
-          f"(Hit-Tag {hit['hit_date']})")
 
 
 def compute_zones():

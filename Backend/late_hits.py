@@ -17,12 +17,12 @@ im Betrieb entdeckt werden:
 1. OANDA liefert nur abgeschlossene Tageskerzen. Ein Treffer wird also
    spätestens mit dem nächsten Tagesschluss (NY 17:00) nachgetragen, nicht
    sekundengenau. Genau dafür ist er als "nachträglich erkannt" markiert.
-2. Je Paar und Fenster wird **nur der jüngste** Treffer nachgetragen. Das
-   Sticky-Modell kennt genau einen offenen HIT je Paar; ältere Treffer
-   desselben Paars im selben Fenster gehen endgültig verloren, weil das
-   Fenster mit dem nächsten erfolgreichen Lauf nachrückt. In der Praxis ist
-   das der seltene Fall einer mehrtägigen Downtime mit mehreren Treffern auf
-   demselben Paar.
+2. Seit 23.08.2026 werden ALLE Treffer eines Fensters gemeldet, nicht mehr
+   nur der jüngste. Alert und Signal hängen nicht am Sticky-Modell; nur der
+   Screener-Zustand (TRIGGERED) übernimmt weiterhin den jüngsten, weil er
+   genau einen offenen HIT je Paar kennt. Vorher gingen ältere Treffer
+   desselben Paars endgültig verloren — das Fenster rückte mit dem nächsten
+   Lauf nach und holte sie nie wieder ein.
 """
 from __future__ import annotations
 
