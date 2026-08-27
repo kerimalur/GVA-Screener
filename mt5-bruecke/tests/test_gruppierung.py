@@ -283,3 +283,54 @@ def test_offener_trade_bekommt_keinen_vermerk():
     s = gruppiere([pos(1, stop=None), pos(2, minuten=1, stop=None)])[0]
     z = zeile(s, [], USER, WERT)
     assert "comment" not in z
+
+
+# --------------------------------------------------- Risiko und Kontostand
+#
+# Beide kamen am 27.08.2026 dazu. Das Risiko wurde vorher gerechnet und
+# weggeworfen — dabei ist es die Zahl, aus der sich R ergibt, und mit dem
+# Kontostand daneben auch der Prozentwert. Ohne diese Kontrollwerte faellt
+# es nicht auf, wenn eines von beiden still verschwindet.
+
+def _fertig(stop=1.0950):
+    s = gruppiere([pos(1, stop=stop), pos(2, stop=stop)])[0]
+    ab = [Abschluss(ticket=1, ausstieg=1.1050, gewinn=250.0, geschlossen=T0),
+          Abschluss(ticket=2, ausstieg=1.1100, gewinn=500.0, geschlossen=T0)]
+    return s, ab
+
+
+def test_risiko_und_kontostand_stehen_in_der_zeile():
+    s, ab = _fertig()
+    z = zeile(s, ab, USER, WERT, 562.48)
+    # 50 Pips je Position, zwei Positionen, 250 je Position.
+    assert z["risk_amount"] == 500.0
+    assert z["account_balance"] == 562.48
+    # Und das R bleibt konsistent dazu: 750 Gewinn auf 500 Risiko.
+    assert z["r_multiple"] == 1.5
+
+
+def test_ohne_stop_kein_risiko_aber_trotzdem_kontostand():
+    """Nicht messbar heisst None — nicht 0. Eine 0 saehe aus wie "kein Risiko"."""
+    s, ab = _fertig(stop=None)
+    z = zeile(s, ab, USER, WERT, 562.48)
+    assert z["risk_amount"] is None
+    assert z["r_multiple"] == 0.0
+    assert z["account_balance"] == 562.48
+
+
+def test_ohne_kontostand_bleibt_der_rest_heil():
+    s, ab = _fertig()
+    z = zeile(s, ab, USER, WERT)
+    assert z["account_balance"] is None
+    assert z["risk_amount"] == 500.0
+
+
+def test_offener_trade_erfindet_kein_ergebnis():
+    s, ab = _fertig()
+    z = zeile(s, [ab[0]], USER, WERT, 562.48)
+    assert z["status"] == "open"
+    assert z["result"] is None
+    assert z["profit_amount"] is None
+    # Risiko und Kontostand stehen trotzdem schon fest.
+    assert z["risk_amount"] == 500.0
+    assert z["account_balance"] == 562.48

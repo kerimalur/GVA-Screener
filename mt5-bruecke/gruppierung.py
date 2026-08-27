@@ -218,7 +218,8 @@ def mittel_gewichtet(paare: list[tuple[float, float]]) -> float | None:
 
 
 def zeile(setup: Setup, abschluesse: list[Abschluss], user_id: str,
-          wert_je_punkt: dict[int, float]) -> dict:
+          wert_je_punkt: dict[int, float],
+          kontostand: float | None = None) -> dict:
     """Der fertige Journaleintrag.
 
     Offen, solange nicht ALLE Positionen des Setups geschlossen sind. Genau das
@@ -256,6 +257,16 @@ def zeile(setup: Setup, abschluesse: list[Abschluss], user_id: str,
         "lot_size": setup.volumen,
         "mt5_setup_key": schluessel(setup),
         "mt5_tickets": setup.tickets,
+        # Das Risiko in Kontowaehrung. Es wurde bisher gerechnet und
+        # weggeworfen — dabei ist es die eine Zahl, aus der sich alles Weitere
+        # ergibt: R, und mit dem Kontostand daneben auch der Prozentwert.
+        # None heisst "nicht messbar" und ist ehrlicher als eine Schaetzung.
+        "risk_amount": ri,
+        # Kontostand zum Zeitpunkt des Schreibens. Damit laesst sich das
+        # Ergebnis in Prozent vom Konto ausdruecken — die Zahl, die ueber die
+        # Zeit vergleichbar bleibt, waehrend "Prozent vom Risiko" nur R mal
+        # hundert waere.
+        "account_balance": kontostand,
     }
 
     if not fertig:

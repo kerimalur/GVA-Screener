@@ -331,6 +331,13 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
     Break-even, meldet MT5 dort den NEUEN Stop. Wer damit rechnet, bekommt
     Risiko 0 und ein unendliches R. Also gilt der zuerst gesehene Stop.
     """
+    # Kontostand JETZT, nicht beim Einstieg — MT5 gibt den historischen nicht
+    # her. Bei einem Konto, das sich in einem Trade kaum bewegt, ist das nah
+    # genug; bei einer langen Serie wandert der Bezugswert mit. Beides ist
+    # besser als gar kein Prozentwert, und es steht hier, damit niemand
+    # spaeter glaubt, es waere der Stand bei Eroeffnung.
+    konto = mt5.account_info()
+    kontostand = float(konto.balance) if konto else None
     positionen, roh_namen = hole_positionen(mt5)
     namen.update(roh_namen)
     for p in positionen:
@@ -368,7 +375,7 @@ def durchgang(mt5, db, user_id: str, trocken: bool) -> list[str]:
             for p in s.positionen
         }
         zu = [t for t in s.tickets if t not in offene_tickets]
-        z = zeile(s, hole_abschluesse(mt5, zu), user_id, werte)
+        z = zeile(s, hole_abschluesse(mt5, zu), user_id, werte, kontostand)
         if unveraendert(z):
             continue
         m = schreibe(db, z, trocken)
