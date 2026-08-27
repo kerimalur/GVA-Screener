@@ -428,6 +428,11 @@ def main() -> None:
             if args.einmal:
                 break
             time.sleep(TAKT_SEKUNDEN)
+    except KeyboardInterrupt:
+        # Strg+C ist die vorgesehene Art, den Dauerlauf zu beenden — kein
+        # Fehler. Ohne diesen Zweig druckt Python einen Traceback, und der
+        # sieht nach Absturz aus, obwohl alles richtig gelaufen ist.
+        melde("Mit Strg+C beendet.")
     finally:
         melde("Bruecke beendet.")
         mt5.shutdown()
