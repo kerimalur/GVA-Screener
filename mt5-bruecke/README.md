@@ -37,6 +37,24 @@ ausführen — sie legt `mt5_setup_key` und `mt5_tickets` an.
 python bruecke.py --trocken --einmal   # rechnet und zeigt, schreibt NICHTS
 python bruecke.py --einmal             # ein Durchgang, schreibt
 python bruecke.py                      # Dauerlauf, alle 30 s
+
+### Dauerbetrieb (empfohlen)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\einrichten-aufgabe.ps1
+```
+
+Legt eine geplante Aufgabe an: Start bei der Anmeldung **und** alle fuenf
+Minuten die Frage, ob sie noch laeuft. Laeuft sie, passiert nichts
+(`MultipleInstances IgnoreNew`).
+
+Das ersetzt die Startordner-Verknuepfung — die wird dabei entfernt, sonst
+liefe die Bruecke doppelt und zwei Instanzen schrieben in dieselbe Tabelle.
+
+Der Unterschied ist nicht kosmetisch: der Startordner startet **einmal** bei
+der Anmeldung. Stuerzt die Bruecke ab oder wird MetaTrader neu gestartet,
+kommt sie bis zur naechsten Anmeldung nicht wieder — und genau dann fehlt der
+Stop, den sie haette sehen muessen.
 ```
 
 **Immer erst `--trocken --einmal`.** Der Durchgang zeigt, welche Setups erkannt

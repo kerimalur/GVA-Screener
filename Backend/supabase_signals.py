@@ -70,6 +70,13 @@ def _headers(key: str, extra: dict | None = None) -> dict:
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
+    # Seit 28.09.2026 liegen die Tabellen im Kompass-Projekt, Schema "trading".
+    # PostgREST waehlt das Schema ueber diese beiden Header; ohne Variable
+    # bleibt es beim Standard (public) der alten Datenbank.
+    schema = (os.getenv("SUPABASE_SCHEMA") or "").strip()
+    if schema:
+        h["Accept-Profile"] = schema
+        h["Content-Profile"] = schema
     if extra:
         h.update(extra)
     return h

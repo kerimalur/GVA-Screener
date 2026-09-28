@@ -276,11 +276,15 @@ def hole_abschluesse(mt5, tickets: list[int]) -> list[Abschluss]:
 
 def _db():
     try:
-        from supabase import create_client  # type: ignore
+        from supabase import ClientOptions, create_client  # type: ignore
     except ImportError:
-        _abbruch("\nDas Paket supabase fehlt:  pip install supabase\n")
+        _abbruch("\nDas Paket supabase fehlt oder ist zu alt:  pip install -U supabase\n")
+    # Seit 28.09.2026: Kompass-Projekt, Schema "trading". Ohne Variable
+    # bleibt es bei public (alte Datenbank).
+    schema = os.environ.get("TRADING_SUPABASE_SCHEMA", "").strip() or "public"
     return create_client(_fehlt("TRADING_SUPABASE_URL"),
-                         _fehlt("TRADING_SUPABASE_SERVICE_ROLE_KEY"))
+                         _fehlt("TRADING_SUPABASE_SERVICE_ROLE_KEY"),
+                         options=ClientOptions(schema=schema))
 
 
 def unveraendert(z: dict) -> bool:
