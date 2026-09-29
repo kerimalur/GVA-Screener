@@ -15,6 +15,11 @@ Was sie tut, alle 30 Sekunden:
   3. fuer verschwundene Positionen die Abschluss-Deals holen und den Eintrag
      schliessen, sobald ALLE Positionen des Setups zu sind.
 
+Zusaetzlich, alle 5 Minuten (seit 29.09.2026): den Wirtschaftskalender, den
+der MQL5-Dienst KerimosKalender.mq5 in eine Datei schreibt, nach
+trading.mt5_kalender hochladen (kalender.py) — fuer das Makro-Terminal in
+KerimOS.
+
 Was sie NICHT tut: Auftraege erteilen, aendern oder schliessen. Sie liest.
 
 Aufruf (aus mt5-bruecke heraus):
@@ -34,6 +39,7 @@ from datetime import datetime, timedelta, timezone
 from gruppierung import (
     Abschluss, Position, Setup, gruppiere, normalisiere_symbol, schluessel, zeile,
 )
+import kalender
 
 TAKT_SEKUNDEN = 30
 # Wie weit zurueck die Historie geholt wird. Grosszuegig, weil der Abruf billig
@@ -436,6 +442,14 @@ def main() -> None:
                     melde(f"laeuft, {len(bekannt)} Setup(s) beobachtet")
             except Exception as e:  # ein Fehler darf den Dauerlauf nicht beenden
                 melde(f"Fehler: {e}")
+            # Eigener try: ein Kalenderfehler soll die Trades nicht verdecken
+            # und umgekehrt.
+            try:
+                k = kalender.hochladen(db, args.trocken, erzwingen=args.einmal)
+                if k:
+                    melde(k)
+            except Exception as e:
+                melde(f"Kalender-Fehler: {e}")
             if args.einmal:
                 break
             time.sleep(TAKT_SEKUNDEN)

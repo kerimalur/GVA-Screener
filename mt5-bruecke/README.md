@@ -152,3 +152,30 @@ python -m pytest -q
 
 40 Kontrollwerte, ohne Terminal und ohne Datenbank lauffähig — die Rechnung
 steckt in `gruppierung.py` und ist bewusst von MT5 und Supabase getrennt.
+
+## Wirtschaftskalender fuer KerimOS (seit 29.09.2026)
+
+KerimOS braucht fuer das Makro-Terminal das **Ist** jeder Wirtschaftszahl.
+Forex Factory liefert gratis nur Erwartung und Vorwert. Der MetaTrader hat
+einen eigenen Kalender mit Ist, Prognose und Vorwert — aber nur MQL5 kommt
+heran, das Python-Paket nicht. Deshalb zwei Teile:
+
+1. **`KerimosKalender.mq5`** — ein MQL5-Dienst. Schreibt alle 5 Minuten den
+   Kalender der acht Hauptwaehrungen ab 2024 nach
+   `%APPDATA%\MetaQuotes\Terminal\Common\Files\kerimos_kalender.csv`.
+2. **`kalender.py`** — Teil der Bruecke. Laedt Geaendertes aus dieser Datei
+   nach `trading.mt5_kalender` (Tabelle: KerimOS-Migration 35).
+
+Einrichten des Dienstes, einmalig:
+
+1. MetaTrader: **Datei → Dateiordner oeffnen**, dort `MQL5\Services`
+   oeffnen und `KerimosKalender.mq5` hineinkopieren.
+2. **Extras → MetaQuotes Language Editor** (F4), die Datei oeffnen,
+   **Kompilieren** (F7). Unten muss `0 errors` stehen.
+3. Zurueck im MetaTrader: **Navigator** (Strg+N) → **Dienste** →
+   Rechtsklick → **Aktualisieren**, dann auf `KerimosKalender`
+   Rechtsklick → **Dienst hinzufuegen** → **OK**.
+4. Im Reiter **Experten** unten erscheint
+   `KerimosKalender: … Termine geschrieben`.
+
+Ein laufender Dienst startet mit dem Terminal automatisch wieder.
