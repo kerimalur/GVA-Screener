@@ -2,7 +2,7 @@
 //| KerimosKalender.mq5                                  29.09.2026  |
 //|                                                                  |
 //| MQL5-Dienst: schreibt den Wirtschaftskalender des MetaTrader     |
-//| (Ist, Prognose, Vorwert) der acht Hauptwaehrungen ab 2024 in     |
+//| (Ist, Prognose, Vorwert) der acht Hauptwaehrungen ab 2021 in     |
 //| eine Datei. Die MT5-Bruecke (kalender.py) laedt sie nach         |
 //| Supabase, trading.mt5_kalender. KerimOS braucht das fuer das     |
 //| Makro-Terminal: Forex Factory liefert gratis nur die Erwartung,  |
@@ -28,7 +28,7 @@
 
 input int    TaktSekunden = 300;                    // alle 5 Minuten
 input string DateiName    = "kerimos_kalender.csv";
-input string AbDatum      = "2024.01.01";           // Historie ab
+input string AbDatum      = "2021.06.01";           // Historie ab (05.10.2026: vorher 2024.01.01)
 
 string WAEHRUNGEN[] = {"USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF"};
 
